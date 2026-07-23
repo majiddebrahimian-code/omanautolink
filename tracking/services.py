@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from .models import Stage, CarStageProgress
+from .models import CarStageProgress, Stage, StageTransition
 
 
 def create_progress_for_car(car):
@@ -61,3 +61,56 @@ def get_delay_days(progress):
         return None
     actual_date = progress.actual_arrival.date()
     return (actual_date - progress.planned_date).days
+
+
+def calculate_remaining_eta_days(car):
+    """
+    Calculates the dynamic estimated number of remaining delivery days.
+
+    The calculation starts from the car's current stage and sums the
+    duration of all remaining active stage transitions.
+    """
+
+    if car.current_stage is None:
+        return None
+
+    stages = list(
+        Stage.objects.filter(
+            is_active=True,
+            order__gte=car.current_stage.order,
+        ).order_by("order")
+    )
+
+    if not stages or stages[0].id != car.current_stage_id:
+        raise ValidationError(
+            "The vehicle current stage is not an active tracking stage."
+        )
+
+    transitions = StageTransition.objects.filter(
+        is_active=True,
+        from_stage__in=stages,
+        to_stage__in=stages,
+    )
+
+    transition_map = {
+        (transition.from_stage_id, transition.to_stage_id): transition
+        for transition in transitions
+    }
+
+    total_days = 0
+
+    for index in range(len(stages) - 1):
+        from_stage = stages[index]
+        to_stage = stages[index + 1]
+
+        transition = transition_map.get((from_stage.id, to_stage.id))
+
+        if transition is None:
+            raise ValidationError(
+                f"No active transition is configured from "
+                f"'{from_stage.name}' to '{to_stage.name}'."
+            )
+
+        total_days += transition.estimated_duration_days
+
+    return total_days
