@@ -64,9 +64,11 @@ class StageTransition(models.Model):
 class TrackingEvent(models.Model):
     class EventType(models.TextChoices):
         TRACKING_STARTED = "tracking_started", "Tracking started"
-        STAGE_CONFIRMED = "stage_confirmed", "Stage confirmed"
+        STAGE_CONFIRMED = "stage_confirmed", "Stage entered"
+        STAGE_COMPLETED = "stage_completed", "Stage completed"
         STAGE_CORRECTED = "stage_corrected", "Stage corrected"
         STAGE_SKIPPED = "stage_skipped", "Stage skipped"
+        STAGE_ARCHIVED = "stage_archived", "Stage archived"
 
     class Source(models.TextChoices):
         SYSTEM = "system", "System"
@@ -124,6 +126,16 @@ class TrackingEvent(models.Model):
                 name="tracking_event_car_time_idx",
             )
         ]
+        permissions = [
+            (
+                "skip_tracking_stage",
+                "Can skip a tracking stage",
+            ),
+            (
+                "correct_tracking_stage",
+                "Can correct tracking stages",
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         if not self._state.adding:
@@ -151,8 +163,16 @@ class CarStageProgress(models.Model):
         on_delete=models.CASCADE,
         related_name="progress_records",
     )
-    planned_date = models.DateField(blank=True, null=True)
-    actual_arrival = models.DateTimeField(blank=True, null=True)
+
+    planned_date = models.DateField(
+        blank=True,
+        null=True,
+    )
+
+    actual_arrival = models.DateTimeField(
+        blank=True,
+        null=True,
+    )
     confirmed_by = models.ForeignKey(
         "auth.User",
         on_delete=models.SET_NULL,
@@ -161,9 +181,62 @@ class CarStageProgress(models.Model):
         related_name="confirmed_stages",
     )
 
+    completed_at = models.DateTimeField(
+        blank=True,
+        null=True,
+    )
+    completed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="completed_stages",
+    )
+
+    skipped_at = models.DateTimeField(
+        blank=True,
+        null=True,
+    )
+    skipped_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="skipped_stages",
+    )
+
     class Meta:
         unique_together = ["car", "stage"]
         ordering = ["stage__order"]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(actual_arrival__isnull=True)
+                    | models.Q(skipped_at__isnull=True)
+                ),
+                name="progress_cannot_be_confirmed_and_skipped",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(completed_at__isnull=True)
+                    | models.Q(actual_arrival__isnull=False)
+                ),
+                name="progress_cannot_complete_before_entry",
+            ),
+        ]
+
+    @property
+    def state(self):
+        if self.skipped_at is not None:
+            return "skipped"
+
+        if self.completed_at is not None:
+            return "completed"
+
+        if self.actual_arrival is not None:
+            return "entered"
+
+        return "pending"
 
     def __str__(self):
         return f"{self.car.tracking_code} @ {self.stage.name}"

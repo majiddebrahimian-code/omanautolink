@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from .models import Car, VehicleHold
 from customers.models import Customer
+from tracking.services import start_tracking_for_sold_car
 
 
 def generate_tracking_code():
@@ -30,6 +31,7 @@ def mark_vehicle_as_sold(
     full_name,
     phone,
     telegram_id,
+    source="system",
 ):
     """
     Converts an active vehicle hold into a completed sale.
@@ -90,6 +92,14 @@ def mark_vehicle_as_sold(
             "release_note",
         ]
     )
+
+    start_tracking_for_sold_car(
+        car=car,
+        actor=actor,
+        source=source,
+    )
+
+    car.refresh_from_db()
 
     return car
 

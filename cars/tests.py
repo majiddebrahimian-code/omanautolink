@@ -10,6 +10,12 @@ from cars.services import (
     publish_vehicle_for_sale,
     release_vehicle_hold,
 )
+from tracking.models import (
+    CarStageProgress,
+    Stage,
+    StageTransition,
+    TrackingEvent,
+)
 
 
 class VehicleHoldServiceTests(TestCase):
@@ -98,6 +104,21 @@ class VehicleHoldServiceTests(TestCase):
         self.assertEqual(VehicleHold.objects.count(), 0)
 
     def test_mark_vehicle_as_sold_assigns_customer_and_tracking_code(self):
+        sale_confirmed_stage = Stage.objects.create(
+            name="Sale Confirmed",
+            order=1,
+        )
+        preparation_stage = Stage.objects.create(
+            name="Vehicle Preparation",
+            order=2,
+        )
+
+        StageTransition.objects.create(
+            from_stage=sale_confirmed_stage,
+            to_stage=preparation_stage,
+            estimated_duration_days=3,
+        )
+
         hold = place_vehicle_on_hold(
             car_id=self.car.id,
             actor=self.employee,
@@ -124,3 +145,20 @@ class VehicleHoldServiceTests(TestCase):
 
         self.assertFalse(hold.is_active)
         self.assertEqual(hold.release_note, "Converted to sold.")
+
+        self.assertEqual(
+            sold_car.current_stage,
+            sale_confirmed_stage,
+        )
+
+        self.assertEqual(
+            CarStageProgress.objects.filter(car=sold_car).count(),
+            2,
+        )
+
+        self.assertTrue(
+            TrackingEvent.objects.filter(
+                car=sold_car,
+                event_type=TrackingEvent.EventType.TRACKING_STARTED,
+            ).exists()
+        )
