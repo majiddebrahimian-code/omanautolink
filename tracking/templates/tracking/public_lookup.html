@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>رهگیری خودرو | Oman Auto Link</title>
+</head>
+<body>
+    <header>
+        <h1>رهگیری خودرو</h1>
+        <p>
+            کد رهگیری خود را وارد کنید تا وضعیت ارسال خودرو و زمان تقریبی
+            باقی‌مانده را مشاهده کنید.
+        </p>
+    </header>
+
+    <main>
+        <section>
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                <div>
+                    {{ form.tracking_code.label_tag }}
+                    {{ form.tracking_code }}
+
+                    {% for error in form.tracking_code.errors %}
+                        <p role="alert">{{ error }}</p>
+                    {% endfor %}
+                </div>
+
+                <button type="submit">مشاهده وضعیت رهگیری</button>
+            </form>
+        </section>
+
+        {% if lookup_error %}
+            <section role="alert">
+                <p>{{ lookup_error }}</p>
+            </section>
+        {% endif %}
+
+        {% if tracking_data %}
+            <section>
+                <h2>اطلاعات خودرو</h2>
+
+                <dl>
+                    <dt>کد رهگیری</dt>
+                    <dd dir="ltr">{{ tracking_data.tracking_code }}</dd>
+
+                    <dt>خودرو</dt>
+                    <dd>{{ tracking_data.vehicle.title }}</dd>
+
+                    <dt>برند</dt>
+                    <dd>{{ tracking_data.vehicle.brand }}</dd>
+
+                    <dt>مدل</dt>
+                    <dd>{{ tracking_data.vehicle.model }}</dd>
+
+                    {% if tracking_data.vehicle.year %}
+                        <dt>سال ساخت</dt>
+                        <dd>{{ tracking_data.vehicle.year }}</dd>
+                    {% endif %}
+
+                    {% if tracking_data.vehicle.color %}
+                        <dt>رنگ</dt>
+                        <dd>{{ tracking_data.vehicle.color }}</dd>
+                    {% endif %}
+                </dl>
+            </section>
+
+            <section>
+                <h2>وضعیت فعلی</h2>
+
+                {% if tracking_data.current_stage %}
+                    <p>
+                        مرحلهٔ فعلی:
+                        <strong>{{ tracking_data.current_stage.name }}</strong>
+                    </p>
+
+                    {% if tracking_data.current_stage.state == "completed" %}
+                        <p>وضعیت مرحله: تکمیل‌شده</p>
+                    {% elif tracking_data.current_stage.state == "entered" %}
+                        <p>وضعیت مرحله: در حال انجام</p>
+                    {% elif tracking_data.current_stage.state == "pending" %}
+                        <p>وضعیت مرحله: در انتظار تأیید</p>
+                    {% elif tracking_data.current_stage.state == "skipped" %}
+                        <p>وضعیت مرحله: رد شده</p>
+                    {% endif %}
+                {% endif %}
+
+                {% if tracking_data.remaining_eta_days is not None %}
+                    <p>
+                        زمان تقریبی باقی‌مانده تا تحویل:
+                        <strong>{{ tracking_data.remaining_eta_days }} روز</strong>
+                    </p>
+                {% endif %}
+            </section>
+
+            <section>
+                <h2>تاریخچهٔ مراحل ارسال</h2>
+
+                <ol>
+                    {% for stage in tracking_data.stages %}
+                        <li>
+                            <h3>{{ stage.name }}</h3>
+
+                            {% if stage.state == "completed" %}
+                                <p>وضعیت: تکمیل‌شده</p>
+                            {% elif stage.state == "entered" %}
+                                <p>وضعیت: در حال انجام</p>
+                            {% elif stage.state == "pending" %}
+                                <p>وضعیت: در انتظار</p>
+                            {% elif stage.state == "skipped" %}
+                                <p>وضعیت: رد شده</p>
+                            {% endif %}
+
+                            {% if stage.planned_date %}
+                                <p>
+                                    تاریخ برنامه‌ریزی‌شده:
+                                    {{ stage.planned_date|date:"Y/m/d" }}
+                                </p>
+                            {% endif %}
+
+                            {% if stage.actual_arrival %}
+                                <p>
+                                    زمان ورود:
+                                    {{ stage.actual_arrival|date:"Y/m/d H:i" }}
+                                </p>
+                            {% endif %}
+
+                            {% if stage.completed_at %}
+                                <p>
+                                    زمان تکمیل:
+                                    {{ stage.completed_at|date:"Y/m/d H:i" }}
+                                </p>
+                            {% endif %}
+
+                            {% if stage.skipped_at %}
+                                <p>
+                                    زمان رد شدن:
+                                    {{ stage.skipped_at|date:"Y/m/d H:i" }}
+                                </p>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ol>
+            </section>
+        {% endif %}
+    </main>
+</body>
+</html>

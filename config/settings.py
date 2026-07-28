@@ -88,7 +88,29 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+CACHE_REDIS_URL = config(
+    "CACHE_REDIS_URL",
+    default="redis://redis:6379/1",
+)
 
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": CACHE_REDIS_URL,
+    }
+}
+
+PUBLIC_TRACKING_RATE_LIMIT_ATTEMPTS = config(
+    "PUBLIC_TRACKING_RATE_LIMIT_ATTEMPTS",
+    default=10,
+    cast=int,
+)
+
+PUBLIC_TRACKING_RATE_LIMIT_WINDOW_SECONDS = config(
+    "PUBLIC_TRACKING_RATE_LIMIT_WINDOW_SECONDS",
+    default=600,
+    cast=int,
+)
 CELERY_BROKER_URL = config("REDIS_URL", default="redis://redis:6379/0")
 CELERY_RESULT_BACKEND = config("REDIS_URL", default="redis://redis:6379/0")
 CELERY_ACCEPT_CONTENT = ["json"]

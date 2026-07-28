@@ -1,7 +1,10 @@
+from urllib import response
+
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 
-from django.test import TestCase
+from django.core.cache import cache
+from django.test import TestCase, override_settings
 
 from tracking.models import (
     CarStageProgress,
@@ -25,6 +28,10 @@ from tracking.services import (
     skip_stage,
     start_tracking_for_sold_car,
 )
+
+from django.urls import reverse
+
+from customers.models import Customer, SearchLog
 
 
 class StageTransitionTests(TestCase):
@@ -955,3 +962,196 @@ class StageTransitionTests(TestCase):
             ).count(),
             3,
         )
+
+
+class PublicTrackingLookupViewTests(TestCase):
+    def setUp(self):
+        self.actor = get_user_model().objects.create_user(
+            username="public-tracking-actor",
+            password="test-password",
+        )
+
+        self.sale_confirmed_stage = Stage.objects.create(
+            name="Sale Confirmed",
+            order=1,
+        )
+        self.shipping_stage = Stage.objects.create(
+            name="Shipping from Oman",
+            order=2,
+        )
+
+        StageTransition.objects.create(
+            from_stage=self.sale_confirmed_stage,
+            to_stage=self.shipping_stage,
+            estimated_duration_days=5,
+        )
+
+        self.customer = Customer.objects.create(
+            full_name="Private Customer Name",
+            phone="09123456789",
+            telegram_id="private_customer_telegram_id",
+        )
+
+        self.car = Car.objects.create(
+            title="2024 Toyota Camry",
+            brand="Toyota",
+            model="Camry",
+            year=2024,
+            color="White",
+            price_amount=3_000_000_000,
+            status=Car.Status.SOLD,
+            customer=self.customer,
+            tracking_code="OAL-public-tracking-test-code",
+        )
+
+        start_tracking_for_sold_car(
+            car=self.car,
+            actor=self.actor,
+        )
+
+    def test_get_displays_the_public_tracking_lookup_form(self):
+        response = self.client.get(reverse("tracking:public_lookup"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(
+            response,
+            "tracking/public_lookup.html",
+        )
+        self.assertContains(
+            response,
+            'name="tracking_code"',
+            html=False,
+        )
+
+    def test_valid_tracking_code_displays_safe_tracking_data(self):
+        response = self.client.post(
+            reverse("tracking:public_lookup"),
+            data={
+                "tracking_code": self.car.tracking_code,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["tracking_data"]["tracking_code"],
+            self.car.tracking_code,
+        )
+        self.assertEqual(
+            response.context["tracking_data"]["remaining_eta_days"],
+            5,
+        )
+
+        self.assertContains(response, self.car.title)
+        self.assertContains(response, self.sale_confirmed_stage.name)
+
+        # Public tracking must not expose private customer or financial data.
+        self.assertNotContains(response, self.customer.full_name)
+        self.assertNotContains(response, self.customer.phone)
+        self.assertNotContains(response, self.customer.telegram_id)
+        self.assertNotContains(response, "3,000,000,000")
+
+    def test_unknown_tracking_code_shows_a_generic_error(self):
+        response = self.client.post(
+            reverse("tracking:public_lookup"),
+            data={
+                "tracking_code": "OAL-unknown-code",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["tracking_data"])
+        self.assertContains(
+            response,
+            "اطلاعات رهگیری با این کد پیدا نشد.",
+        )
+
+        # Do not expose the internal service/database error to the visitor.
+        self.assertNotContains(
+            response,
+            "هیچ سابقه پیگیری برای این کد یافت نشد.",
+        )
+
+    def test_successful_web_lookup_creates_a_search_log(self):
+        response = self.client.post(
+            reverse("tracking:public_lookup"),
+            data={
+                "tracking_code": self.car.tracking_code,
+            },
+            HTTP_USER_AGENT="Phase 4 test browser",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        search_log = SearchLog.objects.get()
+
+        self.assertEqual(search_log.car, self.car)
+        self.assertEqual(search_log.customer, self.customer)
+        self.assertEqual(search_log.source, SearchLog.Source.WEB)
+        self.assertEqual(
+            search_log.user_agent,
+            "Phase 4 test browser",
+        )
+
+    def test_unknown_tracking_code_is_not_logged(self):
+        response = self.client.post(
+            reverse("tracking:public_lookup"),
+            data={
+                "tracking_code": "OAL-unknown-code",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(SearchLog.objects.count(), 0)
+
+
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "public-tracking-rate-limit-tests",
+        }
+    },
+    PUBLIC_TRACKING_RATE_LIMIT_ATTEMPTS=3,
+    PUBLIC_TRACKING_RATE_LIMIT_WINDOW_SECONDS=60,
+)
+class PublicTrackingRateLimitTests(TestCase):
+    def setUp(self):
+        # This clears only the temporary in-memory cache used by this test class.
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_fourth_tracking_lookup_from_same_ip_is_rate_limited(self):
+        url = reverse("tracking:public_lookup")
+        client_ip = "203.0.113.10"
+
+        for attempt_number in range(3):
+            response = self.client.post(
+                url,
+                data={
+                    "tracking_code": f"OAL-rate-limit-{attempt_number}",
+                },
+                REMOTE_ADDR=client_ip,
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(
+                response,
+                "اطلاعات رهگیری با این کد پیدا نشد.",
+            )
+
+        blocked_response = self.client.post(
+            url,
+            data={
+                "tracking_code": "OAL-rate-limit-blocked",
+            },
+            REMOTE_ADDR=client_ip,
+        )
+
+        self.assertEqual(blocked_response.status_code, 200)
+        self.assertContains(
+            blocked_response,
+            "تعداد تلاش‌های شما بیش از حد مجاز است. لطفاً چند دقیقه دیگر دوباره تلاش کنید.",
+        )
+        self.assertEqual(SearchLog.objects.count(), 0)
