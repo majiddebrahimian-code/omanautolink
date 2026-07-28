@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>درخواست ثبت شد | Oman Auto Link</title>
+</head>
+<body>
+    <main>
+        <h1>درخواست شما با موفقیت ثبت شد</h1>
+
+        <p>
+            کارشناسان ما مشخصات خودروی موردنظر شما را بررسی می‌کنند
+            و از طریق شماره تلفن ثبت‌شده با شما تماس خواهند گرفت.
+        </p>
+
+        <p>
+            ثبت درخواست به‌معنای خرید نهایی یا پرداخت وجه نیست.
+        </p>
+
+        <p>
+            <a href="{% url 'customers:custom_vehicle_request_create' %}">
+                ثبت درخواست جدید
+            </a>
+        </p>
+    </main>
+</body>
+</html>

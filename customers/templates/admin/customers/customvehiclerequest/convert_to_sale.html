@@ -1,0 +1,48 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+    <div id="content-main">
+        <h1>تبدیل درخواست به فروش</h1>
+
+        <p>
+            درخواست مشتری:
+            <strong>{{ original.full_name }}</strong>
+        </p>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+                {% for error in form.non_field_errors %}
+                    <p class="errornote">{{ error }}</p>
+                {% endfor %}
+            {% endif %}
+
+            {% for field in form %}
+                <div class="form-row">
+                    {{ field.label_tag }}
+                    {{ field }}
+
+                    {% for error in field.errors %}
+                        <p class="errornote">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+
+            <div class="submit-row">
+                <input
+                    type="submit"
+                    value="تأیید فروش و ایجاد کد رهگیری"
+                    class="default"
+                >
+
+                <a
+                    href="{% url 'admin:customers_customvehiclerequest_change' original.id %}"
+                    class="button cancel-link"
+                >
+                    بازگشت
+                </a>
+            </div>
+        </form>
+    </div>
+{% endblock %}
