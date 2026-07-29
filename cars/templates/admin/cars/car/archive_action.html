@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+    <div id="content-main">
+        <h1>{{ title }}</h1>
+
+        <p>
+            خودرو:
+            <strong>{{ car }}</strong>
+        </p>
+
+        <p>{{ notice }}</p>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+                {% for error in form.non_field_errors %}
+                    <p class="errornote">{{ error }}</p>
+                {% endfor %}
+            {% endif %}
+
+            {% for field in form %}
+                <div class="form-row">
+                    {{ field.label_tag }}
+                    {{ field }}
+
+                    {% for error in field.errors %}
+                        <p class="errornote">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+
+            <div class="submit-row">
+                <input
+                    type="submit"
+                    value="{{ submit_label }}"
+                    class="default"
+                >
+
+                <a
+                    href="{% url 'admin:cars_car_change' car.id %}"
+                    class="button cancel-link"
+                >
+                    بازگشت
+                </a>
+            </div>
+        </form>
+    </div>
+{% endblock %}

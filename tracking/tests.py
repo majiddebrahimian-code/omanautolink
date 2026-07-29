@@ -1,10 +1,12 @@
 from urllib import response
 
+from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 
 from django.core.cache import cache
-from django.test import TestCase, override_settings
+
+from django.test import RequestFactory, TestCase, override_settings
 
 from tracking.models import (
     CarStageProgress,
@@ -14,8 +16,10 @@ from tracking.models import (
 )
 
 from cars.models import Car
-
 from accounts.models import StaffProfile
+from accounts.services import RoleGroup, ensure_default_role_groups
+
+from django.contrib.auth.models import Permission
 
 from tracking.services import (
     archive_stage,
@@ -48,10 +52,20 @@ class StageTransitionTests(TestCase):
             name="Customs Clearance",
             order=3,
         )
+
+        self.clearance_employee_group = ensure_default_role_groups()[
+            RoleGroup.CLEARANCE_EMPLOYEE
+        ]
+
         user_model = get_user_model()
+
         self.employee = user_model.objects.create_user(
             username="tracking-employee",
             password="test-password",
+            is_staff=True,
+        )
+        self.employee.groups.add(
+            self.clearance_employee_group,
         )
 
     def test_forward_transition_is_valid(self):
@@ -286,6 +300,10 @@ class StageTransitionTests(TestCase):
         unauthorized_user = user_model.objects.create_user(
             username="unauthorized-user",
             password="test-password",
+            is_staff=True,
+        )
+        unauthorized_user.groups.add(
+            self.clearance_employee_group,
         )
 
         with self.assertRaises(ValidationError):
@@ -963,6 +981,189 @@ class StageTransitionTests(TestCase):
             3,
         )
 
+    def test_authorized_employee_can_skip_stage_with_explicit_permission(self):
+        StageTransition.objects.create(
+            from_stage=self.stage_one,
+            to_stage=self.stage_two,
+            estimated_duration_days=3,
+        )
+        StageTransition.objects.create(
+            from_stage=self.stage_two,
+            to_stage=self.stage_three,
+            estimated_duration_days=5,
+        )
+
+        car = Car.objects.create(
+            title="Authorized Skip Car",
+            brand="Toyota",
+            model="Land Cruiser",
+            status=Car.Status.SOLD,
+            tracking_code="OAL-authorized-skip",
+        )
+
+        start_tracking_for_sold_car(
+            car=car,
+            actor=self.employee,
+        )
+
+        user_model = get_user_model()
+
+        authorized_employee = user_model.objects.create_user(
+            username="authorized-skip-employee",
+            password="test-password",
+            is_staff=True,
+        )
+
+        skip_permission = Permission.objects.get(
+            content_type__app_label="tracking",
+            codename="skip_tracking_stage",
+        )
+        authorized_employee.user_permissions.add(skip_permission)
+
+        progress = skip_stage(
+            car=car,
+            stage=self.stage_two,
+            actor=authorized_employee,
+            note="این مرحله برای این خودرو لازم نیست.",
+        )
+
+        self.assertEqual(progress.state, "skipped")
+        self.assertEqual(progress.skipped_by, authorized_employee)
+
+    def test_inactive_employee_cannot_skip_stage_even_with_permission(self):
+        StageTransition.objects.create(
+            from_stage=self.stage_one,
+            to_stage=self.stage_two,
+            estimated_duration_days=3,
+        )
+        StageTransition.objects.create(
+            from_stage=self.stage_two,
+            to_stage=self.stage_three,
+            estimated_duration_days=5,
+        )
+
+        car = Car.objects.create(
+            title="Inactive Skip Car",
+            brand="Toyota",
+            model="Land Cruiser",
+            status=Car.Status.SOLD,
+            tracking_code="OAL-inactive-skip",
+        )
+
+        start_tracking_for_sold_car(
+            car=car,
+            actor=self.employee,
+        )
+
+        user_model = get_user_model()
+
+        inactive_employee = user_model.objects.create_user(
+            username="inactive-skip-employee",
+            password="test-password",
+            is_staff=True,
+            is_active=False,
+        )
+
+        skip_permission = Permission.objects.get(
+            content_type__app_label="tracking",
+            codename="skip_tracking_stage",
+        )
+        inactive_employee.user_permissions.add(skip_permission)
+
+        with self.assertRaises(ValidationError):
+            skip_stage(
+                car=car,
+                stage=self.stage_two,
+                actor=inactive_employee,
+            )
+
+        car.refresh_from_db()
+
+        self.assertEqual(car.current_stage, self.stage_one)
+
+    def test_change_stage_permission_cannot_archive_a_stage(self):
+        StageTransition.objects.create(
+            from_stage=self.stage_one,
+            to_stage=self.stage_two,
+            estimated_duration_days=3,
+        )
+        StageTransition.objects.create(
+            from_stage=self.stage_two,
+            to_stage=self.stage_three,
+            estimated_duration_days=5,
+        )
+
+        user_model = get_user_model()
+
+        generic_stage_editor = user_model.objects.create_user(
+            username="generic-stage-editor",
+            password="test-password",
+            is_staff=True,
+        )
+
+        generic_change_permission = Permission.objects.get(
+            content_type__app_label="tracking",
+            codename="change_stage",
+        )
+        generic_stage_editor.user_permissions.add(
+            generic_change_permission,
+        )
+
+        with self.assertRaises(ValidationError):
+            archive_stage(
+                stage=self.stage_two,
+                actor=generic_stage_editor,
+                replacement_duration_days=8,
+                note="آزمایش مجوز Archive",
+                confirm_affected_vehicles=True,
+            )
+
+        self.stage_two.refresh_from_db()
+
+        self.assertTrue(self.stage_two.is_active)
+
+    def test_authorized_employee_can_archive_stage_with_explicit_permission(self):
+        StageTransition.objects.create(
+            from_stage=self.stage_one,
+            to_stage=self.stage_two,
+            estimated_duration_days=3,
+        )
+        StageTransition.objects.create(
+            from_stage=self.stage_two,
+            to_stage=self.stage_three,
+            estimated_duration_days=5,
+        )
+
+        user_model = get_user_model()
+
+        authorized_employee = user_model.objects.create_user(
+            username="authorized-archive-employee",
+            password="test-password",
+            is_staff=True,
+        )
+
+        archive_permission = Permission.objects.get(
+            content_type__app_label="tracking",
+            codename="archive_tracking_stage",
+        )
+        authorized_employee.user_permissions.add(archive_permission)
+
+        result = archive_stage(
+            stage=self.stage_two,
+            actor=authorized_employee,
+            replacement_duration_days=8,
+            note="آزمایش Archive مجاز",
+            confirm_affected_vehicles=True,
+        )
+
+        self.stage_two.refresh_from_db()
+
+        self.assertFalse(self.stage_two.is_active)
+        self.assertEqual(
+            result["impact"]["counts"]["total_affected"],
+            0,
+        )
+
 
 class PublicTrackingLookupViewTests(TestCase):
     def setUp(self):
@@ -1155,3 +1356,32 @@ class PublicTrackingRateLimitTests(TestCase):
             "تعداد تلاش‌های شما بیش از حد مجاز است. لطفاً چند دقیقه دیگر دوباره تلاش کنید.",
         )
         self.assertEqual(SearchLog.objects.count(), 0)
+
+
+class TrackingAdminSafetyTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+
+        self.administrator = user_model.objects.create_superuser(
+            username="tracking-admin-safety",
+            password="test-password",
+        )
+
+        request_factory = RequestFactory()
+        self.request = request_factory.get("/admin/")
+        self.request.user = self.administrator
+
+        self.stage_admin = admin.site._registry[Stage]
+        self.progress_admin = admin.site._registry[CarStageProgress]
+
+    def test_tracking_progress_records_cannot_be_mutated_in_admin(self):
+        self.assertFalse(self.progress_admin.has_add_permission(self.request))
+        self.assertFalse(self.progress_admin.has_change_permission(self.request))
+        self.assertFalse(self.progress_admin.has_delete_permission(self.request))
+
+    def test_stage_cannot_be_directly_archived_or_deleted_in_admin(self):
+        self.assertIn(
+            "is_active",
+            self.stage_admin.readonly_fields,
+        )
+        self.assertFalse(self.stage_admin.has_delete_permission(self.request))

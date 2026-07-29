@@ -128,12 +128,24 @@ class TrackingEvent(models.Model):
         ]
         permissions = [
             (
+                "confirm_tracking_stage",
+                "Can confirm an assigned tracking stage",
+            ),
+            (
+                "import_tracking_stage_updates",
+                "Can import tracking stage updates",
+            ),
+            (
                 "skip_tracking_stage",
                 "Can skip a tracking stage",
             ),
             (
                 "correct_tracking_stage",
                 "Can correct tracking stages",
+            ),
+            (
+                "archive_tracking_stage",
+                "Can archive a tracking stage",
             ),
         ]
 

@@ -87,6 +87,12 @@ class CustomVehicleRequest(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        permissions = [
+            (
+                "convert_custom_vehicle_request_to_sale",
+                "Can convert a custom vehicle request to sale",
+            ),
+        ]
         constraints = [
             models.CheckConstraint(
                 check=(

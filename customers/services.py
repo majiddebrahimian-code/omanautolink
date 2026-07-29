@@ -1,6 +1,6 @@
 from decimal import Decimal, InvalidOperation
 from django.utils import timezone
-
+from accounts.authorization import require_permission
 from tracking.models import TrackingEvent
 
 from django.core.exceptions import ValidationError
@@ -206,12 +206,11 @@ def record_custom_vehicle_request_view(
     This is an audit record, not an employee assignment.
     Repeated views by the same employee update one existing receipt.
     """
-
-    if employee is None or not employee.is_authenticated:
-        raise ValidationError("برای مشاهدهٔ درخواست باید وارد سیستم شوید.")
-
-    if not employee.has_perm("customers.view_customvehiclerequest"):
-        raise ValidationError("شما اجازهٔ مشاهدهٔ درخواست‌های خودرو را ندارید.")
+    require_permission(
+        actor=employee,
+        permission="customers.view_customvehiclerequest",
+        error_message="شما اجازهٔ مشاهدهٔ درخواست‌های خودرو را ندارید.",
+    )
 
     try:
         vehicle_request = CustomVehicleRequest.objects.select_for_update().get(
@@ -253,11 +252,11 @@ def convert_custom_vehicle_request_to_sold(
     startup are never duplicated here.
     """
 
-    if actor is None or not actor.is_authenticated:
-        raise ValidationError("برای ثبت فروش باید وارد سیستم شوید.")
-
-    if not actor.has_perm("customers.change_customvehiclerequest"):
-        raise ValidationError("شما اجازهٔ تبدیل درخواست به فروش را ندارید.")
+    require_permission(
+        actor=actor,
+        permission="customers.convert_custom_vehicle_request_to_sale",
+        error_message="شما اجازهٔ تبدیل درخواست به فروش را ندارید.",
+    )
 
     try:
         vehicle_request = CustomVehicleRequest.objects.select_for_update().get(

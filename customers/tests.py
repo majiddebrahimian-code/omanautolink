@@ -1,31 +1,24 @@
 from decimal import Decimal
 
-
-from django.urls import reverse
-
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.test import TestCase
-
+from django.urls import reverse
 
 from cars.models import Car
 from cars.services import place_vehicle_on_hold
-
-from tracking.models import Stage
-
 from customers.models import (
     Customer,
     CustomVehicleRequest,
     CustomVehicleRequestReadReceipt,
 )
-
 from customers.services import (
-    create_custom_vehicle_request,
     convert_custom_vehicle_request_to_sold,
+    create_custom_vehicle_request,
     record_custom_vehicle_request_view,
 )
-
-from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Permission
+from tracking.models import Stage
 
 
 class CustomVehicleRequestServiceTests(TestCase):
@@ -54,30 +47,12 @@ class CustomVehicleRequestServiceTests(TestCase):
     def test_create_custom_vehicle_request_stores_customer_requirements(self):
         vehicle_request = create_custom_vehicle_request(**self.valid_request_data())
 
-        self.assertEqual(
-            vehicle_request.full_name,
-            "Ali Ahmadi",
-        )
-        self.assertEqual(
-            vehicle_request.phone,
-            "09123456789",
-        )
-        self.assertEqual(
-            vehicle_request.preferred_brand,
-            "Toyota",
-        )
-        self.assertEqual(
-            vehicle_request.preferred_model,
-            "Land Cruiser",
-        )
-        self.assertEqual(
-            vehicle_request.preferred_year_from,
-            2020,
-        )
-        self.assertEqual(
-            vehicle_request.preferred_year_to,
-            2024,
-        )
+        self.assertEqual(vehicle_request.full_name, "Ali Ahmadi")
+        self.assertEqual(vehicle_request.phone, "09123456789")
+        self.assertEqual(vehicle_request.preferred_brand, "Toyota")
+        self.assertEqual(vehicle_request.preferred_model, "Land Cruiser")
+        self.assertEqual(vehicle_request.preferred_year_from, 2020)
+        self.assertEqual(vehicle_request.preferred_year_to, 2024)
         self.assertEqual(
             vehicle_request.budget_amount,
             Decimal("3500000000"),
@@ -139,6 +114,7 @@ class CustomVehicleRequestReadReceiptTests(TestCase):
         )
 
         view_permission = Permission.objects.get(
+            content_type__app_label="customers",
             codename="view_customvehiclerequest",
         )
 
@@ -150,14 +126,8 @@ class CustomVehicleRequestReadReceiptTests(TestCase):
             employee=self.employee,
         )
 
-        self.assertEqual(
-            receipt.vehicle_request,
-            self.vehicle_request,
-        )
-        self.assertEqual(
-            receipt.employee,
-            self.employee,
-        )
+        self.assertEqual(receipt.vehicle_request, self.vehicle_request)
+        self.assertEqual(receipt.employee, self.employee)
         self.assertEqual(
             CustomVehicleRequestReadReceipt.objects.count(),
             1,
@@ -168,10 +138,7 @@ class CustomVehicleRequestReadReceiptTests(TestCase):
             employee=self.employee,
         )
 
-        self.assertEqual(
-            repeated_receipt.pk,
-            receipt.pk,
-        )
+        self.assertEqual(repeated_receipt.pk, receipt.pk)
         self.assertEqual(
             CustomVehicleRequestReadReceipt.objects.count(),
             1,
@@ -208,11 +175,24 @@ class CustomVehicleRequestConversionTests(TestCase):
             is_staff=True,
         )
 
-        change_permission = Permission.objects.get(
-            codename="change_customvehiclerequest",
+        conversion_permission = Permission.objects.get(
+            content_type__app_label="customers",
+            codename="convert_custom_vehicle_request_to_sale",
+        )
+        hold_permission = Permission.objects.get(
+            content_type__app_label="cars",
+            codename="hold_vehicle",
+        )
+        sell_permission = Permission.objects.get(
+            content_type__app_label="cars",
+            codename="sell_vehicle",
         )
 
-        self.authorized_employee.user_permissions.add(change_permission)
+        self.authorized_employee.user_permissions.add(
+            conversion_permission,
+            hold_permission,
+            sell_permission,
+        )
 
         self.vehicle_request = create_custom_vehicle_request(
             full_name="Reza Mohammadi",
@@ -255,18 +235,9 @@ class CustomVehicleRequestConversionTests(TestCase):
         self.vehicle_request.refresh_from_db()
         sold_car.refresh_from_db()
 
-        self.assertEqual(
-            sold_car.status,
-            Car.Status.SOLD,
-        )
-        self.assertEqual(
-            sold_car.customer.full_name,
-            "Reza Mohammadi",
-        )
-        self.assertEqual(
-            sold_car.customer.phone,
-            "09121234567",
-        )
+        self.assertEqual(sold_car.status, Car.Status.SOLD)
+        self.assertEqual(sold_car.customer.full_name, "Reza Mohammadi")
+        self.assertEqual(sold_car.customer.phone, "09121234567")
         self.assertEqual(
             sold_car.customer.telegram_id,
             "reza_customer_telegram_id",
@@ -281,10 +252,7 @@ class CustomVehicleRequestConversionTests(TestCase):
             self.vehicle_request.status,
             CustomVehicleRequest.Status.SOLD,
         )
-        self.assertEqual(
-            self.vehicle_request.sold_car,
-            sold_car,
-        )
+        self.assertEqual(self.vehicle_request.sold_car, sold_car)
         self.assertEqual(
             self.vehicle_request.sold_by,
             self.authorized_employee,
@@ -293,9 +261,7 @@ class CustomVehicleRequestConversionTests(TestCase):
             self.vehicle_request.telegram_id,
             "reza_customer_telegram_id",
         )
-        self.assertIsNotNone(
-            self.vehicle_request.sold_at,
-        )
+        self.assertIsNotNone(self.vehicle_request.sold_at)
 
     def test_employee_without_permission_cannot_convert_request_to_sale(self):
         user_model = get_user_model()
@@ -321,10 +287,47 @@ class CustomVehicleRequestConversionTests(TestCase):
             self.vehicle_request.status,
             CustomVehicleRequest.Status.NEW,
         )
-        self.assertEqual(
-            self.car.status,
-            Car.Status.ON_HOLD,
+        self.assertEqual(self.car.status, Car.Status.ON_HOLD)
+
+    def test_generic_change_permission_does_not_authorize_sale_conversion(self):
+        user_model = get_user_model()
+
+        generic_change_employee = user_model.objects.create_user(
+            username="generic-change-employee",
+            password="test-password",
+            is_staff=True,
         )
+
+        generic_change_permission = Permission.objects.get(
+            content_type__app_label="customers",
+            codename="change_customvehiclerequest",
+        )
+        sell_permission = Permission.objects.get(
+            content_type__app_label="cars",
+            codename="sell_vehicle",
+        )
+
+        generic_change_employee.user_permissions.add(
+            generic_change_permission,
+            sell_permission,
+        )
+
+        with self.assertRaises(ValidationError):
+            convert_custom_vehicle_request_to_sold(
+                vehicle_request_id=self.vehicle_request.id,
+                car_id=self.car.id,
+                actor=generic_change_employee,
+                telegram_id="reza_customer_telegram_id",
+            )
+
+        self.vehicle_request.refresh_from_db()
+        self.car.refresh_from_db()
+
+        self.assertEqual(
+            self.vehicle_request.status,
+            CustomVehicleRequest.Status.NEW,
+        )
+        self.assertEqual(self.car.status, Car.Status.ON_HOLD)
 
 
 class PublicCustomVehicleRequestViewTests(TestCase):
@@ -376,10 +379,7 @@ class PublicCustomVehicleRequestViewTests(TestCase):
 
         vehicle_request = CustomVehicleRequest.objects.get()
 
-        self.assertEqual(
-            vehicle_request.full_name,
-            "Maryam Karimi",
-        )
+        self.assertEqual(vehicle_request.full_name, "Maryam Karimi")
         self.assertEqual(
             vehicle_request.source,
             CustomVehicleRequest.Source.WEBSITE,
@@ -436,11 +436,11 @@ class CustomVehicleRequestAdminAuditTests(TestCase):
         )
 
         view_permission = Permission.objects.get(
+            content_type__app_label="customers",
             codename="view_customvehiclerequest",
         )
 
         self.employee.user_permissions.add(view_permission)
-
         self.client.force_login(self.employee)
 
     def test_opening_request_in_admin_creates_read_receipt(self):
@@ -452,7 +452,6 @@ class CustomVehicleRequestAdminAuditTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-
         self.assertTrue(
             CustomVehicleRequestReadReceipt.objects.filter(
                 vehicle_request=self.vehicle_request,
@@ -477,15 +476,27 @@ class CustomVehicleRequestAdminConversionTests(TestCase):
         )
 
         view_permission = Permission.objects.get(
+            content_type__app_label="customers",
             codename="view_customvehiclerequest",
         )
-        change_permission = Permission.objects.get(
-            codename="change_customvehiclerequest",
+        conversion_permission = Permission.objects.get(
+            content_type__app_label="customers",
+            codename="convert_custom_vehicle_request_to_sale",
+        )
+        hold_permission = Permission.objects.get(
+            content_type__app_label="cars",
+            codename="hold_vehicle",
+        )
+        sell_permission = Permission.objects.get(
+            content_type__app_label="cars",
+            codename="sell_vehicle",
         )
 
         self.employee.user_permissions.add(
             view_permission,
-            change_permission,
+            conversion_permission,
+            hold_permission,
+            sell_permission,
         )
 
         self.vehicle_request = create_custom_vehicle_request(

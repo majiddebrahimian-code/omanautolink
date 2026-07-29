@@ -224,7 +224,10 @@ class CustomVehicleRequestAdmin(admin.ModelAdmin):
 
             if (
                 vehicle_request.status == CustomVehicleRequest.Status.NEW
-                and request.user.has_perm("customers.change_customvehiclerequest")
+                and request.user.has_perm(
+                    "customers.convert_custom_vehicle_request_to_sale"
+                )
+                and request.user.has_perm("cars.sell_vehicle")
             ):
                 extra_context["can_convert_to_sale"] = True
                 extra_context["convert_to_sale_url"] = reverse(
@@ -245,9 +248,12 @@ class CustomVehicleRequestAdmin(admin.ModelAdmin):
         if vehicle_request is None:
             raise Http404
 
-        if not self.has_change_permission(
-            request,
-            vehicle_request,
+        if not (
+            request.user.has_perm("customers.view_customvehiclerequest")
+            and request.user.has_perm(
+                "customers.convert_custom_vehicle_request_to_sale"
+            )
+            and request.user.has_perm("cars.sell_vehicle")
         ):
             raise PermissionDenied
 

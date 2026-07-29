@@ -4,7 +4,11 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from accounts.models import StaffProfile
+from accounts.authorization import (
+    require_permission,
+    require_stage_confirmation_permission,
+)
+
 
 from .models import (
     CarStageProgress,
@@ -21,19 +25,14 @@ def _validate_tracking_source(source):
 
 def _ensure_stage_confirmation_permission(*, actor, stage):
     """
-    Ensures that the actor may enter or complete the given stage.
+    Delegates stage-confirmation authorization to the shared
+    authorization layer.
     """
 
-    if actor.is_superuser:
-        return
-
-    try:
-        staff_profile = StaffProfile.objects.get(user=actor)
-    except StaffProfile.DoesNotExist:
-        raise ValidationError("This user is not authorized to handle tracking stages.")
-
-    if not staff_profile.assigned_stages.filter(pk=stage.pk).exists():
-        raise ValidationError("This employee is not assigned to this stage.")
+    require_stage_confirmation_permission(
+        actor=actor,
+        stage=stage,
+    )
 
 
 def _get_next_expected_stage(car):
@@ -395,8 +394,11 @@ def skip_stage(
 
     _validate_tracking_source(source)
 
-    if not (actor.is_superuser or actor.has_perm("tracking.skip_tracking_stage")):
-        raise ValidationError("This user is not authorized to skip tracking stages.")
+    require_permission(
+        actor=actor,
+        permission="tracking.skip_tracking_stage",
+        error_message="شما اجازهٔ رد کردن مراحل رهگیری را ندارید.",
+    )
 
     locked_car = car.__class__.objects.select_for_update().get(pk=car.pk)
 
@@ -468,8 +470,11 @@ def correct_tracking_stage(
     if not note.strip():
         raise ValidationError("A correction note is required.")
 
-    if not (actor.is_superuser or actor.has_perm("tracking.correct_tracking_stage")):
-        raise ValidationError("This user is not authorized to correct tracking stages.")
+    require_permission(
+        actor=actor,
+        permission="tracking.correct_tracking_stage",
+        error_message="شما اجازهٔ اصلاح مراحل رهگیری را ندارید.",
+    )
 
     locked_car = car.__class__.objects.select_for_update().get(pk=car.pk)
 
@@ -732,8 +737,11 @@ def archive_stage(
     if replacement_duration_days < 0:
         raise ValidationError("Replacement transition duration cannot be negative.")
 
-    if not (actor.is_superuser or actor.has_perm("tracking.change_stage")):
-        raise ValidationError("This user is not authorized to archive stages.")
+    require_permission(
+        actor=actor,
+        permission="tracking.archive_tracking_stage",
+        error_message="شما اجازهٔ بایگانی کردن مراحل رهگیری را ندارید.",
+    )
 
     if not confirm_affected_vehicles:
         raise ValidationError(
