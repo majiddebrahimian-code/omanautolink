@@ -1,0 +1,10 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <h1>{{ title }}</h1>
+  <p>این کد برای <strong>{{ staff_user }}</strong> صادر شده است و تا <strong>{{ expires_at }}</strong> اعتبار دارد.</p>
+  <p><strong>کد اتصال:</strong></p>
+  <p><code style="font-size: 1.3em; user-select: all;">{{ raw_code }}</code></p>
+  <p class="help">کد را اکنون به‌صورت امن در اختیار همان کارمند بگذارید. پس از خروج از این صفحه، نسخهٔ خام آن دوباره قابل مشاهده نیست.</p>
+  <p><a href="../" class="button">بازگشت به اتصال‌های تلگرام</a></p>
+{% endblock %}

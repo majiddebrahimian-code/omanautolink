@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     "customers",
     "tracking",
     "blog",
+    "integrations",
 ]
 
 MIDDLEWARE = [
@@ -117,3 +118,48 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Asia/Tehran"
+
+# Telegram is deliberately disabled unless a deployment explicitly enables it.
+# Keep the real token and webhook secret in .env only.
+TELEGRAM_BOT_ENABLED = config("TELEGRAM_BOT_ENABLED", default=False, cast=bool)
+TELEGRAM_BOT_TOKEN = config("TELEGRAM_BOT_TOKEN", default="")
+TELEGRAM_WEBHOOK_SECRET = config("TELEGRAM_WEBHOOK_SECRET", default="")
+TELEGRAM_LINK_CODE_TTL_MINUTES = config(
+    "TELEGRAM_LINK_CODE_TTL_MINUTES",
+    default=15,
+    cast=int,
+)
+TELEGRAM_CONFIRMATION_SESSION_TTL_MINUTES = config(
+    "TELEGRAM_CONFIRMATION_SESSION_TTL_MINUTES",
+    default=5,
+    cast=int,
+)
+TELEGRAM_OUTBOX_MAX_ATTEMPTS = config(
+    "TELEGRAM_OUTBOX_MAX_ATTEMPTS",
+    default=6,
+    cast=int,
+)
+TELEGRAM_OUTBOX_SENDING_TIMEOUT_SECONDS = config(
+    "TELEGRAM_OUTBOX_SENDING_TIMEOUT_SECONDS",
+    default=300,
+    cast=int,
+)
+TELEGRAM_HTTP_TIMEOUT_SECONDS = config(
+    "TELEGRAM_HTTP_TIMEOUT_SECONDS",
+    default=20,
+    cast=int,
+)
+TELEGRAM_POLL_TIMEOUT_SECONDS = config(
+    "TELEGRAM_POLL_TIMEOUT_SECONDS",
+    default=30,
+    cast=int,
+)
+
+# A durable outbox is the source of truth. Celery Beat periodically recovers
+# retryable or stale messages even if a worker crashed after claiming one.
+CELERY_BEAT_SCHEDULE = {
+    "recover-due-telegram-outbox-messages": {
+        "task": "integrations.process_due_telegram_outbox_messages",
+        "schedule": 60.0,
+    },
+}

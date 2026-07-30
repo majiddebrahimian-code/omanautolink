@@ -77,6 +77,45 @@ def _get_next_expected_stage(car):
     return next_stage
 
 
+@transaction.atomic
+def get_stage_confirmation_preview(*, tracking_code, staff):
+    """
+    Resolves the one stage a staff member may enter next for a vehicle.
+
+    This is intentionally a read/preview service.  Website forms, Telegram
+    handlers, and future APIs can ask the same business layer what the next
+    valid stage is without copying workflow or authorization rules.
+    The final state change must still go through ``confirm_stage``.
+    """
+
+    normalized_code = str(tracking_code or "").strip()
+
+    if not normalized_code:
+        raise ValidationError("کد رهگیری را وارد کنید.")
+
+    from cars.models import Car
+
+    try:
+        car = Car.objects.select_for_update().get(
+            tracking_code=normalized_code,
+            is_deleted=False,
+        )
+    except Car.DoesNotExist:
+        raise ValidationError("خودرویی با این کد رهگیری پیدا نشد.")
+
+    expected_stage = _get_next_expected_stage(car)
+
+    _ensure_stage_confirmation_permission(
+        actor=staff,
+        stage=expected_stage,
+    )
+
+    return {
+        "car": car,
+        "stage": expected_stage,
+    }
+
+
 def _get_transition_map(stages):
     transitions = StageTransition.objects.filter(
         is_active=True,
