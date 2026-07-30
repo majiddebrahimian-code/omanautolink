@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <h1>{{ title }}</h1>
+  <p>
+    این کد فقط یک‌بار نمایش داده می‌شود. صدور کد جدید، همهٔ کدهای
+    استفاده‌نشدهٔ قبلی برای همان خودرو را باطل می‌کند.
+  </p>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="submit-row">
+      <input type="submit" value="ایجاد کد یک‌بارمصرف" class="default">
+      <a href="../" class="button cancel-link">انصراف</a>
+    </div>
+  </form>
+{% endblock %}

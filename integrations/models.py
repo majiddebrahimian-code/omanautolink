@@ -107,6 +107,115 @@ class TelegramStaffLinkToken(models.Model):
         return f"Telegram link token for {self.user}"
 
 
+class TelegramCustomerActivationToken(models.Model):
+    """
+    A one-time, short-lived customer code for activating Telegram tracking.
+
+    The raw code is intentionally never persisted.  It is shown once to the
+    authorized salesperson, who can share it with the customer after sale.
+    """
+
+    car = models.ForeignKey(
+        "cars.Car",
+        on_delete=models.PROTECT,
+        related_name="telegram_customer_activation_tokens",
+    )
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.PROTECT,
+        related_name="telegram_activation_tokens",
+    )
+    code_hash = models.CharField(max_length=128, unique=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_customer_telegram_activation_tokens",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(blank=True, null=True)
+    used_telegram_user_id = models.BigIntegerField(blank=True, null=True)
+    revoked_at = models.DateTimeField(blank=True, null=True)
+    revoked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="revoked_customer_telegram_activation_tokens",
+        blank=True,
+        null=True,
+    )
+    attempt_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-created_at"]
+        permissions = [
+            (
+                "issue_customer_telegram_activation",
+                "Can issue a customer Telegram activation code",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["car", "expires_at"],
+                name="tg_cust_token_car_exp_idx",
+            ),
+            models.Index(
+                fields=["customer", "expires_at"],
+                name="tg_cust_token_user_exp_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Customer Telegram activation token for {self.car}"
+
+
+class CustomerTelegramSubscription(models.Model):
+    """A verified Telegram identity subscribed to one sold vehicle's updates."""
+
+    car = models.ForeignKey(
+        "cars.Car",
+        on_delete=models.PROTECT,
+        related_name="telegram_customer_subscriptions",
+    )
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.PROTECT,
+        related_name="telegram_tracking_subscriptions",
+    )
+    telegram_user_id = models.BigIntegerField()
+    telegram_chat_id = models.BigIntegerField()
+    telegram_username = models.CharField(max_length=255, blank=True)
+    first_name = models.CharField(max_length=255, blank=True)
+    last_name = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+    subscribed_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(blank=True, null=True)
+    unsubscribed_at = models.DateTimeField(blank=True, null=True)
+    unsubscribe_reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-subscribed_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["car"],
+                condition=Q(is_active=True),
+                name="one_active_customer_subscription_per_car",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["telegram_user_id", "is_active"],
+                name="tg_customer_user_active_idx",
+            ),
+            models.Index(
+                fields=["telegram_chat_id", "is_active"],
+                name="tg_customer_chat_active_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Customer Telegram subscription for {self.car}"
+
+
 class TelegramInboundUpdate(models.Model):
     """
     Sanitized receipt for one Telegram update.
@@ -137,6 +246,13 @@ class TelegramInboundUpdate(models.Model):
     command_name = models.CharField(max_length=60, blank=True)
     staff_link = models.ForeignKey(
         TelegramStaffLink,
+        on_delete=models.PROTECT,
+        related_name="inbound_updates",
+        blank=True,
+        null=True,
+    )
+    customer_subscription = models.ForeignKey(
+        CustomerTelegramSubscription,
         on_delete=models.PROTECT,
         related_name="inbound_updates",
         blank=True,
@@ -258,6 +374,13 @@ class TelegramOutboxMessage(models.Model):
         blank=True,
         null=True,
     )
+    customer_subscription = models.ForeignKey(
+        CustomerTelegramSubscription,
+        on_delete=models.PROTECT,
+        related_name="outbox_messages",
+        blank=True,
+        null=True,
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -296,3 +419,47 @@ class TelegramOutboxMessage(models.Model):
 
     def __str__(self):
         return f"Telegram {self.operation} ({self.status}) #{self.pk}"
+
+
+class CustomerTrackingNotification(models.Model):
+    """Durable, idempotent notification intent for one tracking event."""
+
+    tracking_event = models.ForeignKey(
+        "tracking.TrackingEvent",
+        on_delete=models.PROTECT,
+        related_name="customer_notifications",
+    )
+    subscription = models.ForeignKey(
+        CustomerTelegramSubscription,
+        on_delete=models.PROTECT,
+        related_name="tracking_notifications",
+    )
+    outbox_message = models.OneToOneField(
+        TelegramOutboxMessage,
+        on_delete=models.PROTECT,
+        related_name="customer_tracking_notification",
+        blank=True,
+        null=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tracking_event", "subscription"],
+                name="one_customer_notification_per_tracking_event",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["subscription", "created_at"],
+                name="tg_cust_notice_sub_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"Customer notification for tracking event "
+            f"#{self.tracking_event_id}"
+        )

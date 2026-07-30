@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <h1>{{ title }}</h1>
+  <p>
+    این کد برای مشتری <strong>{{ customer }}</strong> و خودرو
+    <strong>{{ car }}</strong> صادر شد و تا <strong>{{ expires_at }}</strong>
+    اعتبار دارد.
+  </p>
+  <p><strong>کد فعال‌سازی:</strong></p>
+  <p><code style="font-size: 1.3em; user-select: all;">{{ raw_code }}</code></p>
+  <p class="help">
+    کد را اکنون فقط از مسیر امن در اختیار همان مشتری قرار دهید. پس از خروج
+    از این صفحه، نسخهٔ خام آن دوباره قابل مشاهده نیست.
+  </p>
+  <p><a href="../" class="button">بازگشت به کدهای فعال‌سازی مشتری</a></p>
+{% endblock %}

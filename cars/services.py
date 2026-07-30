@@ -250,7 +250,22 @@ def mark_vehicle_as_sold(
         source=source,
     )
 
+    # A sale already required the explicit sell_vehicle permission above.  It
+    # therefore issues the one-time customer activation code as part of the
+    # same transaction, without granting a broader reissue permission.
+    from integrations.services import create_customer_telegram_activation_code
+
+    activation_result = create_customer_telegram_activation_code(
+        car=car,
+        actor=actor,
+        enforce_issue_permission=False,
+    )
+
     car.refresh_from_db()
+    # The raw code is intentionally an in-memory, one-time handoff only.  It
+    # is never a Car field and is never written to the database or audit log.
+    car.telegram_customer_activation_code = activation_result["code"]
+    car.telegram_customer_activation_expires_at = activation_result["expires_at"]
 
     return car
 

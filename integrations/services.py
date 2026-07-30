@@ -10,15 +10,19 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.signing import salted_hmac
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from accounts.authorization import require_active_internal_staff
+from accounts.authorization import require_active_internal_staff, require_permission
 
 from .models import (
+    CustomerTelegramSubscription,
+    CustomerTrackingNotification,
+    TelegramCustomerActivationToken,
     TelegramInboundUpdate,
     TelegramOutboxMessage,
     TelegramStageConfirmationSession,
@@ -49,6 +53,13 @@ def _hash_staff_link_code(code):
     ).hexdigest()
 
 
+def _hash_customer_activation_code(code):
+    return salted_hmac(
+        "integrations.telegram.customer-activation-code",
+        str(code),
+    ).hexdigest()
+
+
 def _require_system_administrator(*, actor):
     require_active_internal_staff(actor=actor)
 
@@ -66,6 +77,21 @@ def _make_staff_link_code():
 def _make_session_token():
     # Telegram callback_data has a 64-byte limit; this token remains well below it.
     return secrets.token_urlsafe(24)
+
+
+def _make_customer_activation_code():
+    # This is distinct from staff codes so /start can route safely by prefix.
+    return f"TGC-{secrets.token_urlsafe(24)}"
+
+
+def _require_customer_activation_issuer(*, actor):
+    require_permission(
+        actor=actor,
+        permission="integrations.issue_customer_telegram_activation",
+        error_message=(
+            "شما اجازهٔ صدور کد فعال‌سازی ربات برای مشتری را ندارید."
+        ),
+    )
 
 
 @transaction.atomic
@@ -289,6 +315,482 @@ def get_active_telegram_staff_link(*, telegram_user_id, telegram_chat_id, touch=
     return staff_link
 
 
+def _get_customer_activation_car(*, car_id):
+    """Loads a sale that is eligible for verified customer tracking."""
+
+    from cars.models import Car
+
+    try:
+        car = Car.objects.select_for_update().get(pk=car_id)
+    except Car.DoesNotExist:
+        raise ValidationError("خودروی موردنظر پیدا نشد.")
+
+    if car.is_deleted:
+        raise ValidationError("برای خودروی بایگانی‌شده نمی‌توان کد فعال‌سازی صادر کرد.")
+
+    if car.customer_id is None or car.status not in {
+        Car.Status.SOLD,
+        Car.Status.IN_TRANSIT,
+        Car.Status.DELIVERED,
+    }:
+        raise ValidationError(
+            "کد فعال‌سازی فقط برای خودروی فروخته‌شدهٔ دارای مشتری صادر می‌شود."
+        )
+
+    return car
+
+
+@transaction.atomic
+def create_customer_telegram_activation_code(
+    *,
+    car,
+    actor,
+    ttl_days=None,
+    enforce_issue_permission=True,
+):
+    """
+    Issues one customer activation code and invalidates older unused codes.
+
+    A sale workflow may call this with ``enforce_issue_permission=False`` after
+    it has already verified the actor's ``cars.sell_vehicle`` permission.  A
+    manual reissue always requires the dedicated integration permission.
+    """
+
+    if enforce_issue_permission:
+        _require_customer_activation_issuer(actor=actor)
+
+    locked_car = _get_customer_activation_car(car_id=car.pk)
+
+    ttl_days = (
+        settings.TELEGRAM_CUSTOMER_ACTIVATION_CODE_TTL_DAYS
+        if ttl_days is None
+        else int(ttl_days)
+    )
+
+    if ttl_days <= 0:
+        raise ValidationError("مدت اعتبار کد فعال‌سازی باید بیشتر از صفر باشد.")
+
+    now = timezone.now()
+
+    # Only one outstanding code should exist for a sale at a time.
+    TelegramCustomerActivationToken.objects.select_for_update().filter(
+        car=locked_car,
+        used_at__isnull=True,
+        revoked_at__isnull=True,
+    ).update(
+        revoked_at=now,
+        revoked_by=actor,
+    )
+
+    raw_code = _make_customer_activation_code()
+    token = TelegramCustomerActivationToken.objects.create(
+        car=locked_car,
+        customer=locked_car.customer,
+        code_hash=_hash_customer_activation_code(raw_code),
+        created_by=actor,
+        expires_at=now + timedelta(days=ttl_days),
+    )
+
+    return {
+        "code": raw_code,
+        "expires_at": token.expires_at,
+        "token": token,
+    }
+
+
+def _get_active_customer_subscription(
+    *,
+    telegram_user_id,
+    telegram_chat_id,
+    touch=True,
+):
+    """Returns all active subscriptions for one verified private identity."""
+
+    normalized_user_id = _clean_telegram_identifier(
+        telegram_user_id,
+        "شناسهٔ کاربر",
+    )
+    normalized_chat_id = _clean_telegram_identifier(
+        telegram_chat_id,
+        "شناسهٔ چت",
+    )
+
+    subscriptions = list(
+        CustomerTelegramSubscription.objects.select_related("car", "customer")
+        .filter(
+            telegram_user_id=normalized_user_id,
+            telegram_chat_id=normalized_chat_id,
+            is_active=True,
+        )
+        .order_by("-subscribed_at")
+    )
+
+    if touch and subscriptions:
+        now = timezone.now()
+        CustomerTelegramSubscription.objects.filter(
+            pk__in=[subscription.pk for subscription in subscriptions]
+        ).update(last_seen_at=now)
+        for subscription in subscriptions:
+            subscription.last_seen_at = now
+
+    return subscriptions
+
+
+def get_active_customer_telegram_subscriptions(
+    *,
+    telegram_user_id,
+    telegram_chat_id,
+    touch=True,
+):
+    """Public wrapper used by the Telegram adapter and no other identity type."""
+
+    return _get_active_customer_subscription(
+        telegram_user_id=telegram_user_id,
+        telegram_chat_id=telegram_chat_id,
+        touch=touch,
+    )
+
+
+def activate_customer_telegram_tracking(
+    *,
+    code,
+    telegram_user_id,
+    telegram_chat_id,
+    telegram_username="",
+    first_name="",
+    last_name="",
+):
+    """Consumes a customer code and creates a verified tracking subscription."""
+
+    normalized_user_id = _clean_telegram_identifier(
+        telegram_user_id,
+        "شناسهٔ کاربر",
+    )
+    normalized_chat_id = _clean_telegram_identifier(
+        telegram_chat_id,
+        "شناسهٔ چت",
+    )
+    normalized_code = str(code or "").strip()
+
+    if not normalized_code:
+        raise ValidationError("کد فعال‌سازی معتبر نیست یا منقضی شده است.")
+
+    failure_message = ""
+    subscription = None
+
+    # Like staff-link codes, invalid uses increment an audit counter and are not
+    # rolled back together with the generic validation response.
+    with transaction.atomic():
+        try:
+            token = (
+                TelegramCustomerActivationToken.objects.select_for_update()
+                .select_related("car", "customer")
+                .get(code_hash=_hash_customer_activation_code(normalized_code))
+            )
+        except TelegramCustomerActivationToken.DoesNotExist:
+            failure_message = "کد فعال‌سازی معتبر نیست یا منقضی شده است."
+        else:
+            token.attempt_count += 1
+            token.save(update_fields=["attempt_count"])
+            now = timezone.now()
+
+            if (
+                token.used_at is not None
+                or token.revoked_at is not None
+                or token.expires_at <= now
+            ):
+                failure_message = "کد فعال‌سازی معتبر نیست یا منقضی شده است."
+            else:
+                from cars.models import Car
+
+                car = Car.objects.select_for_update().get(pk=token.car_id)
+                if (
+                    car.is_deleted
+                    or car.customer_id != token.customer_id
+                    or car.status
+                    not in {
+                        Car.Status.SOLD,
+                        Car.Status.IN_TRANSIT,
+                        Car.Status.DELIVERED,
+                    }
+                ):
+                    failure_message = "کد فعال‌سازی معتبر نیست یا منقضی شده است."
+
+            if not failure_message:
+                # A newly issued valid code is an explicit authorization to move
+                # notifications to a new private Telegram account.  The former
+                # subscription remains as audit history and receives no more data.
+                CustomerTelegramSubscription.objects.select_for_update().filter(
+                    car_id=token.car_id,
+                    is_active=True,
+                ).update(
+                    is_active=False,
+                    unsubscribed_at=now,
+                    unsubscribe_reason="با فعال‌سازی جدید جایگزین شد.",
+                )
+
+                subscription = CustomerTelegramSubscription.objects.create(
+                    car_id=token.car_id,
+                    customer_id=token.customer_id,
+                    telegram_user_id=normalized_user_id,
+                    telegram_chat_id=normalized_chat_id,
+                    telegram_username=str(telegram_username or "")[:255],
+                    first_name=str(first_name or "")[:255],
+                    last_name=str(last_name or "")[:255],
+                    last_seen_at=now,
+                )
+
+                token.used_at = now
+                token.used_telegram_user_id = normalized_user_id
+                token.save(
+                    update_fields=[
+                        "used_at",
+                        "used_telegram_user_id",
+                    ]
+                )
+
+    if failure_message:
+        raise ValidationError(failure_message)
+
+    return subscription
+
+
+@transaction.atomic
+def unsubscribe_customer_telegram_tracking(
+    *,
+    tracking_code,
+    telegram_user_id,
+    telegram_chat_id,
+):
+    """Stops notifications for exactly one vehicle in the caller's private chat."""
+
+    normalized_code = str(tracking_code or "").strip()
+    if not normalized_code:
+        raise ValidationError("کد رهگیری را برای توقف اعلان وارد کنید.")
+
+    normalized_user_id = _clean_telegram_identifier(
+        telegram_user_id,
+        "شناسهٔ کاربر",
+    )
+    normalized_chat_id = _clean_telegram_identifier(
+        telegram_chat_id,
+        "شناسهٔ چت",
+    )
+
+    subscription = (
+        CustomerTelegramSubscription.objects.select_for_update()
+        .select_related("car")
+        .filter(
+            car__tracking_code=normalized_code,
+            telegram_user_id=normalized_user_id,
+            telegram_chat_id=normalized_chat_id,
+            is_active=True,
+        )
+        .first()
+    )
+
+    if subscription is None:
+        raise ValidationError("اشتراک فعال برای این کد رهگیری پیدا نشد.")
+
+    subscription.is_active = False
+    subscription.unsubscribed_at = timezone.now()
+    subscription.unsubscribe_reason = "لغو توسط مشتری در ربات تلگرام."
+    subscription.save(
+        update_fields=[
+            "is_active",
+            "unsubscribed_at",
+            "unsubscribe_reason",
+        ]
+    )
+
+    return subscription
+
+
+@transaction.atomic
+def revoke_customer_telegram_subscription(*, subscription, actor, reason=""):
+    """System-administrator safety operation for a verified customer link."""
+
+    _require_system_administrator(actor=actor)
+
+    locked_subscription = CustomerTelegramSubscription.objects.select_for_update().get(
+        pk=subscription.pk
+    )
+
+    if not locked_subscription.is_active:
+        return locked_subscription
+
+    locked_subscription.is_active = False
+    locked_subscription.unsubscribed_at = timezone.now()
+    locked_subscription.unsubscribe_reason = str(reason or "").strip() or (
+        "لغو توسط مدیر اصلی سیستم."
+    )
+    locked_subscription.save(
+        update_fields=[
+            "is_active",
+            "unsubscribed_at",
+            "unsubscribe_reason",
+        ]
+    )
+
+    return locked_subscription
+
+
+def is_telegram_tracking_lookup_allowed(*, telegram_user_id, telegram_chat_id):
+    """Rate-limits bot lookups by Telegram identity rather than Telegram's IP."""
+
+    attempt_limit = int(settings.TELEGRAM_TRACKING_RATE_LIMIT_ATTEMPTS)
+    window_seconds = int(settings.TELEGRAM_TRACKING_RATE_LIMIT_WINDOW_SECONDS)
+
+    if attempt_limit <= 0 or window_seconds <= 0:
+        return True
+
+    try:
+        normalized_user_id = _clean_telegram_identifier(
+            telegram_user_id,
+            "شناسهٔ کاربر",
+        )
+        normalized_chat_id = _clean_telegram_identifier(
+            telegram_chat_id,
+            "شناسهٔ چت",
+        )
+    except ValidationError:
+        return False
+
+    cache_key = (
+        "telegram-customer-tracking-rate-limit:"
+        f"{normalized_user_id}:{normalized_chat_id}"
+    )
+
+    if cache.add(cache_key, 1, timeout=window_seconds):
+        return True
+
+    try:
+        attempt_count = cache.incr(cache_key)
+    except ValueError:
+        # A key can expire between add and incr.
+        cache.set(cache_key, 1, timeout=window_seconds)
+        return True
+
+    return attempt_count <= attempt_limit
+
+
+def get_customer_bot_tracking_data(*, tracking_code):
+    """Returns the shared safe lookup data and records a successful bot lookup."""
+
+    from customers.models import SearchLog
+    from customers.services import record_successful_tracking_lookup
+    from tracking.services import get_public_tracking_data
+
+    tracking_data = get_public_tracking_data(tracking_code=tracking_code)
+
+    try:
+        record_successful_tracking_lookup(
+            tracking_code=tracking_data["tracking_code"],
+            source=SearchLog.Source.BOT,
+        )
+    except Exception:
+        # Lookup availability must not depend on a non-critical audit write.
+        logger.exception("Could not record a successful Telegram tracking lookup.")
+
+    return tracking_data
+
+
+def _get_notification_snapshot(*, tracking_event):
+    """Builds a resilient, public-safe snapshot for an outbound update message."""
+
+    from cars.models import Car
+    from tracking.services import calculate_remaining_eta_days
+
+    car = Car.objects.select_related("current_stage").get(pk=tracking_event.car_id)
+
+    try:
+        remaining_eta_days = calculate_remaining_eta_days(car)
+    except ValidationError:
+        # A stage may be in the middle of an administrative archive operation.
+        # The notice remains useful without an ETA; live lookup recalculates later.
+        remaining_eta_days = None
+
+    return {
+        "tracking_code": car.tracking_code,
+        "vehicle_title": car.title,
+        "current_stage_name": (
+            car.current_stage.name if car.current_stage is not None else None
+        ),
+        "remaining_eta_days": remaining_eta_days,
+        "event_type": tracking_event.event_type,
+        "previous_stage_name": (
+            tracking_event.previous_stage.name
+            if tracking_event.previous_stage_id
+            else None
+        ),
+        "new_stage_name": (
+            tracking_event.new_stage.name if tracking_event.new_stage_id else None
+        ),
+    }
+
+
+def queue_customer_tracking_notifications_for_event(*, tracking_event):
+    """
+    Explicitly creates notification intents for a customer-visible event.
+
+    This function is called by the tracking service in the same transaction as
+    the immutable event.  The durable Outbox task is still scheduled only on
+    successful database commit.
+    """
+
+    customer_visible_events = {
+        "stage_confirmed",
+        "stage_completed",
+        "stage_corrected",
+        "stage_skipped",
+        "stage_archived",
+    }
+
+    if tracking_event.event_type not in customer_visible_events:
+        return []
+
+    subscriptions = list(
+        CustomerTelegramSubscription.objects.select_related("car")
+        .filter(
+            car_id=tracking_event.car_id,
+            is_active=True,
+        )
+        .order_by("pk")
+    )
+
+    if not subscriptions:
+        return []
+
+    from .telegram.messages import customer_tracking_notification_text
+
+    snapshot = _get_notification_snapshot(tracking_event=tracking_event)
+    notifications = []
+
+    for subscription in subscriptions:
+        notification, created = CustomerTrackingNotification.objects.get_or_create(
+            tracking_event=tracking_event,
+            subscription=subscription,
+        )
+
+        if created:
+            outbox_message = queue_telegram_message(
+                chat_id=subscription.telegram_chat_id,
+                body=customer_tracking_notification_text(snapshot=snapshot),
+                message_type="customer_tracking_notification",
+                idempotency_key=(
+                    f"tracking-event:{tracking_event.pk}:"
+                    f"subscription:{subscription.pk}"
+                ),
+                customer_subscription=subscription,
+            )
+            notification.outbox_message = outbox_message
+            notification.save(update_fields=["outbox_message"])
+
+        notifications.append(notification)
+
+    return notifications
+
+
 @transaction.atomic
 def create_telegram_stage_confirmation_session(*, staff_link, tracking_code):
     """Creates a staff-bound review step before a Telegram stage confirmation."""
@@ -436,6 +938,7 @@ def queue_telegram_message(
     reply_to_message_id=None,
     inbound_update=None,
     staff_link=None,
+    customer_subscription=None,
 ):
     """Creates one durable outbound message and schedules its delivery after commit."""
 
@@ -450,6 +953,7 @@ def queue_telegram_message(
             "message_type": str(message_type),
             "inbound_update": inbound_update,
             "staff_link": staff_link,
+            "customer_subscription": customer_subscription,
         },
     )
 
@@ -633,6 +1137,7 @@ def ingest_and_process_telegram_update(*, update):
                 }
 
             staff_link = None
+            customer_subscriptions = []
             if (
                 parsed["telegram_user_id"] is not None
                 and parsed["telegram_chat_id"] is not None
@@ -645,9 +1150,27 @@ def ingest_and_process_telegram_update(*, update):
                 except ValidationError:
                     staff_link = None
 
+                try:
+                    customer_subscriptions = get_active_customer_telegram_subscriptions(
+                        telegram_user_id=parsed["telegram_user_id"],
+                        telegram_chat_id=parsed["telegram_chat_id"],
+                    )
+                except ValidationError:
+                    customer_subscriptions = []
+
             if staff_link is not None:
                 inbound_update.staff_link = staff_link
-                inbound_update.save(update_fields=["staff_link"])
+
+            customer_subscription = (
+                customer_subscriptions[0] if customer_subscriptions else None
+            )
+            if customer_subscription is not None:
+                inbound_update.customer_subscription = customer_subscription
+
+            if staff_link is not None or customer_subscription is not None:
+                inbound_update.save(
+                    update_fields=["staff_link", "customer_subscription"]
+                )
 
             # The adapter handles messages, while every domain write remains in a service.
             from .telegram.handlers import handle_telegram_inbound_update
@@ -656,6 +1179,7 @@ def ingest_and_process_telegram_update(*, update):
                 inbound_update=inbound_update,
                 parsed=parsed,
                 staff_link=staff_link,
+                customer_subscription=customer_subscription,
             )
 
             inbound_update.status = TelegramInboundUpdate.Status.PROCESSED
@@ -667,6 +1191,7 @@ def ingest_and_process_telegram_update(*, update):
                     "error_summary",
                     "processed_at",
                     "staff_link",
+                    "customer_subscription",
                 ]
             )
 

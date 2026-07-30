@@ -2,6 +2,7 @@ import json
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -10,7 +11,11 @@ from django.utils import timezone
 from accounts.models import StaffProfile
 from accounts.services import RoleGroup, ensure_default_role_groups
 from cars.models import Car
+from customers.models import Customer, SearchLog
 from integrations.models import (
+    CustomerTelegramSubscription,
+    CustomerTrackingNotification,
+    TelegramCustomerActivationToken,
     TelegramInboundUpdate,
     TelegramOutboxMessage,
     TelegramStageConfirmationSession,
@@ -18,15 +23,18 @@ from integrations.models import (
     TelegramStaffLinkToken,
 )
 from integrations.services import (
+    activate_customer_telegram_tracking,
+    create_customer_telegram_activation_code,
     create_telegram_staff_link_code,
     deliver_telegram_outbox_message,
     ingest_and_process_telegram_update,
     link_staff_telegram_account,
     queue_telegram_message,
+    unsubscribe_customer_telegram_tracking,
 )
 from integrations.telegram.gateway import TelegramGatewayTransientError
 from tracking.models import CarStageProgress, Stage, StageTransition, TrackingEvent
-from tracking.services import start_tracking_for_sold_car
+from tracking.services import confirm_stage, start_tracking_for_sold_car
 
 
 class FakeSuccessfulTelegramGateway:
@@ -86,12 +94,19 @@ class TelegramIntegrationBaseTests(TestCase):
         profile = StaffProfile.objects.create(user=self.clearance_employee)
         profile.assigned_stages.add(self.clearance_stage)
 
+        self.customer = Customer.objects.create(
+            full_name="Telegram Customer",
+            phone="09120000000",
+            telegram_id="legacy-customer-telegram-id",
+        )
+
         self.car = Car.objects.create(
             title="Toyota Land Cruiser",
             brand="Toyota",
             model="Land Cruiser",
             status=Car.Status.SOLD,
             tracking_code="OAL-telegram-test-car",
+            customer=self.customer,
         )
         start_tracking_for_sold_car(
             car=self.car,
@@ -112,6 +127,12 @@ class TelegramIntegrationBaseTests(TestCase):
             telegram_chat_id=telegram_chat_id,
             telegram_username="clearance_user",
             first_name="Clearance",
+        )
+
+    def issue_customer_activation_code(self):
+        return create_customer_telegram_activation_code(
+            car=self.car,
+            actor=self.administrator,
         )
 
     def message_update(self, *, update_id, text, telegram_user_id=700001, telegram_chat_id=700001):
@@ -425,6 +446,283 @@ class TelegramBotStageConfirmationTests(TelegramIntegrationBaseTests):
                 event_type=TrackingEvent.EventType.STAGE_CONFIRMED,
             ).exists()
         )
+
+
+class TelegramCustomerActivationServiceTests(TelegramIntegrationBaseTests):
+    def test_only_a_system_administrator_or_explicitly_authorized_employee_can_reissue_code(self):
+        with self.assertRaises(ValidationError):
+            create_customer_telegram_activation_code(
+                car=self.car,
+                actor=self.clearance_employee,
+            )
+
+    def test_customer_activation_code_is_one_time_and_raw_value_is_not_persisted(self):
+        issued_code = self.issue_customer_activation_code()
+
+        self.assertTrue(issued_code["code"].startswith("TGC-"))
+        self.assertNotEqual(issued_code["token"].code_hash, issued_code["code"])
+        self.assertFalse(hasattr(issued_code["token"], "code"))
+
+        subscription = activate_customer_telegram_tracking(
+            code=issued_code["code"],
+            telegram_user_id=810001,
+            telegram_chat_id=810001,
+            first_name="Customer",
+        )
+
+        issued_code["token"].refresh_from_db()
+        self.assertTrue(subscription.is_active)
+        self.assertEqual(subscription.car, self.car)
+        self.assertEqual(subscription.customer, self.customer)
+        self.assertIsNotNone(issued_code["token"].used_at)
+        self.assertEqual(issued_code["token"].used_telegram_user_id, 810001)
+
+        with self.assertRaises(ValidationError):
+            activate_customer_telegram_tracking(
+                code=issued_code["code"],
+                telegram_user_id=810001,
+                telegram_chat_id=810001,
+            )
+
+        issued_code["token"].refresh_from_db()
+        self.assertEqual(issued_code["token"].attempt_count, 2)
+
+    def test_reissuing_customer_code_revokes_the_previous_unused_code(self):
+        first_code = self.issue_customer_activation_code()
+        second_code = self.issue_customer_activation_code()
+
+        first_code["token"].refresh_from_db()
+
+        self.assertIsNotNone(first_code["token"].revoked_at)
+        self.assertIsNone(second_code["token"].revoked_at)
+        self.assertEqual(TelegramCustomerActivationToken.objects.count(), 2)
+
+        with self.assertRaises(ValidationError):
+            activate_customer_telegram_tracking(
+                code=first_code["code"],
+                telegram_user_id=810002,
+                telegram_chat_id=810002,
+            )
+
+    def test_new_activation_replaces_an_existing_active_subscription_for_same_car(self):
+        first_code = self.issue_customer_activation_code()
+        first_subscription = activate_customer_telegram_tracking(
+            code=first_code["code"],
+            telegram_user_id=810003,
+            telegram_chat_id=810003,
+        )
+        second_code = self.issue_customer_activation_code()
+        second_subscription = activate_customer_telegram_tracking(
+            code=second_code["code"],
+            telegram_user_id=810004,
+            telegram_chat_id=810004,
+        )
+
+        first_subscription.refresh_from_db()
+
+        self.assertFalse(first_subscription.is_active)
+        self.assertTrue(second_subscription.is_active)
+        self.assertEqual(
+            CustomerTelegramSubscription.objects.filter(
+                car=self.car,
+                is_active=True,
+            ).count(),
+            1,
+        )
+
+
+class TelegramCustomerBotTests(TelegramIntegrationBaseTests):
+    def test_customer_start_command_activates_subscription_and_returns_safe_status(self):
+        issued_code = self.issue_customer_activation_code()
+
+        ingest_and_process_telegram_update(
+            update=self.message_update(
+                update_id=2001,
+                text=f"/start {issued_code['code']}",
+                telegram_user_id=820001,
+                telegram_chat_id=820001,
+            )
+        )
+
+        inbound_update = TelegramInboundUpdate.objects.get(telegram_update_id=2001)
+        reply = TelegramOutboxMessage.objects.get(
+            inbound_update=inbound_update,
+            message_type="customer_activation_success",
+        )
+
+        self.assertIsNotNone(inbound_update.customer_subscription)
+        self.assertEqual(
+            inbound_update.customer_subscription.telegram_user_id,
+            820001,
+        )
+        self.assertIn(self.car.tracking_code, reply.body)
+        self.assertNotIn(self.customer.phone, reply.body)
+        self.assertFalse(hasattr(inbound_update, "command_argument"))
+        self.assertTrue(
+            SearchLog.objects.filter(source=SearchLog.Source.BOT, car=self.car).exists()
+        )
+
+    def test_unlinked_customer_can_use_track_and_success_is_logged_as_bot_lookup(self):
+        ingest_and_process_telegram_update(
+            update=self.message_update(
+                update_id=2002,
+                text=f"/track {self.car.tracking_code}",
+                telegram_user_id=820002,
+                telegram_chat_id=820002,
+            )
+        )
+
+        self.assertTrue(
+            TelegramOutboxMessage.objects.filter(
+                message_type="customer_tracking_lookup",
+            ).exists()
+        )
+        search_log = SearchLog.objects.get(source=SearchLog.Source.BOT)
+        self.assertEqual(search_log.car, self.car)
+        self.assertEqual(search_log.customer, self.customer)
+
+    def test_status_lists_the_active_customer_subscriptions(self):
+        issued_code = self.issue_customer_activation_code()
+        activate_customer_telegram_tracking(
+            code=issued_code["code"],
+            telegram_user_id=820003,
+            telegram_chat_id=820003,
+        )
+
+        ingest_and_process_telegram_update(
+            update=self.message_update(
+                update_id=2003,
+                text="/status",
+                telegram_user_id=820003,
+                telegram_chat_id=820003,
+            )
+        )
+
+        status_reply = TelegramOutboxMessage.objects.get(
+            message_type="customer_tracking_status"
+        )
+        self.assertIn(self.car.tracking_code, status_reply.body)
+        self.assertIn("تاریخچهٔ مراحل", status_reply.body)
+
+    def test_stop_unsubscribes_only_the_requested_vehicle(self):
+        issued_code = self.issue_customer_activation_code()
+        activate_customer_telegram_tracking(
+            code=issued_code["code"],
+            telegram_user_id=820004,
+            telegram_chat_id=820004,
+        )
+
+        ingest_and_process_telegram_update(
+            update=self.message_update(
+                update_id=2004,
+                text=f"/stop {self.car.tracking_code}",
+                telegram_user_id=820004,
+                telegram_chat_id=820004,
+            )
+        )
+
+        self.assertFalse(
+            CustomerTelegramSubscription.objects.get(car=self.car).is_active
+        )
+        self.assertTrue(
+            TelegramOutboxMessage.objects.filter(
+                message_type="customer_stop_success"
+            ).exists()
+        )
+
+
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "telegram-tracking-rate-limit-tests",
+        }
+    },
+    TELEGRAM_TRACKING_RATE_LIMIT_ATTEMPTS=3,
+    TELEGRAM_TRACKING_RATE_LIMIT_WINDOW_SECONDS=60,
+)
+class TelegramCustomerRateLimitTests(TelegramIntegrationBaseTests):
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_fourth_bot_lookup_from_same_telegram_identity_is_rate_limited(self):
+        for update_id in range(2010, 2013):
+            ingest_and_process_telegram_update(
+                update=self.message_update(
+                    update_id=update_id,
+                    text="/track OAL-unknown-code",
+                    telegram_user_id=820010,
+                    telegram_chat_id=820010,
+                )
+            )
+
+        ingest_and_process_telegram_update(
+            update=self.message_update(
+                update_id=2013,
+                text="/track OAL-unknown-code",
+                telegram_user_id=820010,
+                telegram_chat_id=820010,
+            )
+        )
+
+        blocked_reply = TelegramOutboxMessage.objects.get(
+            inbound_update__telegram_update_id=2013,
+        )
+        self.assertEqual(blocked_reply.message_type, "customer_tracking_rate_limited")
+        self.assertIn("بیش از حد مجاز", blocked_reply.body)
+
+
+class CustomerTrackingNotificationTests(TelegramIntegrationBaseTests):
+    def test_stage_confirmation_creates_one_customer_notification_and_outbox_message(self):
+        issued_code = self.issue_customer_activation_code()
+        subscription = activate_customer_telegram_tracking(
+            code=issued_code["code"],
+            telegram_user_id=830001,
+            telegram_chat_id=830001,
+        )
+
+        confirm_stage(
+            car=self.car,
+            stage=self.clearance_stage,
+            staff=self.clearance_employee,
+        )
+
+        notification = CustomerTrackingNotification.objects.get(
+            subscription=subscription,
+            tracking_event__event_type=TrackingEvent.EventType.STAGE_CONFIRMED,
+        )
+
+        self.assertEqual(notification.outbox_message.customer_subscription, subscription)
+        self.assertEqual(
+            notification.outbox_message.message_type,
+            "customer_tracking_notification",
+        )
+        self.assertIn(self.clearance_stage.name, notification.outbox_message.body)
+
+    def test_unsubscribed_customer_receives_no_future_tracking_notifications(self):
+        issued_code = self.issue_customer_activation_code()
+        activate_customer_telegram_tracking(
+            code=issued_code["code"],
+            telegram_user_id=830002,
+            telegram_chat_id=830002,
+        )
+        unsubscribe_customer_telegram_tracking(
+            tracking_code=self.car.tracking_code,
+            telegram_user_id=830002,
+            telegram_chat_id=830002,
+        )
+
+        confirm_stage(
+            car=self.car,
+            stage=self.clearance_stage,
+            staff=self.clearance_employee,
+        )
+
+        self.assertFalse(CustomerTrackingNotification.objects.exists())
 
 
 class TelegramOutboxTests(TelegramIntegrationBaseTests):

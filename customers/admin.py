@@ -293,7 +293,10 @@ class CustomVehicleRequestAdmin(admin.ModelAdmin):
                         request,
                         (
                             "درخواست با موفقیت به فروش تبدیل شد. "
-                            f"کد رهگیری خودرو: {sold_car.tracking_code}"
+                            f"کد رهگیری خودرو: {sold_car.tracking_code}\n"
+                            "کد فعال‌سازی ربات مشتری (فقط همین یک‌بار نمایش داده "
+                            "می‌شود): "
+                            f"{sold_car.telegram_customer_activation_code}"
                         ),
                         level=messages.SUCCESS,
                     )

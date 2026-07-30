@@ -23,6 +23,27 @@ def _validate_tracking_source(source):
         raise ValidationError("Invalid tracking source.")
 
 
+def _create_tracking_event(**event_data):
+    """
+    Persists one immutable tracking event and explicitly requests customer notices.
+
+    Keeping this side effect here makes every workflow path (web admin, bot,
+    import, correction, and stage archive) use the same transactional rule.
+    No external network call is made here; only durable Outbox work is created.
+    """
+
+    tracking_event = TrackingEvent.objects.create(**event_data)
+
+    # A local import keeps the domain model independent during Django startup.
+    from integrations.services import queue_customer_tracking_notifications_for_event
+
+    queue_customer_tracking_notifications_for_event(
+        tracking_event=tracking_event,
+    )
+
+    return tracking_event
+
+
 def _ensure_stage_confirmation_permission(*, actor, stage):
     """
     Delegates stage-confirmation authorization to the shared
@@ -262,7 +283,7 @@ def start_tracking_for_sold_car(
     locked_car.current_stage = stages[0]
     locked_car.save(update_fields=["current_stage"])
 
-    TrackingEvent.objects.create(
+    _create_tracking_event(
         car=locked_car,
         event_type=TrackingEvent.EventType.TRACKING_STARTED,
         previous_stage=None,
@@ -272,7 +293,7 @@ def start_tracking_for_sold_car(
         note="Tracking started after vehicle sale confirmation.",
     )
 
-    TrackingEvent.objects.create(
+    _create_tracking_event(
         car=locked_car,
         event_type=TrackingEvent.EventType.STAGE_COMPLETED,
         previous_stage=None,
@@ -339,7 +360,7 @@ def confirm_stage(
     locked_car.current_stage = stage
     locked_car.save(update_fields=["current_stage"])
 
-    TrackingEvent.objects.create(
+    _create_tracking_event(
         car=locked_car,
         event_type=TrackingEvent.EventType.STAGE_CONFIRMED,
         previous_stage=previous_stage,
@@ -405,7 +426,7 @@ def complete_stage(
         ]
     )
 
-    TrackingEvent.objects.create(
+    _create_tracking_event(
         car=locked_car,
         event_type=TrackingEvent.EventType.STAGE_COMPLETED,
         previous_stage=None,
@@ -474,7 +495,7 @@ def skip_stage(
     locked_car.current_stage = stage
     locked_car.save(update_fields=["current_stage"])
 
-    TrackingEvent.objects.create(
+    _create_tracking_event(
         car=locked_car,
         event_type=TrackingEvent.EventType.STAGE_SKIPPED,
         previous_stage=previous_stage,
@@ -576,7 +597,7 @@ def correct_tracking_stage(
     locked_car.current_stage = stage
     locked_car.save(update_fields=["current_stage"])
 
-    TrackingEvent.objects.create(
+    _create_tracking_event(
         car=locked_car,
         event_type=TrackingEvent.EventType.STAGE_CORRECTED,
         previous_stage=previous_stage,
@@ -900,7 +921,7 @@ def archive_stage(
                 locked_car.current_stage = previous_active_stage
                 locked_car.save(update_fields=["current_stage"])
 
-                TrackingEvent.objects.create(
+                _create_tracking_event(
                     car=locked_car,
                     event_type=TrackingEvent.EventType.STAGE_ARCHIVED,
                     previous_stage=locked_stage,
@@ -929,7 +950,7 @@ def archive_stage(
                 locked_car.current_stage = next_active_stage
                 locked_car.save(update_fields=["current_stage"])
 
-                TrackingEvent.objects.create(
+                _create_tracking_event(
                     car=locked_car,
                     event_type=TrackingEvent.EventType.STAGE_ARCHIVED,
                     previous_stage=locked_stage,
@@ -957,7 +978,7 @@ def archive_stage(
                     ]
                 )
 
-                TrackingEvent.objects.create(
+                _create_tracking_event(
                     car=locked_car,
                     event_type=TrackingEvent.EventType.STAGE_ARCHIVED,
                     previous_stage=locked_car.current_stage,

@@ -22,6 +22,8 @@ from cars.services import (
     restore_archived_vehicle,
 )
 
+from integrations.models import TelegramCustomerActivationToken
+
 from tracking.models import (
     CarStageProgress,
     Stage,
@@ -193,6 +195,14 @@ class VehicleHoldServiceTests(TestCase):
         self.assertEqual(sold_car.customer.phone, "09120000000")
         self.assertEqual(sold_car.customer.telegram_id, "123456789")
         self.assertTrue(sold_car.tracking_code.startswith("OAL-"))
+        self.assertTrue(
+            sold_car.telegram_customer_activation_code.startswith("TGC-")
+        )
+        activation_token = TelegramCustomerActivationToken.objects.get(car=sold_car)
+        self.assertNotEqual(
+            activation_token.code_hash,
+            sold_car.telegram_customer_activation_code,
+        )
 
         self.assertFalse(hold.is_active)
         self.assertEqual(
