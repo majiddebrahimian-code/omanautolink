@@ -1,0 +1,105 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}{{ form_title }} | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}{{ form_title }}{% endblock %}
+
+{% block page_description %}
+    <p>نقش پایه، دسترسی‌های ویژه و مسئولیت مرحله‌ها به‌صورت کنترل‌شده و با تاریخچهٔ مدیریتی ثبت می‌شوند.</p>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% if staff_user %}{% url 'backoffice:staff_detail' staff_user.pk %}{% else %}{% url 'backoffice:staff_list' %}{% endif %}" class="backoffice-button backoffice-button--secondary">
+        <i class="fa fa-arrow-right" aria-hidden="true"></i>
+        بازگشت
+    </a>
+{% endblock %}
+
+{% block content %}
+    <section class="backoffice-form-notice backoffice-form-notice--staff">
+        <i class="fa fa-shield" aria-hidden="true"></i>
+        <p>{{ notice }}</p>
+    </section>
+
+    <form method="post" class="backoffice-staff-form" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <div class="backoffice-form-errors">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <section class="backoffice-form-section">
+            <header>
+                <span><i class="fa fa-id-card-o" aria-hidden="true"></i></span>
+                <div>
+                    <h2>مشخصات حساب</h2>
+                    <p>این مشخصات برای ورود داخلی و شناسایی عملیات کارمند استفاده می‌شوند.</p>
+                </div>
+            </header>
+            <div class="backoffice-form-grid backoffice-form-grid--three">
+                <div class="backoffice-field">{{ form.username.label_tag }}{{ form.username }}{{ form.username.errors }}</div>
+                <div class="backoffice-field">{{ form.first_name.label_tag }}{{ form.first_name }}{{ form.first_name.errors }}</div>
+                <div class="backoffice-field">{{ form.last_name.label_tag }}{{ form.last_name }}{{ form.last_name.errors }}</div>
+                <div class="backoffice-field">{{ form.email.label_tag }}{{ form.email }}{{ form.email.errors }}</div>
+                <div class="backoffice-field">{{ form.phone.label_tag }}{{ form.phone }}{{ form.phone.errors }}</div>
+            </div>
+        </section>
+
+        {% if is_create %}
+            <section class="backoffice-form-section">
+                <header>
+                    <span><i class="fa fa-lock" aria-hidden="true"></i></span>
+                    <div>
+                        <h2>رمز عبور اولیه</h2>
+                        <p>رمز عبور نمایش و ثبت مجدد نمی‌شود؛ آن را فقط از راهی امن به کارمند بدهید.</p>
+                    </div>
+                </header>
+                <div class="backoffice-form-grid">
+                    <div class="backoffice-field">{{ form.password1.label_tag }}{{ form.password1 }}{{ form.password1.errors }}{% if form.password1.help_text %}<small>{{ form.password1.help_text }}</small>{% endif %}</div>
+                    <div class="backoffice-field">{{ form.password2.label_tag }}{{ form.password2 }}{{ form.password2.errors }}</div>
+                </div>
+            </section>
+        {% endif %}
+
+        <section class="backoffice-form-section">
+            <header>
+                <span><i class="fa fa-sitemap" aria-hidden="true"></i></span>
+                <div>
+                    <h2>نقش و مسئولیت عملیاتی</h2>
+                    <p>نقش پایه مجموعه‌ای ثابت از دسترسی‌هاست؛ فقط استثناهای مشخص را در بخش بعدی اضافه کنید.</p>
+                </div>
+            </header>
+            <div class="backoffice-form-grid">
+                <div class="backoffice-field">{{ form.role.label_tag }}{{ form.role }}{{ form.role.errors }}<small>{{ form.role.help_text }}</small></div>
+                <div class="backoffice-field backoffice-field--wide">
+                    {{ form.assigned_stages.label_tag }}
+                    {{ form.assigned_stages }}
+                    {{ form.assigned_stages.errors }}
+                    <small>{{ form.assigned_stages.help_text }}</small>
+                </div>
+            </div>
+        </section>
+
+        <section class="backoffice-form-section">
+            <header>
+                <span><i class="fa fa-key" aria-hidden="true"></i></span>
+                <div>
+                    <h2>دسترسی‌های ویژه</h2>
+                    <p>فقط قابلیت‌های حساسِ موردنیاز برای این شخص را فعال کنید؛ نقش‌ها و مجوزهای خام Django در این صفحه قابل تغییر نیستند.</p>
+                </div>
+            </header>
+            <div class="backoffice-field backoffice-special-permission-field">
+                {{ form.exceptional_permissions.errors }}
+                <div class="backoffice-special-permissions">{{ form.exceptional_permissions }}</div>
+                <small>{{ form.exceptional_permissions.help_text }}</small>
+            </div>
+        </section>
+
+        <footer class="backoffice-form-actions">
+            <a href="{% if staff_user %}{% url 'backoffice:staff_detail' staff_user.pk %}{% else %}{% url 'backoffice:staff_list' %}{% endif %}" class="backoffice-button backoffice-button--secondary">انصراف</a>
+            <button type="submit" class="backoffice-button backoffice-button--primary">
+                <i class="fa fa-check" aria-hidden="true"></i>
+                {{ submit_label }}
+            </button>
+        </footer>
+    </form>
+{% endblock %}

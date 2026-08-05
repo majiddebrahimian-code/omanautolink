@@ -1,0 +1,145 @@
+{% load static %}
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>{{ page_title|default:site_config.site_name }}</title>
+    {% if page_description %}<meta name="description" content="{{ page_description }}">{% endif %}
+    {% if page_keywords %}<meta name="keywords" content="{{ page_keywords }}">{% endif %}
+    <meta name="robots" content="{{ page_robots|default:'index, follow' }}">
+    {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+    {% if site_config.favicon %}<link rel="icon" href="{{ site_config.favicon.url }}">{% endif %}
+
+    <meta property="og:locale" content="fa_IR">
+    <meta property="og:type" content="{{ page_og_type|default:'website' }}">
+    <meta property="og:title" content="{{ page_title|default:site_config.site_name }}">
+    {% if page_description %}<meta property="og:description" content="{{ page_description }}">{% endif %}
+    {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
+    {% if site_config.site_name %}<meta property="og:site_name" content="{{ site_config.site_name }}">{% endif %}
+    {% if page_og_image %}<meta property="og:image" content="{{ page_og_image }}">{% endif %}
+    {% if page_og_type == 'article' %}
+        {% if article_published_at %}<meta property="article:published_time" content="{{ article_published_at|date:'c' }}">{% endif %}
+        {% if article_modified_at %}<meta property="article:modified_time" content="{{ article_modified_at|date:'c' }}">{% endif %}
+        {% if article_section %}<meta property="article:section" content="{{ article_section }}">{% endif %}
+        {% if article_author %}<meta property="article:author" content="{{ article_author }}">{% endif %}
+    {% endif %}
+    <meta name="twitter:card" content="summary_large_image">
+    {% if seo_config.twitter_handle %}<meta name="twitter:site" content="{{ seo_config.twitter_handle }}">{% endif %}
+    {% if seo_config.google_site_verification %}<meta name="google-site-verification" content="{{ seo_config.google_site_verification }}">{% endif %}
+    {% if seo_config.bing_site_verification %}<meta name="msvalidate.01" content="{{ seo_config.bing_site_verification }}">{% endif %}
+    {% if page_json_ld %}<script type="application/ld+json">{{ page_json_ld }}</script>{% endif %}
+
+    <link rel="stylesheet" href="{% static 'core/css/public-site.css' %}?v=blog-showroom-1">
+    <style>
+        :root {
+            --site-primary: {{ site_config.primary_color|default:'#2563EB' }};
+            --site-accent: {{ site_config.accent_color|default:'#38BDF8' }};
+            --site-surface: {{ site_config.surface_color|default:'#17191D' }};
+        }
+    </style>
+</head>
+<body>
+    <a class="skip-link" href="#main-content">پرش به محتوای اصلی</a>
+    <div class="site-shell">
+        <header class="site-header" data-site-header>
+            <div class="site-header__inner container">
+                <a class="brand" href="{% url 'core:home' %}" aria-label="{{ site_config.site_name }} - صفحهٔ اصلی">
+                    {% if site_config.logo_light %}
+                        <img class="brand__image" src="{{ site_config.logo_light.url }}" alt="{{ site_config.site_name }}" width="160" height="48">
+                    {% elif site_config.logo_dark %}
+                        <img class="brand__image" src="{{ site_config.logo_dark.url }}" alt="{{ site_config.site_name }}" width="160" height="48">
+                    {% else %}
+                        <span class="brand__mark" aria-hidden="true">
+                            <svg viewBox="0 0 40 40" fill="none"><path d="M8 12.5 19.7 5 32 12.5 20 20 8 12.5Z"/><path d="m8 20 12 7.5L32 20"/><path d="m8 27.5 12 7.5 12-7.5"/></svg>
+                        </span>
+                        <span class="brand__name">{{ site_config.site_name }}</span>
+                    {% endif %}
+                </a>
+
+                <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation" data-menu-toggle>
+                    <span class="sr-only">باز و بسته کردن منو</span>
+                    <span></span><span></span><span></span>
+                </button>
+
+                <nav class="primary-navigation" id="primary-navigation" aria-label="منوی اصلی" data-primary-navigation>
+                    <ul>
+                        {% for item in header_navigation %}
+                            <li>
+                                <a href="{{ item.destination }}"{% if item.aria_label %} aria-label="{{ item.aria_label }}"{% endif %}{% if item.open_in_new_tab %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.label }}</a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </nav>
+
+                <form class="header-tracking-form" method="post" action="{% url 'tracking:public_lookup' %}" role="search">
+                    {% csrf_token %}
+                    <label class="sr-only" for="site-tracking-code">کد رهگیری</label>
+                    <input id="site-tracking-code" name="tracking_code" type="text" maxlength="40" autocomplete="off" placeholder="شمارهٔ رهگیری را وارد کنید">
+                    <button type="submit" aria-label="رهگیری خودرو">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+                    </button>
+                </form>
+            </div>
+        </header>
+
+        {% if messages %}
+            <div class="container site-messages" aria-live="polite">
+                {% for message in messages %}<p class="site-message {{ message.tags }}">{{ message }}</p>{% endfor %}
+            </div>
+        {% endif %}
+
+        <main id="main-content">
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer class="site-footer">
+            <div class="container site-footer__grid">
+                <section class="footer-brand" aria-label="اطلاعات مجموعه">
+                    <a class="brand brand--footer" href="{% url 'core:home' %}">
+                        {% if site_config.logo_light %}
+                            <img class="brand__image" src="{{ site_config.logo_light.url }}" alt="{{ site_config.site_name }}" width="160" height="48">
+                        {% elif site_config.logo_dark %}
+                            <img class="brand__image" src="{{ site_config.logo_dark.url }}" alt="{{ site_config.site_name }}" width="160" height="48">
+                        {% else %}
+                            <span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><path d="M8 12.5 19.7 5 32 12.5 20 20 8 12.5Z"/><path d="m8 20 12 7.5L32 20"/><path d="m8 27.5 12 7.5 12-7.5"/></svg></span>
+                            <span class="brand__name">{{ site_config.site_name }}</span>
+                        {% endif %}
+                    </a>
+                    {% if site_config.tagline %}<p>{{ site_config.tagline }}</p>{% endif %}
+                    {% if site_config.support_phone %}<a href="tel:{{ site_config.support_phone }}">{{ site_config.support_phone }}</a>{% endif %}
+                    {% if site_config.support_email %}<a href="mailto:{{ site_config.support_email }}">{{ site_config.support_email }}</a>{% endif %}
+                </section>
+
+                {% for section in footer_sections %}
+                    <section class="footer-links" aria-labelledby="footer-section-{{ section.pk }}">
+                        <h2 id="footer-section-{{ section.pk }}">{{ section.title }}</h2>
+                        <ul>
+                            {% for link in section.links.all %}
+                                <li><a href="{{ link.destination }}"{% if link.open_in_new_tab %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ link.label }}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </section>
+                {% endfor %}
+
+                <section class="footer-contact" aria-label="ارتباط با ما">
+                    {% if site_config.address %}<address>{{ site_config.address|linebreaksbr }}</address>{% endif %}
+                    {% if social_links %}
+                        <div class="social-links" aria-label="شبکه‌های اجتماعی">
+                            {% for social_link in social_links %}
+                                <a href="{{ social_link.url }}" target="_blank" rel="noopener noreferrer" aria-label="{{ social_link.label|default:social_link.get_platform_display }}">{{ social_link.label|default:social_link.get_platform_display }}</a>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </section>
+            </div>
+            <div class="container site-footer__bottom">
+                <p>{% if site_config.copyright_text %}{{ site_config.copyright_text }}{% else %}© {{ site_config.site_name }}{% endif %}</p>
+                <a href="{% url 'robots_txt' %}">robots.txt</a>
+            </div>
+        </footer>
+    </div>
+    <script src="{% static 'core/js/public-site.js' %}?v=blog-showroom-1" defer></script>
+</body>
+</html>

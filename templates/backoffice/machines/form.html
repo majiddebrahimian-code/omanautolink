@@ -1,0 +1,108 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}{{ form_title }} | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}{{ form_title }}{% endblock %}
+
+{% block page_description %}
+    <p>{{ notice }}</p>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'backoffice:machine_list' %}" class="backoffice-button backoffice-button--secondary">
+        <i class="fa fa-arrow-right" aria-hidden="true"></i>
+        بازگشت به ماشین‌ها
+    </a>
+{% endblock %}
+
+{% block content %}
+    <form method="post" class="backoffice-form-card" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="backoffice-form-errors" role="alert">
+                {{ form.non_field_errors }}
+            </div>
+        {% endif %}
+
+        <section class="backoffice-form-section">
+            <div class="backoffice-form-section__heading">
+                <h2>اطلاعات موجودی</h2>
+                <p>این اطلاعات در فهرست و صفحهٔ عمومی ماشین استفاده می‌شوند.</p>
+            </div>
+
+            <div class="backoffice-form-grid">
+                {% for field in form %}
+                    <div class="backoffice-field {% if field.name == 'description' or field.name == 'seo_description' %}backoffice-field--wide{% endif %} {% if field.name == 'is_featured' %}backoffice-field--checkbox{% endif %}">
+                        {% if field.name == 'is_featured' %}
+                            <label class="backoffice-checkbox-label" for="{{ field.id_for_label }}">
+                                {{ field }}
+                                <span>{{ field.label }}</span>
+                            </label>
+                        {% else %}
+                            <label for="{{ field.id_for_label }}" class="backoffice-field__label">
+                                {{ field.label }}
+                                {% if field.field.required %}<span class="backoffice-required">*</span>{% endif %}
+                            </label>
+                            {{ field }}
+                        {% endif %}
+
+                        {% if field.help_text %}
+                            <small class="backoffice-field__help">{{ field.help_text }}</small>
+                        {% endif %}
+
+                        {% if field.errors %}
+                            <div class="backoffice-field__error" role="alert">
+                                {{ field.errors }}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <div class="backoffice-form-actions">
+            <button type="submit" class="backoffice-button backoffice-button--primary">
+                <i class="fa fa-check" aria-hidden="true"></i>
+                {{ submit_label }}
+            </button>
+            <a href="{% url 'backoffice:machine_list' %}" class="backoffice-button backoffice-button--secondary">
+                انصراف
+            </a>
+        </div>
+    </form>
+
+    {% if machine %}
+        <section class="backoffice-media-shortcut">
+            <div>
+                <span class="backoffice-media-shortcut__icon">
+                    <i class="fa fa-picture-o" aria-hidden="true"></i>
+                </span>
+                <div>
+                    <h2>تصاویر ماشین</h2>
+                    <p>
+                        {{ photo_count }} تصویر در گالری ثبت شده است. گالری عادی، کاور، متن جایگزین و ترتیب نمایش را از این بخش مدیریت کنید.
+                    </p>
+                </div>
+            </div>
+
+            <div class="backoffice-media-preview">
+                {% for photo in photo_preview %}
+                    {% if photo.image %}
+                        <img src="{{ photo.image.url }}" alt="{{ photo.alt_text|default:machine.title }}">
+                    {% endif %}
+                {% empty %}
+                    <span class="backoffice-media-preview__empty">هنوز تصویری ثبت نشده است.</span>
+                {% endfor %}
+            </div>
+
+            <a
+                href="{% url 'backoffice:machine_photo_manage' machine.pk %}"
+                class="backoffice-button backoffice-button--outline"
+            >
+                <i class="fa fa-picture-o" aria-hidden="true"></i>
+                مدیریت تصاویر
+            </a>
+        </section>
+    {% endif %}
+{% endblock %}

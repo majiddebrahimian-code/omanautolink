@@ -1,0 +1,25 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}{{ action_label }} حساب کارمند | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+{% block page_title %}{{ action_label }} حساب کارمند{% endblock %}
+{% block page_description %}<p>تغییر وضعیت برای «{{ staff_user.get_full_name|default:staff_user.username }}» با ثبت کامل در Audit Trail انجام می‌شود.</p>{% endblock %}
+
+{% block content %}
+    <form method="post" class="backoffice-confirm-card {% if next_is_active %}backoffice-confirm-card--success{% else %}backoffice-confirm-card--danger{% endif %}" novalidate>
+        {% csrf_token %}
+        <span class="backoffice-confirm-card__icon"><i class="fa {% if next_is_active %}fa-user-plus{% else %}fa-user-times{% endif %}" aria-hidden="true"></i></span>
+        <h2>آیا از {{ action_label }} مطمئن هستید؟</h2>
+        {% if next_is_active %}
+            <p>فعال‌سازی دوباره، اتصال Telegram یا مرحله‌های قبلی را خودکار برنمی‌گرداند. این موارد باید آگاهانه دوباره تخصیص داده شوند.</p>
+        {% else %}
+            <p>با غیرفعال‌سازی، ورود کارمند، تأیید مرحله و استفاده از Telegram متوقف می‌شود. مرحله‌های مسئول و کدهای اتصال استفاده‌نشده نیز لغو می‌شوند؛ تاریخچه حفظ خواهد شد.</p>
+        {% endif %}
+        {% if form.non_field_errors %}<div class="backoffice-form-errors">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="backoffice-field">{{ form.reason.label_tag }}{{ form.reason }}{{ form.reason.errors }}</div>
+        <div class="backoffice-check-field">{{ form.confirm_change }}{{ form.confirm_change.label_tag }}{{ form.confirm_change.errors }}</div>
+        <footer class="backoffice-form-actions">
+            <a href="{% url 'backoffice:staff_detail' staff_user.pk %}" class="backoffice-button backoffice-button--secondary">انصراف</a>
+            <button type="submit" class="backoffice-button {% if next_is_active %}backoffice-button--primary{% else %}backoffice-button--danger{% endif %}">{{ action_label }}</button>
+        </footer>
+    </form>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}آزادسازی رزرو | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}آزادسازی رزرو موقت{% endblock %}
+
+{% block page_description %}
+    <p>با آزادسازی، ماشین دوباره به وضعیت آمادهٔ فروش برمی‌گردد.</p>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'backoffice:vehicle_hold_list' %}" class="backoffice-button backoffice-button--secondary">بازگشت</a>
+{% endblock %}
+
+{% block content %}
+    <form method="post" class="backoffice-form-card" novalidate>
+        {% csrf_token %}
+
+        <section class="backoffice-confirmation-summary">
+            <span class="backoffice-confirmation-summary__icon backoffice-confirmation-summary__icon--hold">
+                <i class="fa fa-unlock" aria-hidden="true"></i>
+            </span>
+            <div>
+                <h2>{{ hold.car.title }}</h2>
+                <p>{{ hold.customer_name|default:"بدون نام مشتری" }}</p>
+            </div>
+        </section>
+
+        {% if form.non_field_errors %}
+            <div class="backoffice-form-errors" role="alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="backoffice-field backoffice-field--wide">
+            <label for="{{ form.release_note.id_for_label }}" class="backoffice-field__label">{{ form.release_note.label }}</label>
+            {{ form.release_note }}
+            {% if form.release_note.errors %}<div class="backoffice-field__error" role="alert">{{ form.release_note.errors }}</div>{% endif %}
+        </div>
+
+        <div class="backoffice-form-actions">
+            <button type="submit" class="backoffice-button backoffice-button--warning">
+                <i class="fa fa-unlock" aria-hidden="true"></i>
+                تأیید آزادسازی رزرو
+            </button>
+            <a href="{% url 'backoffice:vehicle_hold_list' %}" class="backoffice-button backoffice-button--secondary">انصراف</a>
+        </div>
+    </form>
+{% endblock %}

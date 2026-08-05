@@ -1,0 +1,108 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}رزروهای موقت | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}رزروهای موقت{% endblock %}
+
+{% block page_description %}
+    <p>رزروهای فعال و سابقهٔ رزروهای آزادشده. رزرو منقضی‌شده تا زمان آزادسازی دستی همچنان فعال است.</p>
+{% endblock %}
+
+{% block page_actions %}
+    <span class="backoffice-result-count">{{ result_count }} رزرو</span>
+{% endblock %}
+
+{% block content %}
+    <section class="backoffice-search-card">
+        <form method="get" class="backoffice-search-form">
+            <input type="hidden" name="state" value="{{ hold_state }}">
+            <div>
+                <label for="hold-search" class="backoffice-search-label">جست‌وجوی رزرو</label>
+                <input id="hold-search" type="search" name="q" value="{{ query }}" class="backoffice-input" placeholder="نام ماشین، کد رهگیری، نام یا تلفن مشتری">
+            </div>
+            <div class="backoffice-search-actions">
+                <button type="submit" class="backoffice-button backoffice-button--primary"><i class="fa fa-search" aria-hidden="true"></i> جست‌وجو</button>
+                {% if query %}<a href="?state={{ hold_state }}" class="backoffice-button backoffice-button--secondary">پاک‌کردن</a>{% endif %}
+            </div>
+        </form>
+
+        <div class="backoffice-filter-tabs" aria-label="فیلتر رزروها">
+            <a href="{% url 'backoffice:vehicle_hold_list' %}" class="{% if hold_state == 'active' %}is-active{% endif %}">فعال</a>
+            <a href="{% url 'backoffice:vehicle_hold_list' %}?state=released" class="{% if hold_state == 'released' %}is-active{% endif %}">آزادشده</a>
+            <a href="{% url 'backoffice:vehicle_hold_list' %}?state=all" class="{% if hold_state == 'all' %}is-active{% endif %}">همه</a>
+        </div>
+    </section>
+
+    <section class="backoffice-table-card">
+        <div class="backoffice-table-scroll">
+            <table class="backoffice-table">
+                <thead>
+                    <tr>
+                        <th>ماشین</th>
+                        <th>مشتری مذاکره</th>
+                        <th>ثبت‌کننده</th>
+                        <th>زمان ثبت</th>
+                        <th>پایان رزرو</th>
+                        <th>وضعیت</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for hold in page_obj %}
+                        <tr>
+                            <td><strong>{{ hold.car.title }}</strong><br><small>{{ hold.car.brand }} {{ hold.car.model }}</small></td>
+                            <td>{{ hold.customer_name|default:"—" }}<br><small>{{ hold.customer_phone|default:"—" }}</small></td>
+                            <td>{{ hold.created_by.get_full_name|default:hold.created_by.get_username }}</td>
+                            <td>{{ hold.created_at|date:"Y/m/d H:i" }}</td>
+                            <td>
+                                {% if hold.expires_at %}
+                                    {{ hold.expires_at|date:"Y/m/d H:i" }}
+                                    {% if hold.is_active and hold.expires_at < now %}<span class="backoffice-expired-label">منقضی شده</span>{% endif %}
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>
+                                {% if hold.is_active %}
+                                    <span class="backoffice-status backoffice-status--hold">فعال</span>
+                                {% else %}
+                                    <span class="backoffice-status backoffice-status--draft">آزاد شده</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="backoffice-row-actions">
+                                    {% if hold.is_active and perms.cars.sell_vehicle %}
+                                        <a
+                                            href="{% url 'backoffice:vehicle_hold_sale' hold.pk %}"
+                                            class="backoffice-button backoffice-button--small backoffice-button--primary backoffice-icon-button"
+                                            aria-label="تأیید فروش"
+                                            data-tooltip="تأیید فروش"
+                                            title="تأیید فروش"
+                                        ><i class="fa fa-check" aria-hidden="true"></i></a>
+                                    {% endif %}
+                                    {% if hold.is_active and perms.cars.release_vehicle_hold %}
+                                        <a
+                                            href="{% url 'backoffice:vehicle_hold_release' hold.pk %}"
+                                            class="backoffice-button backoffice-button--small backoffice-button--warning backoffice-icon-button"
+                                            aria-label="آزادسازی رزرو"
+                                            data-tooltip="آزادسازی رزرو"
+                                            title="آزادسازی رزرو"
+                                        ><i class="fa fa-unlock" aria-hidden="true"></i></a>
+                                    {% endif %}
+                                    {% if not hold.is_active %}<span class="backoffice-action-hint">{{ hold.release_note|default:"بدون توضیح" }}</span>{% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="7" class="backoffice-table-empty">رزروی با این مشخصات پیدا نشد.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="backoffice-pagination" aria-label="صفحه‌بندی رزروها">
+                {% if page_obj.has_previous %}<a href="?state={{ hold_state }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}&amp;page={{ page_obj.previous_page_number }}">قبلی</a>{% endif %}
+                <span>صفحهٔ {{ page_obj.number }} از {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}<a href="?state={{ hold_state }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}&amp;page={{ page_obj.next_page_number }}">بعدی</a>{% endif %}
+            </nav>
+        {% endif %}
+    </section>
+{% endblock %}

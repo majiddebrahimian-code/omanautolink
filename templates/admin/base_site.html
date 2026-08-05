@@ -1,0 +1,16 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ admin_site_config.site_name|default:site_title|default:'پنل مدیریت' }}{% endblock %}
+
+{% block branding %}
+<a class="admin-brand" href="{% url 'admin:index' %}" aria-label="بازگشت به داشبورد">
+    {% if admin_site_config.logo_dark %}
+        <img src="{{ admin_site_config.logo_dark.url }}" alt="{{ admin_site_config.site_name }}" width="150" height="44">
+    {% elif admin_site_config.logo_light %}
+        <img src="{{ admin_site_config.logo_light.url }}" alt="{{ admin_site_config.site_name }}" width="150" height="44">
+    {% else %}
+        <span class="admin-brand__mark" aria-hidden="true">◆</span>
+        <span><strong>{{ admin_site_config.site_name|default:'پنل مدیریت' }}</strong><small>مدیریت هوشمند خودرو</small></span>
+    {% endif %}
+</a>
+{% endblock %}

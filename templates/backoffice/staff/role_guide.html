@@ -1,0 +1,42 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}نقش‌ها و دسترسی‌های کارکنان | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+{% block page_title %}نقش‌ها و دسترسی‌های کارکنان{% endblock %}
+{% block page_description %}<p>راهنمای نقش‌های پایه و دسترسی‌های ویژهٔ کنترل‌شده در سیستم.</p>{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'backoffice:staff_create' %}" class="backoffice-button backoffice-button--primary"><i class="fa fa-user-plus" aria-hidden="true"></i> افزودن کارمند</a>
+{% endblock %}
+
+{% block content %}
+    <section class="backoffice-role-guide-intro">
+        <i class="fa fa-shield" aria-hidden="true"></i>
+        <div>
+            <h2>اصل حداقل دسترسی</h2>
+            <p>هر کارمند دقیقاً یک نقش پایه دارد. قابلیت‌های حساس فقط به‌شکل دسترسی ویژهٔ فردی اعطا می‌شوند و همهٔ تغییرات در تاریخچه ثبت خواهند شد.</p>
+        </div>
+    </section>
+
+    <section class="backoffice-role-guide-grid">
+        <article class="backoffice-role-guide-card backoffice-role-guide-card--administrator">
+            <header><span><i class="fa fa-shield" aria-hidden="true"></i></span><div><h2>مدیر اصلی سیستم</h2><p>دسترسی کامل به همهٔ قابلیت‌ها و مدیریت نقش‌ها، مرحله‌ها و کارکنان.</p></div></header>
+            <ul><li>مدیریت کامل کارکنان و اتصال‌های Telegram</li><li>تعریف و بایگانی مرحله‌های تحویل</li><li>گزارش‌ها و تمام قابلیت‌های نرم‌افزار</li></ul>
+            <footer>این نقش فقط با حساب Superuser Django تعریف می‌شود و از فرم کارکنان قابل واگذاری نیست.</footer>
+        </article>
+        {% for role in roles %}
+            <article class="backoffice-role-guide-card">
+                <header><span><i class="fa {{ role.icon }}" aria-hidden="true"></i></span><div><h2>{{ role.name }}</h2><p>{{ role.description }}</p></div></header>
+                <ul>{% for capability in role.capabilities %}<li>{{ capability }}</li>{% endfor %}</ul>
+            </article>
+        {% endfor %}
+    </section>
+
+    <section class="backoffice-special-permission-guide">
+        <header class="backoffice-section-heading"><div><p class="backoffice-eyebrow">EXCEPTIONAL CAPABILITIES</p><h2>دسترسی‌های ویژهٔ قابل اعطا</h2></div><span>این گزینه‌ها فقط به یک کارمند افزوده می‌شوند و نقش پایهٔ او را تغییر نمی‌دهند.</span></header>
+        <div class="backoffice-special-permission-guide__grid">
+            {% for permission in special_permissions %}
+                <article><i class="fa fa-key" aria-hidden="true"></i><strong>{{ permission.label }}</strong><p>{{ permission.description }}</p></article>
+            {% endfor %}
+        </div>
+    </section>
+{% endblock %}

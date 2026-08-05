@@ -2,9 +2,11 @@ from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from accounts.authorization import (
+    require_active_internal_staff,
     require_permission,
     require_stage_confirmation_permission,
 )
@@ -162,6 +164,56 @@ def _get_required_transition(transition_map, from_stage, to_stage):
     return transition
 
 
+def _sync_car_tracking_status(*, locked_car):
+    """Synchronize the denormalized car status with durable stage progress.
+
+    ``Car.status`` is used for efficient internal lists, while
+    ``CarStageProgress`` remains the detailed source of workflow history.  The
+    synchronization is deliberately kept in this shared service module so a
+    website form, Telegram handler, and Excel import cannot disagree about
+    whether a vehicle is sold, in transit, or delivered.
+
+    The automatically completed first stage means only "sale confirmed".
+    Therefore a vehicle stays ``sold`` until it reaches a later operational
+    stage.  Completing or skipping the final active stage marks it delivered.
+    """
+
+    if locked_car.status not in {
+        locked_car.Status.SOLD,
+        locked_car.Status.IN_TRANSIT,
+        locked_car.Status.DELIVERED,
+    }:
+        return locked_car
+
+    if locked_car.current_stage_id is None:
+        return locked_car
+
+    active_stages = list(Stage.objects.filter(is_active=True).order_by("order"))
+
+    if not active_stages:
+        return locked_car
+
+    first_active_stage = active_stages[0]
+    final_active_stage = active_stages[-1]
+    final_progress = CarStageProgress.objects.filter(
+        car=locked_car,
+        stage=final_active_stage,
+    ).first()
+
+    if final_progress and final_progress.state in {"completed", "skipped"}:
+        target_status = locked_car.Status.DELIVERED
+    elif locked_car.current_stage_id == first_active_stage.id:
+        target_status = locked_car.Status.SOLD
+    else:
+        target_status = locked_car.Status.IN_TRANSIT
+
+    if locked_car.status != target_status:
+        locked_car.status = target_status
+        locked_car.save(update_fields=["status"])
+
+    return locked_car
+
+
 def get_delay_days(progress):
     """
     Returns the difference between actual arrival and planned arrival.
@@ -212,6 +264,780 @@ def calculate_remaining_eta_days(car):
     return total_days
 
 
+def _require_system_administrator(*, actor):
+    """Keep delivery-route administration inside the shared domain layer.
+
+    The custom panel is not the only future caller of these functions: a
+    management API or an audited administrative bot command must be governed
+    by exactly the same rule.  A stage definition affects every active
+    shipment, so an ordinary employee is deliberately not enough here.
+    """
+
+    require_active_internal_staff(actor=actor)
+
+    if not actor.is_superuser:
+        raise ValidationError(
+            "فقط مدیر سیستم می‌تواند ساختار مراحل تحویل را تغییر دهد."
+        )
+
+
+def _get_active_stage_chain(*, lock=False):
+    """Return the one ordered active route and reject ambiguous legacy data."""
+
+    queryset = Stage.objects.filter(is_active=True).order_by("order", "pk")
+
+    if lock:
+        queryset = queryset.select_for_update()
+
+    stages = list(queryset)
+    orders = [stage.order for stage in stages]
+
+    if len(orders) != len(set(orders)):
+        raise ValidationError(
+            "ترتیب مراحل فعال یکتا نیست؛ ابتدا دادهٔ مراحل را توسط مدیر سیستم اصلاح کنید."
+        )
+
+    return stages
+
+
+def _get_linear_transition_map(*, stages, lock=False):
+    """Validate and return the transitions of a strictly linear route.
+
+    ``StageTransition`` can technically hold any forward relation, while the
+    business workflow is intentionally linear.  Management operations must
+    therefore fail safely when a manually-created branch is present rather
+    than silently calculating an incorrect ETA.
+    """
+
+    if len(stages) < 2:
+        return {}
+
+    queryset = StageTransition.objects.filter(
+        is_active=True,
+        from_stage__in=stages,
+        to_stage__in=stages,
+    )
+
+    if lock:
+        queryset = queryset.select_for_update()
+
+    transitions = list(queryset)
+    transition_map = {
+        (transition.from_stage_id, transition.to_stage_id): transition
+        for transition in transitions
+    }
+    expected_pairs = {
+        (stages[index].pk, stages[index + 1].pk)
+        for index in range(len(stages) - 1)
+    }
+
+    if set(transition_map) != expected_pairs:
+        raise ValidationError(
+            "مسیر مراحل فعال خطی و کامل نیست؛ ابتدا Transitionهای مراحل را اصلاح کنید."
+        )
+
+    return transition_map
+
+
+def get_linear_stage_route_integrity():
+    """Describe the active route without raising for missing legacy links.
+
+    Older installations can contain valid Stage rows created before the custom
+    stage-management panel existed, but no StageTransition rows between them.
+    The public result lets the backoffice show a repair workflow instead of
+    trapping an administrator in a validation-error loop.
+    """
+
+    stages = _get_active_stage_chain()
+    all_transitions = list(
+        StageTransition.objects.filter(
+            from_stage__in=stages,
+            to_stage__in=stages,
+        ).select_related("from_stage", "to_stage")
+    )
+    active_transition_map = {
+        (transition.from_stage_id, transition.to_stage_id): transition
+        for transition in all_transitions
+        if transition.is_active
+    }
+    transition_by_pair = {
+        (transition.from_stage_id, transition.to_stage_id): transition
+        for transition in all_transitions
+    }
+    expected_pairs = [
+        (stages[index], stages[index + 1])
+        for index in range(len(stages) - 1)
+    ]
+    expected_pair_ids = {
+        (from_stage.pk, to_stage.pk)
+        for from_stage, to_stage in expected_pairs
+    }
+    unexpected_transitions = [
+        transition
+        for pair, transition in active_transition_map.items()
+        if pair not in expected_pair_ids
+    ]
+    pairs = [
+        {
+            "from_stage": from_stage,
+            "to_stage": to_stage,
+            "transition": active_transition_map.get(
+                (from_stage.pk, to_stage.pk)
+            ),
+            "stored_transition": transition_by_pair.get(
+                (from_stage.pk, to_stage.pk)
+            ),
+        }
+        for from_stage, to_stage in expected_pairs
+    ]
+
+    return {
+        "stages": stages,
+        "pairs": pairs,
+        "missing_pairs": [
+            pair for pair in pairs if pair["transition"] is None
+        ],
+        "unexpected_transitions": unexpected_transitions,
+        "is_valid": not any(
+            pair["transition"] is None for pair in pairs
+        ) and not unexpected_transitions,
+    }
+
+
+@transaction.atomic
+def repair_linear_stage_transitions(*, actor, transition_durations):
+    """Safely create or reactivate the exact links of the active linear route.
+
+    The business workflow is explicitly linear.  During this administrator-
+    confirmed repair, active branches outside the consecutive route are
+    soft-disabled (never deleted), then every required pair is created or
+    reactivated.  Pending ETA values for in-flight vehicles are recalculated
+    atomically; actual operational history is never rewritten.
+    """
+
+    _require_system_administrator(actor=actor)
+    active_stages = _get_active_stage_chain(lock=True)
+
+    if len(active_stages) < 2:
+        raise ValidationError(
+            "برای تعریف Transition دست‌کم دو مرحلهٔ فعال لازم است."
+        )
+
+    expected_pairs = [
+        (active_stages[index], active_stages[index + 1])
+        for index in range(len(active_stages) - 1)
+    ]
+    expected_pair_ids = {
+        (from_stage.pk, to_stage.pk)
+        for from_stage, to_stage in expected_pairs
+    }
+    stored_transitions = list(
+        StageTransition.objects.select_for_update()
+        .filter(
+            from_stage__in=active_stages,
+            to_stage__in=active_stages,
+        )
+        .select_related("from_stage", "to_stage")
+    )
+    active_unexpected_transitions = [
+        transition
+        for transition in stored_transitions
+        if transition.is_active
+        and (transition.from_stage_id, transition.to_stage_id)
+        not in expected_pair_ids
+    ]
+
+    deactivated_count = 0
+    for transition in active_unexpected_transitions:
+        transition.is_active = False
+        transition.save(update_fields=["is_active"])
+        deactivated_count += 1
+
+    transition_by_pair = {
+        (transition.from_stage_id, transition.to_stage_id): transition
+        for transition in stored_transitions
+    }
+    transition_map = {}
+    created_count = 0
+    reactivated_count = 0
+    updated_count = 0
+
+    for from_stage, to_stage in expected_pairs:
+        pair = (from_stage.pk, to_stage.pk)
+        try:
+            raw_duration = transition_durations[pair]
+        except (KeyError, TypeError) as error:
+            raise ValidationError(
+                f"مدت انتقال از «{from_stage.name}» به «{to_stage.name}» الزامی است."
+            ) from error
+
+        duration = _normalize_duration_days(raw_duration, required=True)
+        transition = transition_by_pair.get(pair)
+
+        if transition is None:
+            transition = StageTransition.objects.create(
+                from_stage=from_stage,
+                to_stage=to_stage,
+                estimated_duration_days=duration,
+                is_active=True,
+            )
+            created_count += 1
+        else:
+            changed_fields = []
+            if not transition.is_active:
+                transition.is_active = True
+                changed_fields.append("is_active")
+                reactivated_count += 1
+            if transition.estimated_duration_days != duration:
+                transition.estimated_duration_days = duration
+                changed_fields.append("estimated_duration_days")
+                updated_count += 1
+            if changed_fields:
+                transition.save(update_fields=changed_fields)
+
+        if to_stage.default_duration_days != duration:
+            to_stage.default_duration_days = duration
+            to_stage.save(update_fields=["default_duration_days"])
+
+        transition_map[pair] = transition
+
+    replanned_vehicle_count = _replan_in_flight_vehicles(
+        stages=active_stages,
+        transition_map=transition_map,
+    )
+
+    return {
+        "stages": active_stages,
+        "created_count": created_count,
+        "reactivated_count": reactivated_count,
+        "updated_count": updated_count,
+        "deactivated_count": deactivated_count,
+        "replanned_vehicle_count": replanned_vehicle_count,
+    }
+
+
+def _normalize_stage_name(name):
+    normalized_name = str(name or "").strip()
+
+    if not normalized_name:
+        raise ValidationError("نام مرحله الزامی است.")
+
+    if len(normalized_name) > 120:
+        raise ValidationError("نام مرحله نمی‌تواند بیشتر از ۱۲۰ کاراکتر باشد.")
+
+    return normalized_name
+
+
+def _normalize_duration_days(duration_days, *, required):
+    if duration_days in (None, ""):
+        if required:
+            raise ValidationError("مدت زمان انتقال بین مراحل الزامی است.")
+        return 0
+
+    if isinstance(duration_days, bool):
+        raise ValidationError("مدت زمان انتقال معتبر نیست.")
+
+    try:
+        normalized_duration = int(duration_days)
+    except (TypeError, ValueError):
+        raise ValidationError("مدت زمان انتقال باید یک عدد صحیح باشد.")
+
+    if normalized_duration < 0:
+        raise ValidationError("مدت زمان انتقال نمی‌تواند منفی باشد.")
+
+    return normalized_duration
+
+
+def _get_validated_stage_staff_profiles(assigned_staff):
+    """Resolve staff selections and keep invalid assignees out of a stage."""
+
+    from accounts.models import StaffProfile
+
+    profile_ids = {
+        profile.pk
+        for profile in (assigned_staff or [])
+        if getattr(profile, "pk", None) is not None
+    }
+
+    profiles = list(
+        StaffProfile.objects.select_related("user")
+        .filter(pk__in=profile_ids)
+        .order_by("user__first_name", "user__last_name", "user__username")
+    )
+
+    if len(profiles) != len(profile_ids):
+        raise ValidationError("یکی از کارمندان انتخاب‌شده معتبر نیست.")
+
+    for profile in profiles:
+        user = profile.user
+
+        if not user.is_active or not user.is_staff:
+            raise ValidationError(
+                "فقط کاربران داخلی و فعال می‌توانند مسئول یک مرحله باشند."
+            )
+
+        if not user.is_superuser and not user.has_perm(
+            "tracking.confirm_tracking_stage"
+        ):
+            raise ValidationError(
+                "کارمند انتخاب‌شده مجوز تأیید مرحلهٔ رهگیری را ندارد."
+            )
+
+    return profiles
+
+
+def _recalculate_pending_planned_dates(*, car, stages, transition_map):
+    """Re-plan only future, pending records after an ETA configuration change.
+
+    Actual arrival/completion timestamps are immutable operational history.  A
+    dynamic ETA must update the remaining plan without rewriting that history.
+    """
+
+    progress_by_stage_id = {
+        progress.stage_id: progress
+        for progress in CarStageProgress.objects.select_for_update()
+        .filter(car=car, stage__in=stages)
+        .select_related("stage")
+    }
+
+    if not stages:
+        return
+
+    first_progress = progress_by_stage_id.get(stages[0].pk)
+    planned_date = (
+        first_progress.planned_date
+        if first_progress and first_progress.planned_date
+        else car.created_at.date()
+    )
+
+    for index, stage in enumerate(stages):
+        if index:
+            transition = transition_map[(stages[index - 1].pk, stage.pk)]
+            planned_date += timedelta(days=transition.estimated_duration_days)
+
+        progress = progress_by_stage_id.get(stage.pk)
+
+        if progress and progress.state == "pending" and progress.planned_date != planned_date:
+            progress.planned_date = planned_date
+            progress.save(update_fields=["planned_date"])
+
+
+def _replan_in_flight_vehicles(*, stages, transition_map, new_stage=None):
+    """Backfill a newly appended stage and refresh dynamic future schedules."""
+
+    from cars.models import Car
+
+    updated_vehicle_count = 0
+    in_flight_cars = Car.objects.select_for_update().filter(
+        is_deleted=False,
+        status__in=[Car.Status.SOLD, Car.Status.IN_TRANSIT],
+    )
+
+    for car in in_flight_cars.order_by("pk"):
+        if new_stage is not None:
+            CarStageProgress.objects.get_or_create(
+                car=car,
+                stage=new_stage,
+            )
+
+        _recalculate_pending_planned_dates(
+            car=car,
+            stages=stages,
+            transition_map=transition_map,
+        )
+        updated_vehicle_count += 1
+
+    return updated_vehicle_count
+
+
+@transaction.atomic
+def create_linear_stage(
+    *,
+    actor,
+    name,
+    duration_from_previous=None,
+    assigned_staff=(),
+):
+    """Append one stage to the active linear route through shared logic.
+
+    Adding a stage in the middle of an active route or reordering stages has
+    material effects on vehicles that are already in transit.  Those operations
+    intentionally require a future preview-and-confirm workflow.  This safe
+    first operation appends the stage, creates its incoming transition and
+    backfills pending ``CarStageProgress`` records transactionally.
+    """
+
+    _require_system_administrator(actor=actor)
+    normalized_name = _normalize_stage_name(name)
+    normalized_staff_profiles = _get_validated_stage_staff_profiles(assigned_staff)
+
+    all_stages = list(Stage.objects.select_for_update().order_by("order", "pk"))
+    active_stages = [stage for stage in all_stages if stage.is_active]
+
+    if any(stage.name.casefold() == normalized_name.casefold() for stage in active_stages):
+        raise ValidationError("یک مرحلهٔ فعال با این نام از قبل وجود دارد.")
+
+    transition_map = _get_linear_transition_map(stages=active_stages, lock=True)
+    previous_stage = active_stages[-1] if active_stages else None
+    normalized_duration = _normalize_duration_days(
+        duration_from_previous,
+        required=previous_stage is not None,
+    )
+
+    stage = Stage.objects.create(
+        name=normalized_name,
+        order=max((existing_stage.order for existing_stage in all_stages), default=0)
+        + 1,
+        default_duration_days=normalized_duration,
+        is_active=True,
+    )
+
+    if previous_stage is not None:
+        transition = StageTransition.objects.create(
+            from_stage=previous_stage,
+            to_stage=stage,
+            estimated_duration_days=normalized_duration,
+            is_active=True,
+        )
+        transition_map[(previous_stage.pk, stage.pk)] = transition
+
+    stage.staff_members.set(normalized_staff_profiles)
+    _replan_in_flight_vehicles(
+        stages=[*active_stages, stage],
+        transition_map=transition_map,
+        new_stage=stage,
+    )
+
+    return stage
+
+
+@transaction.atomic
+def update_linear_stage(
+    *,
+    stage,
+    actor,
+    name,
+    duration_from_previous=None,
+    assigned_staff=(),
+):
+    """Safely edit a stage label, its incoming ETA and its responsible staff."""
+
+    _require_system_administrator(actor=actor)
+    normalized_name = _normalize_stage_name(name)
+    normalized_staff_profiles = _get_validated_stage_staff_profiles(assigned_staff)
+
+    active_stages = _get_active_stage_chain(lock=True)
+    stage_by_id = {active_stage.pk: active_stage for active_stage in active_stages}
+    locked_stage = stage_by_id.get(stage.pk)
+
+    if locked_stage is None:
+        raise ValidationError("فقط مرحله‌های فعال قابل ویرایش هستند.")
+
+    if any(
+        active_stage.pk != locked_stage.pk
+        and active_stage.name.casefold() == normalized_name.casefold()
+        for active_stage in active_stages
+    ):
+        raise ValidationError("یک مرحلهٔ فعال با این نام از قبل وجود دارد.")
+
+    transition_map = _get_linear_transition_map(stages=active_stages, lock=True)
+    stage_index = active_stages.index(locked_stage)
+    previous_stage = active_stages[stage_index - 1] if stage_index else None
+    changed_fields = []
+
+    if locked_stage.name != normalized_name:
+        locked_stage.name = normalized_name
+        changed_fields.append("name")
+
+    if previous_stage is not None:
+        normalized_duration = _normalize_duration_days(
+            duration_from_previous,
+            required=True,
+        )
+        transition = transition_map[(previous_stage.pk, locked_stage.pk)]
+
+        if transition.estimated_duration_days != normalized_duration:
+            transition.estimated_duration_days = normalized_duration
+            transition.save(update_fields=["estimated_duration_days"])
+
+        if locked_stage.default_duration_days != normalized_duration:
+            locked_stage.default_duration_days = normalized_duration
+            changed_fields.append("default_duration_days")
+
+    if changed_fields:
+        locked_stage.save(update_fields=changed_fields)
+
+    locked_stage.staff_members.set(normalized_staff_profiles)
+    _replan_in_flight_vehicles(
+        stages=active_stages,
+        transition_map=transition_map,
+    )
+
+    return locked_stage
+
+
+def _get_progress_handler(progress):
+    """Return the employee who actually last handled one progress record."""
+
+    if progress is None:
+        return None
+
+    if progress.state == "entered":
+        return progress.confirmed_by
+
+    if progress.state == "completed":
+        return progress.completed_by or progress.confirmed_by
+
+    if progress.state == "skipped":
+        return progress.skipped_by or progress.confirmed_by
+
+    return None
+
+
+def _get_next_active_stage(*, stage, active_stages):
+    if stage is None:
+        return None
+
+    for active_stage in active_stages:
+        if active_stage.order > stage.order:
+            return active_stage
+
+    return None
+
+
+def get_delivery_machine_snapshot(*, car_id):
+    """Return one read-only operational delivery dossier for the panel.
+
+    It distinguishes the workflow cursor from physical location.  For example,
+    after a stage is completed the car still points at that stage until the
+    next stage confirms arrival; the responsible staff shown in the dossier is
+    then the staff of the *next* stage and the previous handler remains visible
+    as the last employee involved.
+    """
+
+    from accounts.models import StaffProfile
+    from cars.models import Car, CarPhoto
+
+    progress_queryset = CarStageProgress.objects.select_related(
+        "stage",
+        "confirmed_by",
+        "completed_by",
+        "skipped_by",
+    ).order_by("stage__order", "stage__pk")
+    event_queryset = TrackingEvent.objects.select_related(
+        "previous_stage",
+        "new_stage",
+        "performed_by",
+    ).order_by("-created_at", "-pk")
+    photo_queryset = (
+        CarPhoto.objects.filter(image__isnull=False)
+        .exclude(image="")
+        .order_by("-is_cover", "sort_order", "pk")
+    )
+
+    car = Car.objects.select_related("customer", "current_stage").prefetch_related(
+        Prefetch("photos", queryset=photo_queryset, to_attr="delivery_photos"),
+        Prefetch(
+            "stage_progress",
+            queryset=progress_queryset,
+            to_attr="delivery_progress_records",
+        ),
+        Prefetch(
+            "tracking_events",
+            queryset=event_queryset,
+            to_attr="delivery_tracking_events",
+        ),
+    ).get(
+        pk=car_id,
+        is_deleted=False,
+        status__in=[Car.Status.SOLD, Car.Status.IN_TRANSIT, Car.Status.DELIVERED],
+    )
+
+    active_stages = list(
+        Stage.objects.filter(is_active=True)
+        .order_by("order", "pk")
+        .prefetch_related(
+            Prefetch(
+                "staff_members",
+                queryset=StaffProfile.objects.select_related("user").filter(
+                    user__is_active=True,
+                    user__is_staff=True,
+                ),
+                to_attr="delivery_staff_profiles",
+            )
+        )
+    )
+    active_stage_by_id = {stage.pk: stage for stage in active_stages}
+    progress_records = list(car.delivery_progress_records)
+    progress_by_stage_id = {
+        progress.stage_id: progress for progress in progress_records
+    }
+    events = list(car.delivery_tracking_events)
+    latest_event = events[0] if events else None
+    current_stage = car.current_stage
+    current_progress = progress_by_stage_id.get(car.current_stage_id)
+    state = current_progress.state if current_progress else "unknown"
+    next_active_stage = _get_next_active_stage(
+        stage=current_stage,
+        active_stages=active_stages,
+    )
+
+    def stage_staff(stage):
+        if stage is None:
+            return []
+        return list(getattr(stage, "delivery_staff_profiles", []))
+
+    last_handler = _get_progress_handler(current_progress)
+    if last_handler is None:
+        for progress in reversed(progress_records):
+            last_handler = _get_progress_handler(progress)
+            if last_handler is not None:
+                break
+
+    if last_handler is None and latest_event is not None:
+        last_handler = latest_event.performed_by
+
+    if current_stage is None:
+        workflow = {
+            "tone": "warning",
+            "title": "رهگیری هنوز شروع نشده یا دادهٔ آن ناقص است",
+            "description": "برای این ماشین مرحلهٔ فعلی قابل تشخیص نیست.",
+            "responsible_stage": None,
+            "responsible_staff": [],
+            
+            "last_handler": last_handler,
+        }
+    elif current_progress is None:
+        workflow = {
+            "tone": "warning",
+            "title": "رکورد مرحلهٔ فعلی ناقص است",
+            "description": (
+                f"برای مرحلهٔ «{current_stage.name}» رکورد پیشرفت پیدا نشد. "
+                "دادهٔ رهگیری باید بررسی شود."
+            ),
+            "responsible_stage": active_stage_by_id.get(current_stage.pk),
+            "responsible_staff": stage_staff(
+                active_stage_by_id.get(current_stage.pk)
+            ),
+            "last_handler": last_handler,
+        }
+    elif state == "entered":
+        responsible_stage = active_stage_by_id.get(current_stage.pk, current_stage)
+        workflow = {
+            "tone": "active",
+            "title": f"ماشین وارد مرحلهٔ «{current_stage.name}» شده است",
+            "description": "مرحله هنوز تکمیل نشده و مسئولان همین مرحله پیگیری می‌کنند.",
+            "responsible_stage": responsible_stage,
+            "responsible_staff": stage_staff(responsible_stage),
+            "last_handler": current_progress.confirmed_by or last_handler,
+        }
+    elif state in {"completed", "skipped"} and next_active_stage is not None:
+        action_label = "کامل شده" if state == "completed" else "رد شده"
+        workflow = {
+            "tone": "waiting",
+            "title": (
+                f"مرحلهٔ «{current_stage.name}» {action_label}؛ "
+                f"ماشین منتظر دریافت در «{next_active_stage.name}» است"
+            ),
+            "description": (
+                "هنوز ورود ماشین به مرحلهٔ بعد توسط کارمند آن مرحله تأیید نشده است."
+            ),
+            "responsible_stage": next_active_stage,
+            "responsible_staff": stage_staff(next_active_stage),
+            "last_handler": _get_progress_handler(current_progress) or last_handler,
+        }
+    elif state == "pending":
+        responsible_stage = active_stage_by_id.get(current_stage.pk, current_stage)
+        workflow = {
+            "tone": "waiting",
+            "title": f"ماشین منتظر دریافت در مرحلهٔ «{current_stage.name}» است",
+            "description": (
+                "این حالت می‌تواند پس از اصلاح یا بایگانی یک مرحله رخ دهد؛ "
+                "کارمند مسئول باید ورود ماشین را تأیید کند."
+            ),
+            "responsible_stage": responsible_stage,
+            "responsible_staff": stage_staff(responsible_stage),
+            "last_handler": last_handler,
+        }
+    else:
+        workflow = {
+            "tone": "complete",
+            "title": "تمام مراحل فعال تحویل کامل شده‌اند",
+            "description": "فرآیند رهگیری این ماشین به پایان رسیده است.",
+            "responsible_stage": None,
+            "responsible_staff": [],
+            
+            "last_handler": _get_progress_handler(current_progress) or last_handler,
+        }
+
+    try:
+        remaining_eta_days = (
+            calculate_remaining_eta_days(car)
+            if car.current_stage_id in active_stage_by_id
+            else None
+        )
+        eta_is_available = remaining_eta_days is not None
+    except ValidationError:
+        remaining_eta_days = None
+        eta_is_available = False
+
+    state_labels = {
+        "pending": "در انتظار دریافت",
+        "entered": "وارد مرحله شده",
+        "completed": "تکمیل شده",
+        "skipped": "رد شده",
+    }
+    event_labels = {
+        TrackingEvent.EventType.TRACKING_STARTED: "شروع رهگیری",
+        TrackingEvent.EventType.STAGE_CONFIRMED: "تأیید ورود به مرحله",
+        TrackingEvent.EventType.STAGE_COMPLETED: "تکمیل مرحله",
+        TrackingEvent.EventType.STAGE_CORRECTED: "اصلاح مرحله",
+        TrackingEvent.EventType.STAGE_SKIPPED: "رد کردن مرحله",
+        TrackingEvent.EventType.STAGE_ARCHIVED: "بایگانی مرحله",
+    }
+    source_labels = {
+        TrackingEvent.Source.SYSTEM: "سیستم",
+        TrackingEvent.Source.ADMIN_DASHBOARD: "پنل مدیریت",
+        TrackingEvent.Source.TELEGRAM_BOT: "ربات تلگرام",
+        TrackingEvent.Source.EXCEL_IMPORT: "فایل Excel",
+    }
+
+    return {
+        "car": car,
+        "cover_photo": next(iter(car.delivery_photos), None),
+        "progress_records": progress_records,
+        "timeline": [
+            {
+                "progress": progress,
+                "state": progress.state,
+                "state_label": state_labels.get(progress.state, "نامشخص"),
+            }
+            for progress in progress_records
+        ],
+        "events": [
+            {
+                "event": event,
+                "event_label": event_labels.get(event.event_type, event.event_type),
+                "source_label": source_labels.get(event.source, event.source),
+            }
+            for event in events
+        ],
+        "current_stage": current_stage,
+        "current_progress": current_progress,
+        "next_active_stage": next_active_stage,
+        "workflow": workflow,
+        "latest_event": latest_event,
+        "latest_event_source_label": (
+            source_labels.get(latest_event.source, latest_event.source)
+            if latest_event is not None
+            else None
+        ),
+        "remaining_eta_days": remaining_eta_days,
+        "eta_is_available": eta_is_available,
+        "tracking_code_is_missing": not bool(car.tracking_code),
+    }
+
+
 @transaction.atomic
 def start_tracking_for_sold_car(
     *,
@@ -239,12 +1065,12 @@ def start_tracking_for_sold_car(
     if CarStageProgress.objects.filter(car=locked_car).exists():
         raise ValidationError("Tracking has already been started for this vehicle.")
 
-    stages = list(Stage.objects.filter(is_active=True).order_by("order"))
+    stages = _get_active_stage_chain()
 
     if not stages:
         raise ValidationError("At least one active tracking stage is required.")
 
-    transition_map = _get_transition_map(stages)
+    transition_map = _get_linear_transition_map(stages=stages)
 
     now = timezone.now()
     planned_date = now.date()
@@ -360,6 +1186,8 @@ def confirm_stage(
     locked_car.current_stage = stage
     locked_car.save(update_fields=["current_stage"])
 
+    _sync_car_tracking_status(locked_car=locked_car)
+
     _create_tracking_event(
         car=locked_car,
         event_type=TrackingEvent.EventType.STAGE_CONFIRMED,
@@ -425,6 +1253,8 @@ def complete_stage(
             "completed_by",
         ]
     )
+
+    _sync_car_tracking_status(locked_car=locked_car)
 
     _create_tracking_event(
         car=locked_car,
@@ -494,6 +1324,8 @@ def skip_stage(
 
     locked_car.current_stage = stage
     locked_car.save(update_fields=["current_stage"])
+
+    _sync_car_tracking_status(locked_car=locked_car)
 
     _create_tracking_event(
         car=locked_car,
@@ -596,6 +1428,8 @@ def correct_tracking_stage(
 
     locked_car.current_stage = stage
     locked_car.save(update_fields=["current_stage"])
+
+    _sync_car_tracking_status(locked_car=locked_car)
 
     _create_tracking_event(
         car=locked_car,
@@ -921,6 +1755,8 @@ def archive_stage(
                 locked_car.current_stage = previous_active_stage
                 locked_car.save(update_fields=["current_stage"])
 
+                _sync_car_tracking_status(locked_car=locked_car)
+
                 _create_tracking_event(
                     car=locked_car,
                     event_type=TrackingEvent.EventType.STAGE_ARCHIVED,
@@ -949,6 +1785,8 @@ def archive_stage(
 
                 locked_car.current_stage = next_active_stage
                 locked_car.save(update_fields=["current_stage"])
+
+                _sync_car_tracking_status(locked_car=locked_car)
 
                 _create_tracking_event(
                     car=locked_car,

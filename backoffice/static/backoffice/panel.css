@@ -1,0 +1,3893 @@
+@font-face {
+    font-family: "Vazir";
+    src: url("../core/vendor/persian-adminlte/fonts/Vazir.woff2") format("woff2"),
+         url("../core/vendor/persian-adminlte/fonts/Vazir.woff") format("woff");
+    font-display: swap;
+    font-style: normal;
+    font-weight: 400;
+}
+
+@font-face {
+    font-family: "Vazir";
+    src: url("../core/vendor/persian-adminlte/fonts/Vazir-Bold.woff2") format("woff2"),
+         url("../core/vendor/persian-adminlte/fonts/Vazir-Bold.woff") format("woff");
+    font-display: swap;
+    font-style: normal;
+    font-weight: 700;
+}
+
+:root {
+    --panel-primary: #218838;
+    --panel-primary-dark: #176c2b;
+    --panel-sidebar: #343a40;
+    --panel-sidebar-deep: #2c3136;
+    --panel-page: #f4f6f9;
+    --panel-card: #ffffff;
+    --panel-text: #29313a;
+    --panel-muted: #77818c;
+    --panel-border: #e4e8ec;
+    --panel-shadow: 0 8px 24px rgba(28, 39, 49, 0.08);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    background: var(--panel-page);
+}
+
+.backoffice-body {
+    min-height: 100vh;
+    margin: 0;
+    color: var(--panel-text);
+    background: var(--panel-page);
+    font-family: Vazir, Tahoma, Arial, sans-serif;
+}
+
+.backoffice-shell {
+    display: grid;
+    grid-template-areas: "sidebar main";
+    grid-template-columns: 18rem minmax(0, 1fr);
+    min-height: 100vh;
+}
+
+.backoffice-sidebar {
+    grid-area: sidebar;
+    min-height: 100vh;
+    color: #e9edf1;
+    background: linear-gradient(180deg, var(--panel-sidebar) 0%, var(--panel-sidebar-deep) 100%);
+    box-shadow: -5px 0 18px rgba(20, 30, 38, 0.16);
+}
+
+.backoffice-main {
+    grid-area: main;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.backoffice-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 4.5rem;
+    padding: 0.75rem 1rem;
+    color: #ffffff;
+    text-decoration: none;
+    background: var(--panel-primary);
+}
+
+.backoffice-brand__icon,
+.backoffice-user__avatar,
+.backoffice-sidebar-user__avatar {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: 50%;
+}
+
+.backoffice-brand__icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 1.15rem;
+    color: var(--panel-primary);
+    background: #ffffff;
+}
+
+.backoffice-brand__logo {
+    width: 2.5rem;
+    height: 2.5rem;
+    object-fit: contain;
+    padding: 0.2rem;
+    border-radius: 50%;
+    background: #ffffff;
+}
+
+.backoffice-brand__text {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.backoffice-brand__text strong {
+    overflow: hidden;
+    font-size: 1rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.backoffice-brand__text small {
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 0.74rem;
+}
+
+.backoffice-sidebar-user {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.backoffice-sidebar-user__avatar {
+    width: 2.25rem;
+    height: 2.25rem;
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.backoffice-sidebar-user div {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.backoffice-sidebar-user strong {
+    overflow: hidden;
+    font-size: 0.86rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.backoffice-sidebar-user small {
+    color: #aeb8c2;
+    font-size: 0.72rem;
+}
+
+.backoffice-navigation {
+    padding: 0.75rem;
+}
+
+.backoffice-nav-list,
+.backoffice-nav-sublist,
+.backoffice-nav-nested-list {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.backoffice-nav-section {
+    margin-bottom: 0.4rem;
+}
+
+.backoffice-nav-group summary,
+.backoffice-nav-subgroup summary,
+.backoffice-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 2.65rem;
+    padding: 0.55rem 0.7rem;
+    color: #d9e0e6;
+    border-radius: 0.35rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.18s ease, color 0.18s ease;
+}
+
+.backoffice-nav-group summary,
+.backoffice-nav-subgroup summary {
+    justify-content: space-between;
+    list-style: none;
+}
+
+.backoffice-nav-group summary::-webkit-details-marker,
+.backoffice-nav-subgroup summary::-webkit-details-marker {
+    display: none;
+}
+
+.backoffice-nav-group summary > span,
+.backoffice-nav-subgroup summary > span {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.backoffice-nav-group summary:hover,
+.backoffice-nav-subgroup summary:hover,
+.backoffice-nav-link:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.backoffice-nav-group > summary {
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.backoffice-nav-sublist {
+    padding: 0.25rem 0.35rem 0.15rem 0;
+}
+
+.backoffice-nav-nested-list {
+    padding: 0.2rem 0.65rem 0.1rem 0;
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.backoffice-nav-link--sub {
+    font-size: 0.88rem;
+}
+
+.backoffice-nav-link--nested {
+    min-height: 2.35rem;
+    font-size: 0.82rem;
+}
+
+.backoffice-nav-link.is-active {
+    color: #ffffff;
+    background: var(--panel-primary);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+}
+
+.backoffice-nav-chevron {
+    font-size: 1rem;
+    transition: transform 0.18s ease;
+}
+
+.backoffice-nav-group[open] > summary .backoffice-nav-chevron,
+.backoffice-nav-subgroup[open] > summary .backoffice-nav-chevron {
+    transform: rotate(-90deg);
+}
+
+.backoffice-nav-empty {
+    padding: 0.75rem;
+    color: #aeb8c2;
+    font-size: 0.82rem;
+}
+
+.backoffice-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 4.5rem;
+    padding: 0.75rem 1.5rem;
+    background: #ffffff;
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.backoffice-topbar__right,
+.backoffice-topbar__left,
+.backoffice-user {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.backoffice-menu-toggle {
+    display: none;
+    width: 2.35rem;
+    height: 2.35rem;
+    color: var(--panel-text);
+    border: 1px solid var(--panel-border);
+    border-radius: 0.35rem;
+    cursor: pointer;
+    background: #ffffff;
+}
+
+.backoffice-home-link,
+.backoffice-public-link {
+    color: var(--panel-muted);
+    font-size: 0.88rem;
+    text-decoration: none;
+}
+
+.backoffice-home-link:hover,
+.backoffice-public-link:hover {
+    color: var(--panel-primary);
+}
+
+.backoffice-user {
+    padding-right: 0.75rem;
+    border-right: 1px solid var(--panel-border);
+    font-size: 0.85rem;
+}
+
+.backoffice-user__avatar {
+    width: 2rem;
+    height: 2rem;
+    color: #ffffff;
+    background: var(--panel-primary);
+}
+
+.backoffice-content {
+    flex: 1;
+    padding: 1.75rem;
+}
+
+.backoffice-page-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.backoffice-eyebrow {
+    margin: 0 0 0.35rem;
+    color: var(--panel-primary);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.backoffice-page-heading h1 {
+    margin: 0;
+    font-size: clamp(1.35rem, 2vw, 1.8rem);
+}
+
+.backoffice-page-heading p:not(.backoffice-eyebrow) {
+    max-width: 48rem;
+    margin: 0.55rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.9rem;
+    line-height: 1.9;
+}
+
+.backoffice-messages {
+    display: grid;
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+}
+
+.backoffice-alert {
+    padding: 0.75rem 1rem;
+    border-radius: 0.4rem;
+    border: 1px solid transparent;
+}
+
+.backoffice-alert--success {
+    color: #155724;
+    background: #d4edda;
+    border-color: #c3e6cb;
+}
+
+.backoffice-alert--error,
+.backoffice-alert--danger {
+    color: #721c24;
+    background: #f8d7da;
+    border-color: #f5c6cb;
+}
+
+.backoffice-alert--warning {
+    color: #856404;
+    background: #fff3cd;
+    border-color: #ffeeba;
+}
+
+.backoffice-alert--info {
+    color: #0c5460;
+    background: #d1ecf1;
+    border-color: #bee5eb;
+}
+
+.backoffice-welcome-card,
+.backoffice-placeholder-card,
+.backoffice-quick-card {
+    background: var(--panel-card);
+    border: 1px solid var(--panel-border);
+    border-radius: 0.55rem;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-welcome-card,
+.backoffice-placeholder-card {
+    padding: clamp(1.25rem, 3vw, 2rem);
+}
+
+.backoffice-welcome-card__icon,
+.backoffice-placeholder-card__icon {
+    display: inline-grid;
+    place-items: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    margin-bottom: 0.85rem;
+    color: #ffffff;
+    border-radius: 0.7rem;
+    background: var(--panel-primary);
+    font-size: 1.35rem;
+}
+
+.backoffice-welcome-card h2,
+.backoffice-placeholder-card h2 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.backoffice-welcome-card p,
+.backoffice-placeholder-card p {
+    max-width: 44rem;
+    margin: 0.65rem 0 0;
+    color: var(--panel-muted);
+    line-height: 2;
+}
+
+.backoffice-quick-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.backoffice-quick-card {
+    padding: 1.25rem;
+}
+
+.backoffice-quick-card > i {
+    color: var(--panel-primary);
+    font-size: 1.45rem;
+}
+
+.backoffice-quick-card h3 {
+    margin: 0.85rem 0 0.35rem;
+    font-size: 1rem;
+}
+
+.backoffice-quick-card p {
+    margin: 0;
+    color: var(--panel-muted);
+    font-size: 0.84rem;
+    line-height: 1.8;
+}
+
+.backoffice-footer {
+    padding: 1rem 1.75rem;
+    color: var(--panel-muted);
+    font-size: 0.8rem;
+    background: #ffffff;
+    border-top: 1px solid var(--panel-border);
+}
+
+.backoffice-backdrop {
+    display: none;
+}
+
+@media (max-width: 960px) {
+    .backoffice-shell {
+        display: block;
+    }
+
+    .backoffice-sidebar {
+        position: fixed;
+        z-index: 30;
+        top: 0;
+        right: 0;
+        width: min(18rem, 86vw);
+        min-height: 100dvh;
+        transform: translateX(110%);
+        transition: transform 0.2s ease;
+    }
+
+    .backoffice-body.panel-sidebar-open .backoffice-sidebar {
+        transform: translateX(0);
+    }
+
+    .backoffice-body.panel-sidebar-open .backoffice-backdrop {
+        position: fixed;
+        z-index: 20;
+        inset: 0;
+        display: block;
+        background: rgba(16, 24, 32, 0.48);
+    }
+
+    .backoffice-menu-toggle {
+        display: inline-grid;
+        place-items: center;
+    }
+
+    .backoffice-content {
+        padding: 1.1rem;
+    }
+
+    .backoffice-topbar {
+        padding: 0.75rem 1rem;
+    }
+
+    .backoffice-footer {
+        padding: 1rem;
+    }
+}
+
+@media (max-width: 700px) {
+    .backoffice-topbar__left .backoffice-public-link {
+        display: none;
+    }
+
+    .backoffice-user {
+        padding-right: 0;
+        border-right: 0;
+    }
+
+    .backoffice-user span:last-child {
+        display: none;
+    }
+
+    .backoffice-page-heading {
+        display: block;
+    }
+
+    .backoffice-quick-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.backoffice-page-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.backoffice-result-count {
+    padding: 0.45rem 0.8rem;
+    color: var(--panel-primary-dark);
+    border-radius: 99rem;
+    background: #e4f4e8;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.backoffice-search-card,
+.backoffice-table-card {
+    background: var(--panel-card);
+    border: 1px solid var(--panel-border);
+    border-radius: 0.55rem;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-search-card {
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.backoffice-search-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 0.85rem;
+}
+
+.backoffice-search-label {
+    display: block;
+    margin-bottom: 0.45rem;
+    color: var(--panel-text);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.backoffice-input {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.6rem 0.8rem;
+    color: var(--panel-text);
+    border: 1px solid #cfd7de;
+    border-radius: 0.35rem;
+    outline: 0;
+    font: inherit;
+    background: #ffffff;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.backoffice-input:focus {
+    border-color: var(--panel-primary);
+    box-shadow: 0 0 0 0.2rem rgba(33, 136, 56, 0.14);
+}
+
+.backoffice-search-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.backoffice-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.9rem;
+    border: 1px solid transparent;
+    border-radius: 0.35rem;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.backoffice-button--primary {
+    color: #ffffff;
+    background: var(--panel-primary);
+}
+
+.backoffice-button--primary:hover {
+    background: var(--panel-primary-dark);
+}
+
+.backoffice-button--secondary {
+    color: #5e6a74;
+    border-color: #d5dce2;
+    background: #ffffff;
+}
+
+.backoffice-button--outline {
+    color: var(--panel-primary-dark);
+    border-color: #a8d8b3;
+    background: #f4fbf5;
+}
+
+.backoffice-button--outline:hover {
+    color: #ffffff;
+    border-color: var(--panel-primary);
+    background: var(--panel-primary);
+}
+
+.backoffice-button--warning {
+    color: #6b4a08;
+    border-color: #f1c96b;
+    background: #fff4d8;
+}
+
+.backoffice-button--warning:hover {
+    color: #ffffff;
+    border-color: #c48a16;
+    background: #c48a16;
+}
+
+.backoffice-button--danger {
+    color: #ffffff;
+    border-color: #c73b48;
+    background: #c73b48;
+}
+
+.backoffice-button--danger:hover {
+    border-color: #a92935;
+    background: #a92935;
+}
+
+.backoffice-button--small {
+    min-height: 2.15rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.73rem;
+}
+
+.backoffice-icon-button {
+    position: relative;
+    width: 2.5rem;
+    min-width: 2.5rem;
+    padding-right: 0;
+    padding-left: 0;
+}
+
+.backoffice-icon-button::after {
+    position: absolute;
+    z-index: 50;
+    right: 50%;
+    bottom: calc(100% + 0.55rem);
+    width: max-content;
+    max-width: 14rem;
+    padding: 0.4rem 0.6rem;
+    color: #ffffff;
+    border-radius: 0.3rem;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(50%) translateY(0.25rem);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+    direction: rtl;
+    font-size: 0.72rem;
+    font-weight: 400;
+    line-height: 1.5;
+    white-space: nowrap;
+    content: attr(data-tooltip);
+    background: #20272e;
+    box-shadow: 0 5px 14px rgba(18, 27, 35, 0.22);
+}
+
+.backoffice-icon-button:hover::after,
+.backoffice-icon-button:focus-visible::after {
+    opacity: 1;
+    transform: translateX(50%) translateY(0);
+}
+
+.backoffice-icon-button:focus-visible {
+    outline: 3px solid rgba(33, 136, 56, 0.28);
+    outline-offset: 2px;
+}
+
+.backoffice-button--small.backoffice-icon-button {
+    width: 2.15rem;
+    min-width: 2.15rem;
+}
+
+.backoffice-table-scroll {
+    overflow-x: auto;
+}
+
+.backoffice-table {
+    width: 100%;
+    min-width: 52rem;
+    border-collapse: collapse;
+}
+
+.backoffice-table th,
+.backoffice-table td {
+    padding: 0.9rem 1rem;
+    text-align: right;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--panel-border);
+    font-size: 0.84rem;
+}
+
+.backoffice-table th {
+    color: #5a6772;
+    background: #f8fafb;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.backoffice-table tbody tr:hover {
+    background: #fbfcfd;
+}
+
+.backoffice-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.backoffice-machine-name {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-width: 13rem;
+}
+
+.backoffice-machine-name__icon {
+    display: inline-grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    color: var(--panel-primary);
+    border-radius: 0.45rem;
+    background: #e4f4e8;
+}
+
+.backoffice-machine-name div {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.backoffice-machine-name strong {
+    font-size: 0.86rem;
+}
+
+.backoffice-machine-name small {
+    color: var(--panel-muted);
+    font-size: 0.76rem;
+}
+
+.backoffice-status {
+    display: inline-flex;
+    padding: 0.32rem 0.6rem;
+    border-radius: 99rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.backoffice-status--draft {
+    color: #52616b;
+    background: #e6ebef;
+}
+
+.backoffice-status--sale {
+    color: #0f5f7f;
+    background: #d9f2fb;
+}
+
+.backoffice-status--hold {
+    color: #865d0c;
+    background: #fff0c9;
+}
+
+.backoffice-status--sold {
+    color: #5e3f94;
+    background: #ede2ff;
+}
+
+.backoffice-status--transit {
+    color: #0e5d72;
+    background: #d7f3f8;
+}
+
+.backoffice-status--delivered {
+    color: #176c2b;
+    background: #dff5e4;
+}
+
+.backoffice-tracking-code {
+    color: #315264;
+    font-family: Consolas, monospace;
+    font-size: 0.79rem;
+    direction: ltr;
+}
+
+.backoffice-row-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    min-width: 11rem;
+}
+
+.backoffice-row-actions form {
+    margin: 0;
+}
+
+.backoffice-action-hint {
+    color: var(--panel-muted);
+    font-size: 0.72rem;
+    line-height: 1.6;
+}
+
+.backoffice-data-warning,
+.backoffice-expired-label {
+    display: inline-flex;
+    margin-top: 0.25rem;
+    padding: 0.15rem 0.38rem;
+    color: #8b5810;
+    border-radius: 0.25rem;
+    background: #fff0c9;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.backoffice-table-empty {
+    padding: 2.5rem !important;
+    color: var(--panel-muted);
+    text-align: center !important;
+}
+
+.backoffice-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    padding: 1rem;
+    color: var(--panel-muted);
+    font-size: 0.82rem;
+}
+
+.backoffice-pagination a {
+    padding: 0.35rem 0.65rem;
+    color: var(--panel-primary-dark);
+    border: 1px solid #cfe8d4;
+    border-radius: 0.3rem;
+    text-decoration: none;
+    background: #f3fbf5;
+}
+
+.backoffice-form-card {
+    max-width: 70rem;
+    padding: clamp(1rem, 3vw, 2rem);
+    background: var(--panel-card);
+    border: 1px solid var(--panel-border);
+    border-radius: 0.55rem;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-form-card--warning {
+    max-width: 48rem;
+    border-top: 4px solid #c73b48;
+}
+
+.backoffice-form-card--sale {
+    max-width: 52rem;
+    border-top: 4px solid var(--panel-primary);
+}
+
+.backoffice-form-section + .backoffice-form-section {
+    margin-top: 1.75rem;
+}
+
+.backoffice-form-section__heading {
+    margin-bottom: 1rem;
+}
+
+.backoffice-form-section__heading h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.backoffice-form-section__heading p {
+    margin: 0.4rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.82rem;
+    line-height: 1.8;
+}
+
+.backoffice-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.backoffice-field {
+    min-width: 0;
+}
+
+.backoffice-field--wide {
+    grid-column: 1 / -1;
+}
+
+.backoffice-field--checkbox {
+    display: flex;
+    align-items: center;
+    min-height: 2.75rem;
+}
+
+.backoffice-field__label {
+    display: block;
+    margin-bottom: 0.45rem;
+    color: var(--panel-text);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.backoffice-required {
+    color: #c73b48;
+}
+
+.backoffice-textarea {
+    width: 100%;
+    min-height: 7rem;
+    padding: 0.65rem 0.8rem;
+    color: var(--panel-text);
+    border: 1px solid #cfd7de;
+    border-radius: 0.35rem;
+    outline: 0;
+    resize: vertical;
+    font: inherit;
+    line-height: 1.8;
+    background: #ffffff;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.backoffice-textarea:focus {
+    border-color: var(--panel-primary);
+    box-shadow: 0 0 0 0.2rem rgba(33, 136, 56, 0.14);
+}
+
+.backoffice-checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--panel-text);
+    cursor: pointer;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.backoffice-checkbox {
+    width: 1.05rem;
+    height: 1.05rem;
+    accent-color: var(--panel-primary);
+}
+
+.backoffice-field__help {
+    display: block;
+    margin-top: 0.35rem;
+    color: var(--panel-muted);
+    font-size: 0.72rem;
+    line-height: 1.6;
+}
+
+.backoffice-field__error,
+.backoffice-form-errors {
+    margin-top: 0.45rem;
+    color: #a92935;
+    font-size: 0.78rem;
+    line-height: 1.65;
+}
+
+.backoffice-form-errors {
+    margin: 0 0 1rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid #f3c7cd;
+    border-radius: 0.35rem;
+    background: #fff0f1;
+}
+
+.backoffice-form-errors ul,
+.backoffice-field__error ul {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.backoffice-form-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--panel-border);
+}
+
+.backoffice-confirmation-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1.1rem;
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.backoffice-confirmation-summary__icon {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 3rem;
+    height: 3rem;
+    color: #ffffff;
+    border-radius: 0.7rem;
+    background: #c73b48;
+    font-size: 1.15rem;
+}
+
+.backoffice-confirmation-summary__icon--hold {
+    background: #c48a16;
+}
+
+.backoffice-confirmation-summary__icon--sale {
+    background: var(--panel-primary);
+}
+
+.backoffice-confirmation-summary h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.backoffice-confirmation-summary p {
+    margin: 0.35rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.82rem;
+}
+
+.backoffice-warning-note {
+    padding: 0.8rem 0.95rem;
+    margin: 0 0 1rem;
+    color: #7c2630;
+    border-right: 3px solid #c73b48;
+    border-radius: 0.25rem;
+    background: #fff0f1;
+    font-size: 0.83rem;
+    line-height: 1.9;
+}
+
+.backoffice-filter-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.9rem;
+}
+
+.backoffice-filter-tabs a {
+    padding: 0.35rem 0.7rem;
+    color: #596773;
+    border: 1px solid #d5dce2;
+    border-radius: 99rem;
+    font-size: 0.76rem;
+    text-decoration: none;
+    background: #ffffff;
+}
+
+.backoffice-filter-tabs a.is-active,
+.backoffice-filter-tabs a:hover {
+    color: #ffffff;
+    border-color: var(--panel-primary);
+    background: var(--panel-primary);
+}
+
+.backoffice-media-shortcut {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+    max-width: 70rem;
+    padding: 1rem 1.25rem;
+    margin-top: 1rem;
+    border: 1px solid var(--panel-border);
+    border-right: 4px solid var(--panel-primary);
+    border-radius: 0.55rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-media-shortcut > div:first-child {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.backoffice-media-shortcut__icon {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.7rem;
+    height: 2.7rem;
+    color: var(--panel-primary);
+    border-radius: 0.55rem;
+    background: #e4f4e8;
+    font-size: 1.15rem;
+}
+
+.backoffice-media-shortcut h2 {
+    margin: 0;
+    font-size: 0.98rem;
+}
+
+.backoffice-media-shortcut p {
+    margin: 0.3rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.78rem;
+    line-height: 1.8;
+}
+
+.backoffice-media-preview {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.backoffice-media-preview img {
+    width: 2.5rem;
+    height: 2.5rem;
+    object-fit: cover;
+    border: 2px solid #ffffff;
+    border-radius: 0.38rem;
+    box-shadow: 0 2px 6px rgba(29, 42, 53, 0.17);
+}
+
+.backoffice-media-preview__empty {
+    color: var(--panel-muted);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.backoffice-photo-upload-card {
+    max-width: none;
+    margin-bottom: 1rem;
+}
+
+.backoffice-upload-form {
+    display: flex;
+    align-items: end;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+}
+
+.backoffice-upload-form .backoffice-field {
+    flex: 1 1 20rem;
+}
+
+.backoffice-file-input {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.45rem 0.6rem;
+    color: var(--panel-text);
+    border: 1px dashed #aab8c2;
+    border-radius: 0.35rem;
+    background: #fbfcfd;
+    font: inherit;
+}
+
+.backoffice-readonly-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.8rem 1rem;
+    margin-bottom: 1rem;
+    color: #6b4a08;
+    border: 1px solid #f1d18a;
+    border-radius: 0.45rem;
+    background: #fff9e8;
+    font-size: 0.83rem;
+    line-height: 1.8;
+}
+
+.backoffice-photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    gap: 1rem;
+}
+
+.backoffice-photo-card,
+.backoffice-photo-empty {
+    overflow: hidden;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.55rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-photo-card.is-cover {
+    border-color: #a8d8b3;
+    box-shadow: 0 0 0 2px rgba(33, 136, 56, 0.13), var(--panel-shadow);
+}
+
+.backoffice-photo-card__image {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    background: #eaf0f4;
+}
+
+.backoffice-photo-card__image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.backoffice-photo-card__missing {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 0.45rem;
+    width: 100%;
+    height: 100%;
+    color: #788692;
+    font-size: 0.8rem;
+}
+
+.backoffice-photo-card__missing i {
+    font-size: 1.4rem;
+}
+
+.backoffice-cover-badge {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.45rem;
+    color: #ffffff;
+    border-radius: 99rem;
+    background: var(--panel-primary);
+    box-shadow: 0 2px 7px rgba(15, 79, 31, 0.3);
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.backoffice-photo-card__body {
+    padding: 0.8rem;
+}
+
+.backoffice-photo-metadata-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 5rem auto;
+    align-items: end;
+    gap: 0.55rem;
+}
+
+.backoffice-photo-metadata-form .backoffice-field__label {
+    margin-bottom: 0.3rem;
+    font-size: 0.7rem;
+}
+
+.backoffice-photo-metadata-form .backoffice-input {
+    min-height: 2.3rem;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.76rem;
+}
+
+.backoffice-photo-card__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+}
+
+.backoffice-photo-card__actions form {
+    margin: 0;
+}
+
+.backoffice-photo-readonly-data {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0;
+    margin: 0;
+    font-size: 0.76rem;
+}
+
+.backoffice-photo-readonly-data div {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.backoffice-photo-readonly-data dt {
+    color: var(--panel-muted);
+}
+
+.backoffice-photo-readonly-data dd {
+    margin: 0;
+    color: var(--panel-text);
+}
+
+.backoffice-photo-empty {
+    display: grid;
+    grid-column: 1 / -1;
+    place-items: center;
+    gap: 0.5rem;
+    min-height: 13rem;
+    padding: 1.5rem;
+    color: var(--panel-muted);
+    text-align: center;
+    font-size: 0.84rem;
+}
+
+.backoffice-photo-empty i {
+    color: #9eabb5;
+    font-size: 2.25rem;
+}
+
+.backoffice-photo-empty strong {
+    color: var(--panel-text);
+}
+
+@media (max-width: 700px) {
+    .backoffice-search-form {
+        grid-template-columns: 1fr;
+    }
+
+    .backoffice-search-actions {
+        width: 100%;
+    }
+
+    .backoffice-search-actions .backoffice-button {
+        flex: 1;
+    }
+
+    .backoffice-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .backoffice-field--wide {
+        grid-column: auto;
+    }
+
+    .backoffice-page-actions {
+        margin-top: 0.8rem;
+    }
+
+    .backoffice-media-shortcut {
+        grid-template-columns: 1fr;
+    }
+
+    .backoffice-media-shortcut .backoffice-button {
+        justify-self: start;
+    }
+
+    .backoffice-photo-metadata-form {
+        grid-template-columns: minmax(0, 1fr) 5rem auto;
+    }
+}
+
+/* Blog management components: keep the custom panel visually consistent with
+   the RTL AdminLTE-inspired machine screens. */
+.backoffice-post-table {
+    min-width: 64rem;
+}
+
+.backoffice-post-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 18rem;
+}
+
+.backoffice-post-title__media {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 3rem;
+    height: 2.45rem;
+    overflow: hidden;
+    color: var(--panel-primary);
+    border-radius: 0.42rem;
+    background: #e4f4e8;
+}
+
+.backoffice-post-title__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.backoffice-post-title__media i {
+    font-size: 1.1rem;
+}
+
+.backoffice-post-title > div {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.backoffice-post-title strong,
+.backoffice-post-title small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.backoffice-post-title strong {
+    color: var(--panel-text);
+    font-size: 0.86rem;
+}
+
+.backoffice-post-title small {
+    color: var(--panel-muted);
+    direction: rtl;
+    font-size: 0.74rem;
+}
+
+.backoffice-post-status {
+    display: inline-flex;
+    padding: 0.32rem 0.6rem;
+    border-radius: 99rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.backoffice-post-status--draft {
+    color: #52616b;
+    background: #e6ebef;
+}
+
+.backoffice-post-status--published {
+    color: #176c2b;
+    background: #dff5e4;
+}
+
+.backoffice-post-status__date {
+    display: block;
+    margin-top: 0.3rem;
+    color: var(--panel-muted);
+    font-size: 0.7rem;
+}
+
+.backoffice-post-form {
+    max-width: 76rem;
+}
+
+.backoffice-post-form .backoffice-file-input {
+    min-height: 3rem;
+}
+
+.backoffice-post-form__image-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    max-width: 32rem;
+    padding: 0.7rem;
+    margin: 1rem 0 0;
+    color: var(--panel-muted);
+    border: 1px solid var(--panel-border);
+    border-radius: 0.5rem;
+    background: #fbfcfd;
+    font-size: 0.76rem;
+}
+
+.backoffice-post-form__image-preview img {
+    width: 6rem;
+    height: 4rem;
+    object-fit: cover;
+    border-radius: 0.35rem;
+}
+
+.backoffice-post-form__image-preview figcaption {
+    margin: 0;
+}
+
+.backoffice-post-publication-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    max-width: 76rem;
+    padding: 1rem 1.25rem;
+    margin-top: 1rem;
+    border: 1px solid var(--panel-border);
+    border-right: 4px solid var(--panel-primary);
+    border-radius: 0.55rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-post-publication-card > div:first-child {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.backoffice-post-publication-card__icon {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.7rem;
+    height: 2.7rem;
+    color: var(--panel-primary);
+    border-radius: 0.55rem;
+    background: #e4f4e8;
+    font-size: 1.12rem;
+}
+
+.backoffice-post-publication-card h2 {
+    margin: 0;
+    font-size: 0.98rem;
+}
+
+.backoffice-post-publication-card p {
+    margin: 0.3rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.78rem;
+    line-height: 1.8;
+}
+
+.backoffice-post-publication-card__actions,
+.backoffice-post-publication-card__actions form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+}
+
+@media (max-width: 700px) {
+    .backoffice-post-publication-card {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .backoffice-post-publication-card__actions {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+}
+
+/* Delivery-stage administration and operational delivery dossiers. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.backoffice-delivery-table {
+    min-width: 72rem;
+}
+
+.backoffice-delivery-machine-link {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-width: 14rem;
+    color: inherit;
+    text-decoration: none;
+}
+
+.backoffice-delivery-machine-link:hover strong {
+    color: var(--panel-primary-dark);
+}
+
+.backoffice-delivery-machine-link > span:last-child {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.backoffice-delivery-machine-link small {
+    color: var(--panel-muted);
+    font-size: 0.74rem;
+}
+
+.backoffice-delivery-machine-media {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 3.1rem;
+    height: 2.45rem;
+    overflow: hidden;
+    color: var(--panel-primary);
+    border: 1px solid #cfe8d4;
+    border-radius: 0.42rem;
+    background: #edf8ef;
+}
+
+.backoffice-delivery-machine-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.backoffice-tracking-code--link {
+    display: inline-flex;
+    padding: 0.33rem 0.5rem;
+    color: #123d50;
+    border: 1px solid #bfd1db;
+    border-radius: 0.35rem;
+    text-decoration: none;
+    background: #f5fbfd;
+    white-space: nowrap;
+}
+
+.backoffice-tracking-code--link:hover {
+    color: #ffffff;
+    border-color: #1c718e;
+    background: #1c718e;
+}
+
+.backoffice-stage-intro,
+.backoffice-workflow-status,
+.backoffice-stage-archive-impact {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.9rem;
+    max-width: 82rem;
+    padding: 1rem 1.2rem;
+    margin-bottom: 1rem;
+    border: 1px solid #cae8d1;
+    border-right: 4px solid var(--panel-primary);
+    border-radius: 0.6rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-stage-intro__icon,
+.backoffice-workflow-status__icon {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.75rem;
+    height: 2.75rem;
+    color: var(--panel-primary);
+    border-radius: 0.65rem;
+    background: #e8f7ec;
+    font-size: 1.15rem;
+}
+
+.backoffice-stage-intro h2,
+.backoffice-workflow-status h2,
+.backoffice-stage-archive-impact h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.backoffice-stage-intro p,
+.backoffice-workflow-status p,
+.backoffice-stage-archive-impact p {
+    max-width: 68rem;
+    margin: 0.3rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.8rem;
+    line-height: 1.9;
+}
+
+.backoffice-stage-route {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: 1rem;
+    max-width: 82rem;
+}
+
+.backoffice-stage-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.65rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-stage-card.has-entered-vehicles {
+    border-color: #e4c66e;
+    box-shadow: 0 0 0 2px rgba(219, 170, 35, 0.12), var(--panel-shadow);
+}
+
+.backoffice-stage-card__header,
+.backoffice-stage-card__actions,
+.backoffice-delivery-dossier__title-row,
+.backoffice-section-heading,
+.backoffice-progress-timeline__item header,
+.backoffice-event-row,
+.backoffice-event-row dl {
+    display: flex;
+    align-items: center;
+}
+
+.backoffice-stage-card__header {
+    justify-content: space-between;
+    padding: 0.8rem 0.9rem;
+    border-bottom: 1px solid var(--panel-border);
+    background: #fbfcfd;
+}
+
+.backoffice-stage-order {
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    color: #ffffff;
+    border-radius: 50%;
+    background: var(--panel-primary);
+    font-weight: 700;
+}
+
+.backoffice-stage-active-label {
+    color: var(--panel-primary-dark);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.backoffice-stage-card__body {
+    padding: 1rem;
+}
+
+.backoffice-stage-card__body h2 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.backoffice-stage-card__order-note {
+    margin: 0.28rem 0 0.9rem;
+    color: var(--panel-muted);
+    font-size: 0.7rem;
+}
+
+.backoffice-stage-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 0;
+    margin: 0;
+}
+
+.backoffice-stage-metrics div {
+    padding: 0.55rem 0.6rem;
+    border: 1px solid #e7ecef;
+    border-radius: 0.4rem;
+    background: #fbfcfd;
+}
+
+.backoffice-stage-metrics__wide {
+    grid-column: 1 / -1;
+}
+
+.backoffice-stage-metrics dt,
+.backoffice-stage-metrics dd,
+.backoffice-last-event-meta dt,
+.backoffice-last-event-meta dd,
+.backoffice-progress-timeline dt,
+.backoffice-progress-timeline dd,
+.backoffice-event-row dt,
+.backoffice-event-row dd {
+    margin: 0;
+}
+
+.backoffice-stage-metrics dt {
+    color: var(--panel-muted);
+    font-size: 0.67rem;
+}
+
+.backoffice-stage-metrics dd {
+    margin-top: 0.22rem;
+    color: var(--panel-text);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.backoffice-stage-staff {
+    margin-top: 0.95rem;
+}
+
+.backoffice-stage-staff h3,
+.backoffice-delivery-info-card h2 {
+    margin: 0 0 0.55rem;
+    font-size: 0.78rem;
+}
+
+.backoffice-stage-staff h3 {
+    color: var(--panel-muted);
+}
+
+.backoffice-staff-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.backoffice-staff-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.24rem 0.45rem 0.24rem 0.55rem;
+    color: #36513e;
+    border: 1px solid #cfe8d4;
+    border-radius: 99rem;
+    background: #f1faf3;
+    font-size: 0.7rem;
+    white-space: nowrap;
+}
+
+.backoffice-staff-chip > span {
+    display: inline-grid;
+    place-items: center;
+    width: 1.22rem;
+    height: 1.22rem;
+    color: #ffffff;
+    border-radius: 50%;
+    background: var(--panel-primary);
+    font-size: 0.58rem;
+    font-weight: 700;
+}
+
+.backoffice-empty-inline {
+    color: var(--panel-muted);
+    font-size: 0.74rem;
+    line-height: 1.8;
+}
+
+.backoffice-stage-card__actions {
+    min-height: 3.7rem;
+    gap: 0.45rem;
+    padding: 0.75rem 0.9rem;
+    border-top: 1px solid var(--panel-border);
+    background: #fbfcfd;
+}
+
+.backoffice-stage-card__actions .backoffice-action-hint {
+    margin-right: auto;
+    text-align: left;
+}
+
+.backoffice-stage-archive-list,
+.backoffice-delivery-detail-section {
+    max-width: 82rem;
+    margin-top: 1rem;
+}
+
+.backoffice-section-heading {
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.2rem;
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.backoffice-section-heading h2 {
+    margin: 0.15rem 0 0;
+    font-size: 1rem;
+}
+
+.backoffice-section-heading > span {
+    max-width: 28rem;
+    color: var(--panel-muted);
+    font-size: 0.72rem;
+    line-height: 1.8;
+}
+
+.backoffice-empty-state {
+    display: grid;
+    place-items: center;
+    max-width: 52rem;
+    min-height: 16rem;
+    padding: 2rem;
+    color: var(--panel-muted);
+    border: 1px dashed #b9c5cd;
+    border-radius: 0.65rem;
+    text-align: center;
+    background: #ffffff;
+}
+
+.backoffice-empty-state > i {
+    margin-bottom: 0.3rem;
+    color: #9baab4;
+    font-size: 2rem;
+}
+
+.backoffice-empty-state h2,
+.backoffice-empty-state p {
+    margin: 0.35rem 0;
+}
+
+.backoffice-empty-state h2 {
+    color: var(--panel-text);
+    font-size: 1rem;
+}
+
+.backoffice-empty-state p {
+    max-width: 34rem;
+    font-size: 0.8rem;
+    line-height: 1.9;
+}
+
+.backoffice-empty-state--compact {
+    max-width: none;
+    min-height: 8rem;
+    border: 0;
+    border-radius: 0;
+}
+
+.backoffice-select-multiple {
+    width: 100%;
+    min-height: 9rem;
+    padding: 0.45rem;
+    color: var(--panel-text);
+    border: 1px solid #cfd7de;
+    border-radius: 0.35rem;
+    outline: 0;
+    font: inherit;
+    font-size: 0.82rem;
+    line-height: 1.8;
+    background: #ffffff;
+}
+
+.backoffice-select-multiple:focus {
+    border-color: var(--panel-primary);
+    box-shadow: 0 0 0 0.2rem rgba(33, 136, 56, 0.14);
+}
+
+.backoffice-stage-form {
+    max-width: 56rem;
+}
+
+.backoffice-stage-form__safety-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    padding: 0.75rem 0.85rem;
+    margin-top: 1rem;
+    color: #695015;
+    border-right: 3px solid #d3a226;
+    border-radius: 0.3rem;
+    background: #fff9e7;
+    font-size: 0.78rem;
+    line-height: 1.8;
+}
+
+.backoffice-stage-form__safety-note p {
+    padding: 0;
+    margin: 0;
+}
+
+.backoffice-stage-archive-impact {
+    display: block;
+    max-width: 62rem;
+    border-color: #f0d9a2;
+    border-right-color: #c48a16;
+}
+
+.backoffice-stage-archive-impact > header {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.backoffice-stage-archive-impact > header > span {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.8rem;
+    height: 2.8rem;
+    color: #855a05;
+    border-radius: 0.65rem;
+    background: #fff1c9;
+    font-size: 1.2rem;
+}
+
+.backoffice-impact-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: 1rem;
+}
+
+.backoffice-impact-grid article {
+    display: grid;
+    gap: 0.3rem;
+    min-height: 6rem;
+    padding: 0.7rem;
+    border: 1px solid #f0dfb4;
+    border-radius: 0.45rem;
+    background: #fffdf7;
+}
+
+.backoffice-impact-grid strong {
+    color: #855a05;
+    font-size: 1.3rem;
+}
+
+.backoffice-impact-grid span {
+    color: #705e35;
+    font-size: 0.7rem;
+    line-height: 1.75;
+}
+
+.backoffice-impact-details {
+    margin-top: 0.9rem;
+    color: #705e35;
+    font-size: 0.78rem;
+}
+
+.backoffice-impact-details summary {
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.backoffice-impact-details div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.65rem;
+}
+
+.backoffice-impact-details span {
+    padding: 0.28rem 0.45rem;
+    border-radius: 0.3rem;
+    background: #fff8e9;
+}
+
+.backoffice-delivery-dossier {
+    display: grid;
+    grid-template-columns: minmax(16rem, 0.72fr) minmax(0, 1.45fr);
+    max-width: 82rem;
+    overflow: hidden;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.7rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-delivery-dossier__media {
+    min-height: 19rem;
+    background: linear-gradient(145deg, #e8eef2, #d9e3e8);
+}
+
+.backoffice-delivery-dossier__media img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 19rem;
+    object-fit: cover;
+}
+
+.backoffice-delivery-dossier__placeholder {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 0.7rem;
+    width: 100%;
+    min-height: 19rem;
+    color: #6f7d87;
+    background: linear-gradient(145deg, #e9eff2, #dce5e9);
+    font-size: 0.8rem;
+}
+
+.backoffice-delivery-dossier__placeholder i {
+    color: #8ba0ab;
+    font-size: 3rem;
+}
+
+.backoffice-delivery-dossier__summary {
+    padding: clamp(1rem, 3vw, 1.6rem);
+}
+
+.backoffice-delivery-dossier__title-row {
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.backoffice-delivery-dossier__title-row h2 {
+    margin: 0.15rem 0 0;
+    font-size: clamp(1.1rem, 2vw, 1.4rem);
+}
+
+.backoffice-delivery-dossier__title-row p:not(.backoffice-eyebrow) {
+    margin: 0.35rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.8rem;
+}
+
+.backoffice-tracking-code-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.25rem 0.8rem;
+    align-items: center;
+    padding: 0.75rem 0.85rem;
+    margin-top: 1rem;
+    color: #123d50;
+    border: 1px solid #b8d5df;
+    border-radius: 0.5rem;
+    background: #f2fbfe;
+}
+
+.backoffice-tracking-code-card > span {
+    color: #52717e;
+    font-size: 0.7rem;
+}
+
+.backoffice-tracking-code-card > strong {
+    grid-column: 1 / 2;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 1.05rem;
+    letter-spacing: 0.025em;
+}
+
+.backoffice-tracking-code-card.is-missing {
+    color: #7c4a0a;
+    border-color: #eed295;
+    background: #fff9e8;
+}
+
+.backoffice-tracking-code-card.is-missing p {
+    grid-column: 1 / -1;
+    margin: 0.25rem 0 0;
+    color: #86652c;
+    font-size: 0.7rem;
+    line-height: 1.75;
+}
+
+.backoffice-copy-code {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    display: inline-grid;
+    place-items: center;
+    width: 2.35rem;
+    height: 2.35rem;
+    color: #1c718e;
+    border: 1px solid #9fcad8;
+    border-radius: 0.4rem;
+    cursor: pointer;
+    background: #ffffff;
+}
+
+.backoffice-copy-code:hover,
+.backoffice-copy-code:focus-visible {
+    color: #ffffff;
+    border-color: #1c718e;
+    outline: 0;
+    background: #1c718e;
+}
+
+.backoffice-copy-code.is-copied {
+    color: #ffffff;
+    border-color: var(--panel-primary);
+    background: var(--panel-primary);
+}
+
+.backoffice-delivery-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    margin-top: 0.9rem;
+}
+
+.backoffice-delivery-meta-grid div {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.6rem 0.65rem;
+    border: 1px solid #e7ecef;
+    border-radius: 0.4rem;
+    background: #fbfcfd;
+}
+
+.backoffice-delivery-meta-grid span {
+    color: var(--panel-muted);
+    font-size: 0.68rem;
+}
+
+.backoffice-delivery-meta-grid strong {
+    color: var(--panel-text);
+    font-size: 0.78rem;
+}
+
+.backoffice-workflow-status {
+    max-width: 82rem;
+    margin-top: 1rem;
+}
+
+.backoffice-workflow-status--active {
+    border-color: #b8dce3;
+    border-right-color: #1c718e;
+}
+
+.backoffice-workflow-status--active .backoffice-workflow-status__icon {
+    color: #1c718e;
+    background: #e6f6fa;
+}
+
+.backoffice-workflow-status--waiting {
+    border-color: #f0d99f;
+    border-right-color: #c48a16;
+}
+
+.backoffice-workflow-status--waiting .backoffice-workflow-status__icon {
+    color: #9a690e;
+    background: #fff4d8;
+}
+
+.backoffice-workflow-status--warning {
+    border-color: #edc7cb;
+    border-right-color: #c73b48;
+}
+
+.backoffice-workflow-status--warning .backoffice-workflow-status__icon {
+    color: #b4323f;
+    background: #fff0f1;
+}
+
+.backoffice-workflow-status--complete {
+    border-color: #c8e4cf;
+    border-right-color: var(--panel-primary);
+}
+
+.backoffice-delivery-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    max-width: 82rem;
+    margin-top: 1rem;
+}
+
+.backoffice-delivery-info-card {
+    min-height: 10rem;
+    padding: 1rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.6rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-delivery-info-card header {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-bottom: 0.65rem;
+}
+
+.backoffice-delivery-info-card header > i {
+    color: var(--panel-primary);
+}
+
+.backoffice-delivery-info-card h2 {
+    margin: 0;
+    font-size: 0.88rem;
+}
+
+.backoffice-delivery-info-card__context,
+.backoffice-delivery-info-card p {
+    margin: 0 0 0.65rem;
+    color: var(--panel-muted);
+    font-size: 0.76rem;
+    line-height: 1.8;
+}
+
+.backoffice-last-handler {
+    display: block;
+    margin-bottom: 0.3rem;
+    color: var(--panel-text);
+    font-size: 0.9rem;
+}
+
+.backoffice-last-event-meta {
+    display: flex;
+    gap: 1rem;
+    padding: 0;
+    margin: 0.75rem 0 0;
+}
+
+.backoffice-last-event-meta div {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.backoffice-last-event-meta dt {
+    color: var(--panel-muted);
+    font-size: 0.66rem;
+}
+
+.backoffice-last-event-meta dd {
+    color: var(--panel-text);
+    font-size: 0.72rem;
+}
+
+.backoffice-delivery-detail-section {
+    overflow: hidden;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.65rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-progress-timeline {
+    padding: 1.2rem 1.4rem 1.2rem 1rem;
+    margin: 0;
+    list-style: none;
+}
+
+.backoffice-progress-timeline__item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: 0.7rem;
+    min-height: 5.2rem;
+}
+
+.backoffice-progress-timeline__item:not(:last-child)::before {
+    position: absolute;
+    top: 2rem;
+    right: 0.94rem;
+    bottom: -0.2rem;
+    width: 2px;
+    content: "";
+    background: #dce5e9;
+}
+
+.backoffice-progress-timeline__marker {
+    position: relative;
+    z-index: 1;
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    color: #71808a;
+    border: 2px solid #d5dee3;
+    border-radius: 50%;
+    background: #ffffff;
+    font-size: 0.75rem;
+}
+
+.backoffice-progress-timeline__item.is-entered .backoffice-progress-timeline__marker {
+    color: #1c718e;
+    border-color: #73bfd6;
+    background: #e9f8fc;
+}
+
+.backoffice-progress-timeline__item.is-completed .backoffice-progress-timeline__marker {
+    color: #ffffff;
+    border-color: var(--panel-primary);
+    background: var(--panel-primary);
+}
+
+.backoffice-progress-timeline__item.is-skipped .backoffice-progress-timeline__marker {
+    color: #93620c;
+    border-color: #e8c161;
+    background: #fff7dc;
+}
+
+.backoffice-progress-timeline__item header {
+    justify-content: space-between;
+    gap: 0.7rem;
+}
+
+.backoffice-progress-timeline h3 {
+    margin: 0;
+    font-size: 0.84rem;
+}
+
+.backoffice-progress-state {
+    padding: 0.2rem 0.45rem;
+    border-radius: 99rem;
+    font-size: 0.65rem;
+    white-space: nowrap;
+}
+
+.backoffice-progress-state--pending {
+    color: #53616b;
+    background: #e7edf0;
+}
+
+.backoffice-progress-state--entered {
+    color: #1b6680;
+    background: #e3f6fb;
+}
+
+.backoffice-progress-state--completed {
+    color: #176c2b;
+    background: #e0f5e5;
+}
+
+.backoffice-progress-state--skipped {
+    color: #895b0c;
+    background: #fff1cf;
+}
+
+.backoffice-progress-timeline dl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    padding: 0;
+    margin: 0.4rem 0 0;
+}
+
+.backoffice-progress-timeline dl div {
+    display: flex;
+    gap: 0.3rem;
+}
+
+.backoffice-progress-timeline dt {
+    color: var(--panel-muted);
+    font-size: 0.68rem;
+}
+
+.backoffice-progress-timeline dd {
+    color: #53616b;
+    font-size: 0.68rem;
+}
+
+.backoffice-event-list {
+    display: grid;
+}
+
+.backoffice-event-row {
+    align-items: flex-start;
+    gap: 0.7rem;
+    padding: 1rem 1.2rem;
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.backoffice-event-row:last-child {
+    border-bottom: 0;
+}
+
+.backoffice-event-row__icon {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2rem;
+    height: 2rem;
+    color: #1c718e;
+    border-radius: 50%;
+    background: #e8f6fa;
+    font-size: 0.75rem;
+}
+
+.backoffice-event-row > div:nth-child(2) {
+    flex: 1 1 18rem;
+}
+
+.backoffice-event-row h3 {
+    margin: 0;
+    font-size: 0.82rem;
+}
+
+.backoffice-event-row p {
+    margin: 0.3rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.72rem;
+    line-height: 1.75;
+}
+
+.backoffice-event-row dl {
+    align-items: flex-start;
+    gap: 0.8rem;
+    padding: 0;
+    margin: 0;
+}
+
+.backoffice-event-row dl div {
+    display: grid;
+    gap: 0.18rem;
+    min-width: 5.4rem;
+}
+
+.backoffice-event-row dt {
+    color: var(--panel-muted);
+    font-size: 0.65rem;
+}
+
+.backoffice-event-row dd {
+    color: var(--panel-text);
+    font-size: 0.69rem;
+}
+
+@media (max-width: 900px) {
+    .backoffice-impact-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .backoffice-delivery-dossier {
+        grid-template-columns: 1fr;
+    }
+
+    .backoffice-delivery-dossier__media,
+    .backoffice-delivery-dossier__media img,
+    .backoffice-delivery-dossier__placeholder {
+        min-height: 14rem;
+    }
+
+    .backoffice-event-row {
+        flex-wrap: wrap;
+    }
+
+    .backoffice-event-row dl {
+        width: 100%;
+        margin-right: 2.7rem;
+    }
+}
+
+@media (max-width: 700px) {
+    .backoffice-stage-intro,
+    .backoffice-workflow-status {
+        padding: 0.85rem;
+    }
+
+    .backoffice-stage-route,
+    .backoffice-delivery-info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .backoffice-impact-grid,
+    .backoffice-delivery-meta-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .backoffice-section-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .backoffice-section-heading > span {
+        max-width: none;
+    }
+
+    .backoffice-delivery-dossier__title-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .backoffice-progress-timeline {
+        padding: 1rem 0.8rem;
+    }
+
+    .backoffice-event-row dl {
+        flex-wrap: wrap;
+        margin-right: 0;
+    }
+}
+
+/* -------------------------------------------------------------------------
+   Staff management
+   ------------------------------------------------------------------------- */
+
+.backoffice-select {
+    width: 100%;
+    min-height: 2.7rem;
+    padding: 0.55rem 0.7rem;
+    color: var(--panel-text);
+    border: 1px solid #cfd7de;
+    border-radius: 0.35rem;
+    outline: 0;
+    font: inherit;
+    font-size: 0.8rem;
+    background: #ffffff;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.backoffice-select:focus {
+    border-color: var(--panel-primary);
+    box-shadow: 0 0 0 0.2rem rgba(33, 136, 56, 0.14);
+}
+
+.backoffice-status--for-sale {
+    color: #176c2b;
+    background: #e0f5e5;
+}
+
+.backoffice-staff-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    max-width: 82rem;
+    margin-bottom: 1rem;
+}
+
+.backoffice-staff-metric {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-height: 6.2rem;
+    padding: 1rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.65rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-staff-metric > span {
+    display: inline-grid;
+    place-items: center;
+    width: 2.9rem;
+    height: 2.9rem;
+    border-radius: 0.6rem;
+    font-size: 1.15rem;
+}
+
+.backoffice-staff-metric div {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.backoffice-staff-metric small {
+    color: var(--panel-muted);
+    font-size: 0.7rem;
+}
+
+.backoffice-staff-metric strong {
+    color: var(--panel-text);
+    font-size: 1.35rem;
+}
+
+.backoffice-staff-metric--active > span {
+    color: #176c2b;
+    background: #e0f5e5;
+}
+
+.backoffice-staff-metric--employee > span {
+    color: #1f6b85;
+    background: #e4f5fa;
+}
+
+.backoffice-staff-metric--clearance > span {
+    color: #925d08;
+    background: #fff1cb;
+}
+
+.backoffice-staff-metric--inactive > span {
+    color: #9a3540;
+    background: #fff0f1;
+}
+
+.backoffice-staff-filter-card {
+    max-width: 82rem;
+}
+
+.backoffice-staff-filter-form {
+    display: grid;
+    grid-template-columns: minmax(14rem, 1.6fr) repeat(3, minmax(9rem, 1fr)) auto;
+    align-items: end;
+    gap: 0.8rem;
+}
+
+.backoffice-staff-filter-form label {
+    display: block;
+    margin-bottom: 0.4rem;
+    color: var(--panel-text);
+    font-size: 0.73rem;
+    font-weight: 700;
+}
+
+.backoffice-staff-filter-form__search {
+    min-width: 0;
+}
+
+.backoffice-staff-table-card {
+    max-width: 82rem;
+}
+
+.backoffice-staff-identity {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-width: 11.5rem;
+}
+
+.backoffice-staff-avatar {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.2rem;
+    height: 2.2rem;
+    color: #176c2b;
+    border: 1px solid #c9e6d0;
+    border-radius: 50%;
+    background: #eaf7ed;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.backoffice-staff-avatar--large {
+    width: 4.15rem;
+    height: 4.15rem;
+    color: #ffffff;
+    border: 0;
+    background: linear-gradient(135deg, var(--panel-primary), #4aaf62);
+    box-shadow: 0 0.7rem 1.5rem rgba(33, 136, 56, 0.2);
+    font-size: 1.35rem;
+}
+
+.backoffice-staff-identity div {
+    display: grid;
+    gap: 0.12rem;
+}
+
+.backoffice-staff-identity strong {
+    color: var(--panel-text);
+    font-size: 0.8rem;
+}
+
+.backoffice-staff-identity small {
+    color: var(--panel-muted);
+    font-size: 0.67rem;
+}
+
+.backoffice-role-chip,
+.backoffice-telegram-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.32rem;
+    padding: 0.27rem 0.52rem;
+    border-radius: 99rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.backoffice-role-chip--administrator {
+    color: #694188;
+    background: #f0e6f8;
+}
+
+.backoffice-role-chip--employee {
+    color: #1d627d;
+    background: #e4f5fa;
+}
+
+.backoffice-role-chip--clearance {
+    color: #875a08;
+    background: #fff0ca;
+}
+
+.backoffice-role-chip--unassigned {
+    color: #606c75;
+    background: #e8edf0;
+}
+
+.backoffice-capability-summary {
+    margin-top: 0.35rem;
+    color: #826014;
+    font-size: 0.64rem;
+    white-space: nowrap;
+}
+
+.backoffice-staff-stage-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    max-width: 13rem;
+}
+
+.backoffice-staff-stage-chips > span:not(.backoffice-empty-inline) {
+    padding: 0.2rem 0.4rem;
+    color: #26647a;
+    border: 1px solid #b8dce7;
+    border-radius: 0.3rem;
+    background: #f1fbfe;
+    font-size: 0.63rem;
+}
+
+.backoffice-telegram-state--connected {
+    color: #167347;
+    background: #e2f5e8;
+}
+
+.backoffice-telegram-state--pending {
+    color: #93620c;
+    background: #fff2d3;
+}
+
+.backoffice-telegram-state--disconnected {
+    color: #6c7780;
+    background: #edf0f2;
+}
+
+.backoffice-staff-form {
+    display: grid;
+    gap: 1rem;
+    max-width: 76rem;
+}
+
+.backoffice-form-notice--staff {
+    max-width: 76rem;
+}
+
+.backoffice-form-section {
+    padding: clamp(1rem, 2.8vw, 1.5rem);
+    border: 1px solid var(--panel-border);
+    border-radius: 0.65rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-form-section + .backoffice-form-section {
+    margin-top: 0;
+}
+
+.backoffice-form-section > header,
+.backoffice-staff-detail-card > header,
+.backoffice-role-guide-card > header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    margin-bottom: 1.15rem;
+}
+
+.backoffice-form-section > header > span,
+.backoffice-staff-detail-card > header > span,
+.backoffice-role-guide-card > header > span {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.25rem;
+    height: 2.25rem;
+    color: var(--panel-primary);
+    border-radius: 0.5rem;
+    background: #eaf7ed;
+}
+
+.backoffice-form-section h2,
+.backoffice-staff-detail-card h2,
+.backoffice-role-guide-card h2 {
+    padding: 0;
+    margin: 0;
+    color: var(--panel-text);
+    font-size: 0.94rem;
+}
+
+.backoffice-form-section header p,
+.backoffice-staff-detail-card header p,
+.backoffice-role-guide-card header p {
+    padding: 0;
+    margin: 0.28rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.72rem;
+    line-height: 1.75;
+}
+
+.backoffice-form-grid--three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.backoffice-field > label {
+    display: block;
+    margin-bottom: 0.42rem;
+    color: var(--panel-text);
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.backoffice-field .backoffice-input {
+    width: 100%;
+}
+
+.backoffice-field small {
+    display: block;
+    margin-top: 0.34rem;
+    color: var(--panel-muted);
+    font-size: 0.68rem;
+    line-height: 1.65;
+}
+
+.backoffice-field ul.errorlist,
+.backoffice-check-field ul.errorlist {
+    padding: 0;
+    margin: 0.35rem 0 0;
+    color: #a92935;
+    list-style: none;
+    font-size: 0.7rem;
+    line-height: 1.65;
+}
+
+.backoffice-special-permission-field {
+    max-width: 70rem;
+}
+
+.backoffice-special-permissions > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+
+.backoffice-special-permissions label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.8rem;
+    padding: 0.55rem 0.65rem;
+    color: #3a4851;
+    border: 1px solid #e2e9ed;
+    border-radius: 0.45rem;
+    cursor: pointer;
+    background: #fbfcfd;
+    font-size: 0.73rem;
+    transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.backoffice-special-permissions label:hover {
+    border-color: #b7d8c0;
+    background: #f5fbf6;
+}
+
+.backoffice-special-permissions input {
+    flex: 0 0 auto;
+}
+
+.backoffice-staff-profile-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    max-width: 82rem;
+    padding: clamp(1rem, 3vw, 1.65rem);
+    border: 1px solid #cfe3d3;
+    border-radius: 0.75rem;
+    background: linear-gradient(135deg, #ffffff, #f2fbf4);
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-staff-profile-hero__identity {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.backoffice-staff-profile-hero__title-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.backoffice-staff-profile-hero h2 {
+    margin: 0;
+    color: var(--panel-text);
+    font-size: 1.2rem;
+}
+
+.backoffice-staff-profile-hero p {
+    margin: 0.3rem 0 0.5rem;
+    color: var(--panel-muted);
+    font-size: 0.74rem;
+}
+
+.backoffice-staff-profile-hero__actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.backoffice-protected-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 0.65rem;
+    color: #6c4a87;
+    border: 1px solid #ddcaeb;
+    border-radius: 0.4rem;
+    background: #f9f2fd;
+    font-size: 0.72rem;
+}
+
+.backoffice-staff-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.8rem;
+    max-width: 82rem;
+    margin-top: 1rem;
+}
+
+.backoffice-staff-summary-grid article {
+    display: grid;
+    gap: 0.25rem;
+    min-height: 7.2rem;
+    padding: 1rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.6rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-staff-summary-grid i {
+    color: var(--panel-primary);
+}
+
+.backoffice-staff-summary-grid span {
+    color: var(--panel-muted);
+    font-size: 0.67rem;
+}
+
+.backoffice-staff-summary-grid strong {
+    overflow: hidden;
+    color: var(--panel-text);
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.backoffice-staff-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    max-width: 82rem;
+    margin-top: 1rem;
+}
+
+.backoffice-staff-detail-card {
+    min-width: 0;
+    padding: 1.1rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.65rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-staff-detail-card--telegram {
+    grid-column: 1 / -1;
+}
+
+.backoffice-role-explanation {
+    padding: 0.75rem;
+    color: #3d5964;
+    border-right: 3px solid var(--panel-primary);
+    border-radius: 0.35rem;
+    background: #f4faf5;
+}
+
+.backoffice-role-explanation strong {
+    color: var(--panel-text);
+    font-size: 0.78rem;
+}
+
+.backoffice-role-explanation p {
+    margin: 0.3rem 0 0;
+    font-size: 0.7rem;
+    line-height: 1.75;
+}
+
+.backoffice-detail-subtitle {
+    margin: 1rem 0 0.55rem;
+    color: var(--panel-text);
+    font-size: 0.8rem;
+}
+
+.backoffice-detail-subtitle i {
+    color: #b18117;
+}
+
+.backoffice-capability-list {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.backoffice-capability-list li {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.55rem 0.6rem;
+    border: 1px solid #eee5c8;
+    border-radius: 0.35rem;
+    background: #fffcf4;
+}
+
+.backoffice-capability-list strong {
+    color: #665017;
+    font-size: 0.72rem;
+}
+
+.backoffice-capability-list span {
+    color: #7c704c;
+    font-size: 0.67rem;
+    line-height: 1.65;
+}
+
+.backoffice-assigned-stage-list {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.backoffice-assigned-stage-list > span {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.65rem;
+    color: #2a5969;
+    border: 1px solid #c7e2eb;
+    border-radius: 0.35rem;
+    background: #f4fbfd;
+    font-size: 0.73rem;
+}
+
+.backoffice-assigned-stage-list b {
+    display: inline-grid;
+    place-items: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    color: #ffffff;
+    border-radius: 50%;
+    background: #3c92ad;
+    font-size: 0.6rem;
+}
+
+.backoffice-telegram-detail {
+    padding: 0.9rem;
+    border-radius: 0.5rem;
+}
+
+.backoffice-telegram-detail strong {
+    display: block;
+    font-size: 0.8rem;
+}
+
+.backoffice-telegram-detail p {
+    margin: 0.45rem 0;
+    font-size: 0.72rem;
+    line-height: 1.75;
+}
+
+.backoffice-telegram-detail--connected {
+    color: #176b42;
+    border: 1px solid #bfe2ca;
+    background: #f1fbf3;
+}
+
+.backoffice-telegram-detail--pending {
+    color: #805e16;
+    border: 1px solid #eedca8;
+    background: #fffae9;
+}
+
+.backoffice-telegram-detail--idle {
+    color: #53636c;
+    border: 1px dashed #bdcbd1;
+    background: #fbfcfd;
+}
+
+.backoffice-telegram-detail dl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem 1.2rem;
+    margin: 0.7rem 0;
+}
+
+.backoffice-telegram-detail dl div {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.backoffice-telegram-detail dt {
+    color: var(--panel-muted);
+    font-size: 0.65rem;
+}
+
+.backoffice-telegram-detail dd {
+    margin: 0;
+    color: var(--panel-text);
+    font-size: 0.7rem;
+}
+
+.backoffice-staff-activity-card,
+.backoffice-special-permission-guide {
+    max-width: 82rem;
+    margin-top: 1rem;
+    overflow: hidden;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.65rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-staff-activity-card > header,
+.backoffice-special-permission-guide > header {
+    padding: 1rem 1.15rem;
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.backoffice-staff-activity-list {
+    display: grid;
+}
+
+.backoffice-staff-activity-row {
+    display: grid;
+    grid-template-columns: 2.1rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.85rem 1.15rem;
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.backoffice-staff-activity-row:last-child {
+    border-bottom: 0;
+}
+
+.backoffice-staff-activity-row > span {
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    color: #386c7e;
+    border-radius: 50%;
+    background: #eaf7fb;
+    font-size: 0.74rem;
+}
+
+.backoffice-staff-activity-row--management > span {
+    color: #6d4d87;
+    background: #f3ebf8;
+}
+
+.backoffice-staff-activity-row--inventory > span {
+    color: #805f15;
+    background: #fff3d4;
+}
+
+.backoffice-staff-activity-row strong {
+    color: var(--panel-text);
+    font-size: 0.75rem;
+}
+
+.backoffice-staff-activity-row p {
+    margin: 0.2rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.68rem;
+}
+
+.backoffice-staff-activity-row time {
+    color: var(--panel-muted);
+    font-size: 0.65rem;
+    white-space: nowrap;
+}
+
+.backoffice-confirm-card {
+    max-width: 48rem;
+    padding: clamp(1rem, 3vw, 1.8rem);
+    border: 1px solid var(--panel-border);
+    border-top: 4px solid var(--panel-primary);
+    border-radius: 0.65rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-confirm-card--danger {
+    border-top-color: #c73b48;
+}
+
+.backoffice-confirm-card--success {
+    border-top-color: var(--panel-primary);
+}
+
+.backoffice-confirm-card__icon {
+    display: inline-grid;
+    place-items: center;
+    width: 3.1rem;
+    height: 3.1rem;
+    margin-bottom: 0.6rem;
+    color: var(--panel-primary);
+    border-radius: 0.65rem;
+    background: #eaf7ed;
+    font-size: 1.2rem;
+}
+
+.backoffice-confirm-card--danger .backoffice-confirm-card__icon {
+    color: #b33140;
+    background: #fff0f1;
+}
+
+.backoffice-confirm-card h2 {
+    margin: 0;
+    color: var(--panel-text);
+    font-size: 1.05rem;
+}
+
+.backoffice-confirm-card > p {
+    margin: 0.55rem 0 1rem;
+    color: var(--panel-muted);
+    font-size: 0.76rem;
+    line-height: 1.9;
+}
+
+.backoffice-check-field {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    color: var(--panel-text);
+    font-size: 0.75rem;
+}
+
+.backoffice-telegram-code-card {
+    display: grid;
+    justify-items: center;
+    max-width: 46rem;
+    padding: clamp(1.2rem, 4vw, 2.2rem);
+    color: var(--panel-text);
+    border: 1px solid #bfe2ca;
+    border-radius: 0.75rem;
+    text-align: center;
+    background: linear-gradient(150deg, #ffffff, #effbf2);
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-telegram-code-card__icon {
+    display: inline-grid;
+    place-items: center;
+    width: 3.6rem;
+    height: 3.6rem;
+    color: #ffffff;
+    border-radius: 50%;
+    background: #2a9b58;
+    box-shadow: 0 0.5rem 1.3rem rgba(42, 155, 88, 0.24);
+    font-size: 1.4rem;
+}
+
+.backoffice-telegram-code-card h2 {
+    margin: 1rem 0 0;
+    font-size: 1.05rem;
+}
+
+.backoffice-telegram-code-card > p {
+    max-width: 35rem;
+    margin: 0.55rem 0;
+    color: var(--panel-muted);
+    font-size: 0.76rem;
+    line-height: 1.85;
+}
+
+.backoffice-secret-code {
+    display: block;
+    max-width: 100%;
+    padding: 0.85rem 1rem;
+    margin: 0.65rem 0;
+    overflow-wrap: anywhere;
+    color: #175e35;
+    border: 1px dashed #83c79a;
+    border-radius: 0.45rem;
+    background: #ffffff;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: clamp(0.85rem, 2vw, 1rem);
+    font-weight: 700;
+    letter-spacing: 0.035em;
+}
+
+.backoffice-telegram-code-card__expiry {
+    color: #795f1e !important;
+}
+
+.backoffice-telegram-code-card__warning {
+    max-width: 35rem;
+    padding: 0.65rem 0.75rem;
+    margin: 0.5rem 0 1rem;
+    color: #7c5f1a;
+    border: 1px solid #ecdcaa;
+    border-radius: 0.4rem;
+    background: #fff9e7;
+    font-size: 0.7rem;
+    line-height: 1.75;
+}
+
+.backoffice-role-guide-intro {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8rem;
+    max-width: 82rem;
+    padding: 1rem 1.15rem;
+    color: #4a624f;
+    border: 1px solid #cce3d1;
+    border-right: 4px solid var(--panel-primary);
+    border-radius: 0.6rem;
+    background: #f4fbf5;
+}
+
+.backoffice-role-guide-intro > i {
+    margin-top: 0.15rem;
+    color: var(--panel-primary);
+    font-size: 1.2rem;
+}
+
+.backoffice-role-guide-intro h2 {
+    margin: 0;
+    color: var(--panel-text);
+    font-size: 0.95rem;
+}
+
+.backoffice-role-guide-intro p {
+    margin: 0.35rem 0 0;
+    font-size: 0.73rem;
+    line-height: 1.8;
+}
+
+.backoffice-role-guide-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    max-width: 82rem;
+    margin-top: 1rem;
+}
+
+.backoffice-role-guide-card {
+    padding: 1.1rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 0.65rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-role-guide-card--administrator {
+    border-color: #dcc7ec;
+    background: linear-gradient(145deg, #ffffff, #fbf7fe);
+}
+
+.backoffice-role-guide-card--administrator header > span {
+    color: #6f478e;
+    background: #f2e8fa;
+}
+
+.backoffice-role-guide-card ul {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.backoffice-role-guide-card li {
+    position: relative;
+    padding-right: 1rem;
+    color: #53636c;
+    font-size: 0.72rem;
+    line-height: 1.7;
+}
+
+.backoffice-role-guide-card li::before {
+    position: absolute;
+    top: 0.45rem;
+    right: 0;
+    width: 0.35rem;
+    height: 0.35rem;
+    content: "";
+    border-radius: 50%;
+    background: var(--panel-primary);
+}
+
+.backoffice-role-guide-card footer {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    color: #6a5480;
+    border-top: 1px solid #e9dff1;
+    font-size: 0.68rem;
+    line-height: 1.7;
+}
+
+.backoffice-special-permission-guide__grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--panel-border);
+}
+
+.backoffice-special-permission-guide__grid article {
+    min-height: 8.4rem;
+    padding: 1rem;
+    background: #ffffff;
+}
+
+.backoffice-special-permission-guide__grid i {
+    color: #b18117;
+}
+
+.backoffice-special-permission-guide__grid strong {
+    display: block;
+    margin-top: 0.55rem;
+    color: var(--panel-text);
+    font-size: 0.76rem;
+}
+
+.backoffice-special-permission-guide__grid p {
+    margin: 0.32rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.67rem;
+    line-height: 1.7;
+}
+
+@media (max-width: 1050px) {
+    .backoffice-staff-metrics,
+    .backoffice-staff-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .backoffice-staff-filter-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .backoffice-staff-filter-form__search {
+        grid-column: 1 / -1;
+    }
+
+    .backoffice-role-guide-grid,
+    .backoffice-special-permission-guide__grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 700px) {
+    .backoffice-staff-metrics,
+    .backoffice-staff-summary-grid,
+    .backoffice-staff-detail-grid,
+    .backoffice-form-grid--three,
+    .backoffice-special-permissions > div,
+    .backoffice-role-guide-grid,
+    .backoffice-special-permission-guide__grid {
+        grid-template-columns: 1fr;
+    }
+
+    .backoffice-staff-filter-form {
+        grid-template-columns: 1fr;
+    }
+
+    .backoffice-staff-filter-form__search {
+        grid-column: auto;
+    }
+
+    .backoffice-staff-profile-hero {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .backoffice-staff-detail-card--telegram {
+        grid-column: auto;
+    }
+
+    .backoffice-staff-activity-row {
+        grid-template-columns: 2rem minmax(0, 1fr);
+    }
+
+    .backoffice-staff-activity-row time {
+        grid-column: 2;
+    }
+}
+
+/* Delivery-route integrity and repair */
+.backoffice-route-integrity-alert,
+.backoffice-route-repair-overview,
+.backoffice-route-repair-branch-warning,
+.backoffice-route-repair-safety-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    max-width: 82rem;
+    padding: 1rem 1.15rem;
+    border-radius: 0.65rem;
+}
+
+.backoffice-route-integrity-alert {
+    margin-bottom: 1rem;
+    color: #81363f;
+    border: 1px solid #f0c2c7;
+    border-right: 4px solid #c73b48;
+    background: #fff4f5;
+}
+
+.backoffice-route-integrity-alert__icon,
+.backoffice-route-repair-overview__icon {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.55rem;
+    font-size: 1rem;
+}
+
+.backoffice-route-integrity-alert__icon {
+    color: #a82f3b;
+    background: #ffe3e5;
+}
+
+.backoffice-route-integrity-alert div,
+.backoffice-route-repair-overview div,
+.backoffice-route-repair-branch-warning div {
+    min-width: 0;
+    flex: 1;
+}
+
+.backoffice-route-integrity-alert h2,
+.backoffice-route-repair-overview h2 {
+    margin: 0;
+    color: var(--panel-text);
+    font-size: 0.92rem;
+}
+
+.backoffice-route-integrity-alert p,
+.backoffice-route-repair-overview p,
+.backoffice-route-repair-branch-warning p,
+.backoffice-route-repair-safety-note p {
+    margin: 0.3rem 0 0;
+    font-size: 0.73rem;
+    line-height: 1.85;
+}
+
+.backoffice-route-repair-overview {
+    color: #754f11;
+    border: 1px solid #efd99c;
+    border-right: 4px solid #ca9218;
+    background: #fffae8;
+}
+
+.backoffice-route-repair-overview__icon {
+    color: #996a0e;
+    background: #ffefc7;
+}
+
+.backoffice-route-repair-overview.is-valid {
+    color: #276c3a;
+    border-color: #c9e5cf;
+    border-right-color: var(--panel-primary);
+    background: #f2fbf4;
+}
+
+.backoffice-route-repair-overview.is-valid .backoffice-route-repair-overview__icon {
+    color: #17723a;
+    background: #dff4e4;
+}
+
+.backoffice-route-repair-route {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    max-width: 82rem;
+    padding: 1rem 0;
+}
+
+.backoffice-route-repair-route > i {
+    color: #76a1ad;
+    font-size: 1.1rem;
+}
+
+.backoffice-route-repair-stage {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.6rem;
+    color: #315761;
+    border: 1px solid #c9e0e5;
+    border-radius: 99rem;
+    background: #ffffff;
+    font-size: 0.72rem;
+}
+
+.backoffice-route-repair-stage > span {
+    display: inline-grid;
+    place-items: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    color: #ffffff;
+    border-radius: 50%;
+    background: #3c91aa;
+    font-size: 0.6rem;
+}
+
+.backoffice-route-repair-branch-warning {
+    margin-bottom: 1rem;
+    color: #7a5410;
+    border: 1px solid #ecd69c;
+    border-right: 4px solid #c9941e;
+    background: #fffaf0;
+}
+
+.backoffice-route-repair-branch-warning > i {
+    margin-top: 0.15rem;
+    color: #a87512;
+    font-size: 1.1rem;
+}
+
+.backoffice-route-repair-branch-warning strong {
+    color: #6d5316;
+    font-size: 0.8rem;
+}
+
+.backoffice-route-repair-branch-warning ul {
+    padding: 0 1rem 0 0;
+    margin: 0.5rem 0 0;
+    font-size: 0.7rem;
+    line-height: 1.9;
+}
+
+.backoffice-route-repair-form {
+    display: grid;
+    gap: 1rem;
+    max-width: 82rem;
+}
+
+.backoffice-route-repair-card {
+    padding: clamp(1rem, 2.8vw, 1.5rem);
+    border: 1px solid var(--panel-border);
+    border-radius: 0.7rem;
+    background: #ffffff;
+    box-shadow: var(--panel-shadow);
+}
+
+.backoffice-route-repair-card > header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+}
+
+.backoffice-route-repair-card > header > span {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.35rem;
+    height: 2.35rem;
+    color: #2d7187;
+    border-radius: 0.55rem;
+    background: #e6f6fa;
+}
+
+.backoffice-route-repair-card h2 {
+    margin: 0;
+    color: var(--panel-text);
+    font-size: 0.94rem;
+}
+
+.backoffice-route-repair-card header p {
+    margin: 0.28rem 0 0;
+    color: var(--panel-muted);
+    font-size: 0.72rem;
+    line-height: 1.75;
+}
+
+.backoffice-route-repair-pairs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+}
+
+.backoffice-route-repair-pair {
+    min-width: 0;
+    padding: 0.65rem;
+    border: 1px solid #d8e6ea;
+    border-radius: 0.45rem;
+    background: #f9fcfd;
+}
+
+.backoffice-route-repair-pair.is-missing {
+    border-color: #ecccd0;
+    background: #fff7f7;
+}
+
+.backoffice-route-repair-pair__route {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    overflow: hidden;
+    color: #415b64;
+    font-size: 0.68rem;
+    white-space: nowrap;
+}
+
+.backoffice-route-repair-pair__route span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.backoffice-route-repair-pair__route i {
+    color: #5f9fb3;
+}
+
+.backoffice-route-repair-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+    padding: 0.18rem 0.38rem;
+    border-radius: 99rem;
+    font-size: 0.61rem;
+    font-weight: 700;
+}
+
+.backoffice-route-repair-state--ready {
+    color: #176c2b;
+    background: #dff4e4;
+}
+
+.backoffice-route-repair-state--inactive {
+    color: #785c19;
+    background: #fff0ca;
+}
+
+.backoffice-route-repair-state--missing {
+    color: #a0333d;
+    background: #ffe2e5;
+}
+
+.backoffice-route-repair-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.backoffice-route-repair-safety-note {
+    color: #3d6472;
+    border: 1px solid #c8e1e9;
+    border-right: 4px solid #3990aa;
+    background: #f3fbfd;
+}
+
+.backoffice-route-repair-safety-note > i {
+    margin-top: 0.15rem;
+    color: #227c97;
+}
+
+.backoffice-route-repair-confirm {
+    max-width: 82rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid #e2e8eb;
+    border-radius: 0.45rem;
+    background: #ffffff;
+}
+
+@media (max-width: 900px) {
+    .backoffice-route-repair-pairs,
+    .backoffice-route-repair-fields {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 700px) {
+    .backoffice-route-integrity-alert {
+        flex-wrap: wrap;
+    }
+
+    .backoffice-route-integrity-alert .backoffice-button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .backoffice-route-repair-pairs,
+    .backoffice-route-repair-fields {
+        grid-template-columns: 1fr;
+    }
+}

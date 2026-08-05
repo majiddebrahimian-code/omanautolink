@@ -1,0 +1,124 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}{{ form_title }} | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}{{ form_title }}{% endblock %}
+
+{% block page_description %}
+    <p>{{ notice }}</p>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'backoffice:blog_post_list' %}" class="backoffice-button backoffice-button--secondary">
+        <i class="fa fa-arrow-right" aria-hidden="true"></i>
+        بازگشت به مقالات
+    </a>
+{% endblock %}
+
+{% block content %}
+    <form method="post" enctype="multipart/form-data" class="backoffice-form-card backoffice-post-form" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="backoffice-form-errors" role="alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <section class="backoffice-form-section">
+            <div class="backoffice-form-section__heading">
+                <h2>محتوای مقاله</h2>
+                <p>عنوان، متن، دسته‌بندی و تصویر کاور در صفحهٔ عمومی مجله نمایش داده می‌شوند.</p>
+            </div>
+            <div class="backoffice-form-grid">
+                {% for field in form %}
+                    {% if field.name == 'title' or field.name == 'slug' or field.name == 'category' or field.name == 'cover_image' or field.name == 'cover_image_alt' or field.name == 'excerpt' or field.name == 'content' %}
+                        <div class="backoffice-field {% if field.name == 'excerpt' or field.name == 'content' %}backoffice-field--wide{% endif %}">
+                            <label for="{{ field.id_for_label }}" class="backoffice-field__label">
+                                {{ field.label }}
+                                {% if field.field.required %}<span class="backoffice-required">*</span>{% endif %}
+                            </label>
+                            {{ field }}
+                            {% if field.help_text %}<small class="backoffice-field__help">{{ field.help_text }}</small>{% endif %}
+                            {% if field.errors %}<div class="backoffice-field__error" role="alert">{{ field.errors }}</div>{% endif %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+            {% if post and post.cover_image %}
+                <figure class="backoffice-post-form__image-preview">
+                    <img src="{{ post.cover_image.url }}" alt="{{ post.image_alt_text }}">
+                    <figcaption>کاور فعلی مقاله</figcaption>
+                </figure>
+            {% endif %}
+        </section>
+
+        <section class="backoffice-form-section">
+            <div class="backoffice-form-section__heading">
+                <h2>SEO و اشتراک‌گذاری</h2>
+                <p>این اطلاعات برای نتایج جست‌وجو، لینک canonical و پیش‌نمایش اشتراک‌گذاری استفاده می‌شوند.</p>
+            </div>
+            <div class="backoffice-form-grid">
+                {% for field in form %}
+                    {% if field.name == 'seo_title' or field.name == 'meta_description' or field.name == 'meta_keywords' or field.name == 'og_image' %}
+                        <div class="backoffice-field {% if field.name == 'meta_description' %}backoffice-field--wide{% endif %}">
+                            <label for="{{ field.id_for_label }}" class="backoffice-field__label">
+                                {{ field.label }}
+                                {% if field.field.required %}<span class="backoffice-required">*</span>{% endif %}
+                            </label>
+                            {{ field }}
+                            {% if field.help_text %}<small class="backoffice-field__help">{{ field.help_text }}</small>{% endif %}
+                            {% if field.errors %}<div class="backoffice-field__error" role="alert">{{ field.errors }}</div>{% endif %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </section>
+
+        <div class="backoffice-form-actions">
+            <button type="submit" class="backoffice-button backoffice-button--primary">
+                <i class="fa fa-check" aria-hidden="true"></i>
+                {{ submit_label }}
+            </button>
+            <a href="{% url 'backoffice:blog_post_list' %}" class="backoffice-button backoffice-button--secondary">انصراف</a>
+        </div>
+    </form>
+
+    {% if post %}
+        <section class="backoffice-post-publication-card">
+            <div>
+                <span class="backoffice-post-publication-card__icon"><i class="fa fa-bullhorn" aria-hidden="true"></i></span>
+                <div>
+                    <h2>وضعیت انتشار</h2>
+                    <p>
+                        وضعیت فعلی: <strong>{{ post.get_status_display }}</strong>
+                        {% if post.published_at %} — منتشرشده در {{ post.published_at|date:"Y/m/d H:i" }}{% endif %}
+                    </p>
+                </div>
+            </div>
+
+            <div class="backoffice-post-publication-card__actions">
+                {% if post.status == 'draft' and perms.blog.change_post or post.status == 'draft' and perms.blog.publish_post %}
+                    <form method="post" action="{% url 'backoffice:blog_post_publish' post.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="backoffice-button backoffice-button--primary">
+                            <i class="fa fa-cloud-upload" aria-hidden="true"></i>
+                            انتشار در سایت
+                        </button>
+                    </form>
+                {% elif post.status == 'published' and perms.blog.change_post or post.status == 'published' and perms.blog.publish_post %}
+                    <form method="post" action="{% url 'backoffice:blog_post_unpublish' post.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="backoffice-button backoffice-button--warning">
+                            <i class="fa fa-eye-slash" aria-hidden="true"></i>
+                            بازگرداندن به پیش‌نویس
+                        </button>
+                    </form>
+                    <a href="{{ post.get_absolute_url }}" target="_blank" rel="noopener noreferrer" class="backoffice-button backoffice-button--outline">
+                        <i class="fa fa-external-link" aria-hidden="true"></i>
+                        مشاهده در سایت
+                    </a>
+                {% endif %}
+            </div>
+        </section>
+    {% endif %}
+{% endblock %}

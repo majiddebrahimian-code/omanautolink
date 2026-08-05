@@ -1,0 +1,116 @@
+{% extends "public/base.html" %}
+
+{% block content %}
+<section class="magazine-hero">
+    <div class="magazine-hero__grid container">
+        <div class="magazine-hero__content">
+            {% if blog_config.listing_eyebrow %}<p class="eyebrow"><span></span>{{ blog_config.listing_eyebrow }}</p>{% endif %}
+            <h1>{{ blog_config.listing_title }}</h1>
+            {% if blog_config.listing_description %}<p>{{ blog_config.listing_description }}</p>{% endif %}
+            <div class="magazine-hero__stats" aria-label="اطلاعات مجله">
+                <span><strong>{{ result_count }}</strong> مقالهٔ قابل مطالعه</span>
+                <span>راهنمای خرید، واردات و تحویل خودرو</span>
+            </div>
+        </div>
+        <div class="magazine-hero__panel" aria-hidden="true">
+            <span class="magazine-hero__panel-line"></span>
+            <span class="magazine-hero__panel-orbit"></span>
+            <i>OMAN → IRAN</i>
+            <strong>MAGAZINE</strong>
+        </div>
+    </div>
+</section>
+
+<section class="section magazine-section" aria-labelledby="blog-posts-heading">
+    <div class="container">
+        <div class="magazine-toolbar">
+            <form method="get" class="magazine-search-form" role="search">
+                <input type="hidden" name="category" value="{{ active_category_slug }}">
+                <label for="blog-search" class="sr-only">جست‌وجو در عنوان مقاله‌ها</label>
+                <input id="blog-search" name="q" type="search" value="{{ query }}" placeholder="جست‌وجو در عنوان مقاله‌ها">
+                <button type="submit"><span aria-hidden="true">⌕</span><span>جست‌وجو</span></button>
+                {% if query or active_category_slug %}
+                    <a href="{% url 'blog:post_list' %}">پاک‌کردن فیلتر</a>
+                {% endif %}
+            </form>
+
+            <nav class="magazine-category-list" aria-label="دسته‌بندی مقاله‌ها">
+                <a href="{% url 'blog:post_list' %}{% if query %}?q={{ query|urlencode }}{% endif %}" class="{% if not active_category_slug %}is-active{% endif %}">همهٔ مطالب</a>
+                {% for category in categories %}
+                    <a href="{% url 'blog:post_list' %}?category={{ category.slug|urlencode }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}" class="{% if active_category_slug == category.slug %}is-active{% endif %}">{{ category.name }}</a>
+                {% endfor %}
+            </nav>
+        </div>
+
+        <h2 id="blog-posts-heading" class="sr-only">مطالب منتشرشدهٔ وبلاگ</h2>
+
+        {% if featured_post %}
+            <article class="magazine-feature">
+                <a class="magazine-feature__media" href="{{ featured_post.get_absolute_url }}" aria-label="مطالعهٔ {{ featured_post.title }}">
+                    {% if featured_post.cover_image %}
+                        <img src="{{ featured_post.cover_image.url }}" alt="{{ featured_post.image_alt_text }}" width="1200" height="760" fetchpriority="high">
+                    {% else %}
+                        <span class="magazine-feature__empty" aria-hidden="true"><i>01</i><strong>OMAN AUTO</strong></span>
+                    {% endif %}
+                </a>
+                <div class="magazine-feature__body">
+                    <div class="magazine-post-meta">
+                        <span>{% if featured_post.category %}{{ featured_post.category.name }}{% else %}مجله{% endif %}</span>
+                        {% if featured_post.published_at %}<time datetime="{{ featured_post.published_at|date:'c' }}">{{ featured_post.published_at|date:"Y/m/d" }}</time>{% endif %}
+                        <span>{{ featured_post.reading_time_minutes }} دقیقه مطالعه</span>
+                    </div>
+                    <h2><a href="{{ featured_post.get_absolute_url }}">{{ featured_post.title }}</a></h2>
+                    <p>{{ featured_post.excerpt|default:featured_post.content|truncatechars:310 }}</p>
+                    <a class="magazine-read-link" href="{{ featured_post.get_absolute_url }}">مطالعهٔ مقاله <span aria-hidden="true">←</span></a>
+                </div>
+            </article>
+        {% else %}
+            <div class="magazine-empty-state">
+                <span aria-hidden="true">⌁</span>
+                <h2>هنوز مقاله‌ای برای نمایش وجود ندارد.</h2>
+                <p>به‌زودی راهنماها و تجربه‌های واردات خودرو در این بخش منتشر می‌شوند.</p>
+            </div>
+        {% endif %}
+
+        {% if posts %}
+            <div class="magazine-post-grid">
+                {% for post in posts %}
+                    <article class="magazine-post-card">
+                        <a class="magazine-post-card__media" href="{{ post.get_absolute_url }}" aria-label="مطالعهٔ {{ post.title }}">
+                            {% if post.cover_image %}
+                                <img src="{{ post.cover_image.url }}" alt="{{ post.image_alt_text }}" width="640" height="400" loading="lazy">
+                            {% else %}
+                                <span class="magazine-post-card__empty" aria-hidden="true"><i>+</i><strong>راهنمای خودرو</strong></span>
+                            {% endif %}
+                        </a>
+                        <div class="magazine-post-card__body">
+                            <div class="magazine-post-meta">
+                                <span>{% if post.category %}{{ post.category.name }}{% else %}مجله{% endif %}</span>
+                                {% if post.published_at %}<time datetime="{{ post.published_at|date:'c' }}">{{ post.published_at|date:"Y/m/d" }}</time>{% endif %}
+                            </div>
+                            <h2><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></h2>
+                            <p>{{ post.excerpt|default:post.content|truncatechars:160 }}</p>
+                            <div class="magazine-post-card__footer">
+                                <span>{{ post.reading_time_minutes }} دقیقه مطالعه</span>
+                                <a href="{{ post.get_absolute_url }}" aria-label="مطالعهٔ {{ post.title }}"><span aria-hidden="true">←</span></a>
+                            </div>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="magazine-pagination" aria-label="صفحه‌بندی مطالب وبلاگ">
+                {% if page_obj.has_previous %}
+                    <a href="?{% if query %}q={{ query|urlencode }}&amp;{% endif %}{% if active_category_slug %}category={{ active_category_slug|urlencode }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">قبلی</a>
+                {% endif %}
+                <span>صفحهٔ {{ page_obj.number }} از {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?{% if query %}q={{ query|urlencode }}&amp;{% endif %}{% if active_category_slug %}category={{ active_category_slug|urlencode }}&amp;{% endif %}page={{ page_obj.next_page_number }}">بعدی</a>
+                {% endif %}
+            </nav>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

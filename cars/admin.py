@@ -6,13 +6,18 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 
 from .forms import VehicleArchiveReasonForm
-from .models import Car, CarPhoto, VehicleArchiveEvent, VehicleHold
+from .models import Car, CarPhoto, CarSpinFrame, VehicleArchiveEvent, VehicleHold
 from .services import (
     archive_vehicle,
     place_vehicle_on_hold,
     publish_vehicle_for_sale,
     release_vehicle_hold,
     restore_archived_vehicle,
+)
+from .spin import (
+    assess_car_spin_frames,
+    disable_car_spin_360,
+    enable_car_spin_360,
 )
 
 
@@ -26,6 +31,16 @@ class CarPhotoInline(admin.TabularInline):
     model = CarPhoto
     extra = 1
     readonly_fields = ["telegram_file_id"]
+    fields = ["image", "is_cover", "alt_text", "sort_order", "telegram_file_id"]
+
+
+class CarSpinFrameInline(admin.TabularInline):
+    """Separate ordered media for the interactive 360° viewer."""
+
+    model = CarSpinFrame
+    extra = 1
+    fields = ["sequence", "image", "image_width", "image_height"]
+    readonly_fields = ["image_width", "image_height"]
 
 
 class VehicleArchiveEventInline(admin.TabularInline):
@@ -71,11 +86,12 @@ class CarAdmin(admin.ModelAdmin):
         "is_deleted",
         "customer",
         "current_stage",
+        "spin_360_enabled",
     ]
     list_filter = ["status", "brand", "is_featured", "is_deleted"]
     search_fields = ["tracking_code", "title", "brand", "model"]
     list_select_related = ["customer", "current_stage"]
-    inlines = [CarPhotoInline, VehicleArchiveEventInline]
+    inlines = [CarPhotoInline, CarSpinFrameInline, VehicleArchiveEventInline]
 
     # Lifecycle and external-integration fields must be changed by services.
     readonly_fields = [
@@ -86,11 +102,15 @@ class CarAdmin(admin.ModelAdmin):
         "target_delivery",
         "channel_message_ids",
         "is_deleted",
+        "spin_360_enabled",
+        "spin_360_readiness",
     ]
 
     actions = [
         "publish_selected_cars",
         "place_selected_vehicle_on_hold",
+        "enable_selected_360_views",
+        "disable_selected_360_views",
     ]
 
     def get_queryset(self, request):
@@ -126,7 +146,23 @@ class CarAdmin(admin.ModelAdmin):
         if not request.user.has_perm("cars.hold_vehicle"):
             actions.pop("place_selected_vehicle_on_hold", None)
 
+        if not request.user.has_perm("cars.change_car"):
+            actions.pop("enable_selected_360_views", None)
+            actions.pop("disable_selected_360_views", None)
+
         return actions
+
+    @admin.display(description="وضعیت فنی نمایش ۳۶۰")
+    def spin_360_readiness(self, car):
+        if not car or not car.pk:
+            return "ابتدا خودرو را ذخیره کنید و سپس فریم‌ها را اضافه کنید."
+
+        readiness = assess_car_spin_frames(car)
+        if readiness.is_ready:
+            quality = "پیشنهادی" if readiness.is_recommended else "پایه"
+            return f"آماده برای نمایش عمومی ({readiness.frame_count} فریم؛ کیفیت {quality})"
+
+        return "آماده نیست: " + " ".join(readiness.messages)
 
     def has_delete_permission(self, request, obj=None):
         """Vehicles are removed only through the audited soft-archive workflow."""
@@ -310,6 +346,52 @@ class CarAdmin(admin.ModelAdmin):
             self.message_user(
                 request,
                 f"{success_count} خودرو برای فروش منتشر شد.",
+                level=messages.SUCCESS,
+            )
+
+    @admin.action(description="فعال‌سازی نمایش ۳۶۰ برای خودروهای انتخاب‌شده")
+    def enable_selected_360_views(self, request, queryset):
+        enabled_count = 0
+
+        for car in queryset:
+            try:
+                enable_car_spin_360(car_id=car.id, actor=request.user)
+            except ValidationError as error:
+                self.message_user(
+                    request,
+                    f"{car}: {' '.join(error.messages)}",
+                    level=messages.ERROR,
+                )
+            else:
+                enabled_count += 1
+
+        if enabled_count:
+            self.message_user(
+                request,
+                f"نمایش ۳۶۰ برای {enabled_count} خودرو فعال شد.",
+                level=messages.SUCCESS,
+            )
+
+    @admin.action(description="غیرفعال‌سازی نمایش ۳۶۰ برای خودروهای انتخاب‌شده")
+    def disable_selected_360_views(self, request, queryset):
+        disabled_count = 0
+
+        for car in queryset:
+            try:
+                disable_car_spin_360(car_id=car.id, actor=request.user)
+            except ValidationError as error:
+                self.message_user(
+                    request,
+                    f"{car}: {' '.join(error.messages)}",
+                    level=messages.ERROR,
+                )
+            else:
+                disabled_count += 1
+
+        if disabled_count:
+            self.message_user(
+                request,
+                f"نمایش ۳۶۰ برای {disabled_count} خودرو غیرفعال شد.",
                 level=messages.SUCCESS,
             )
 

@@ -1,0 +1,90 @@
+{% extends "public/base.html" %}
+
+{% block content %}
+<article class="magazine-article section" data-magazine-article>
+    <div class="container">
+        <nav class="magazine-breadcrumb" aria-label="مسیر صفحه">
+            <a href="{% url 'core:home' %}">صفحهٔ اصلی</a>
+            <span aria-hidden="true">/</span>
+            <a href="{% url 'blog:post_list' %}">مجله</a>
+            <span aria-hidden="true">/</span>
+            <span>{{ post.title }}</span>
+        </nav>
+
+        <header class="magazine-article__header">
+            <p class="eyebrow"><span></span>{% if post.category %}{{ post.category.name }}{% else %}مجلهٔ واردات خودرو{% endif %}</p>
+            <h1>{{ post.title }}</h1>
+            {% if post.excerpt %}<p class="magazine-article__lead">{{ post.excerpt }}</p>{% endif %}
+            <dl class="magazine-article__meta">
+                {% if post.published_at %}
+                    <div><dt>انتشار</dt><dd><time datetime="{{ post.published_at|date:'c' }}">{{ post.published_at|date:"Y/m/d" }}</time></dd></div>
+                {% endif %}
+                <div><dt>مطالعه</dt><dd>{{ post.reading_time_minutes }} دقیقه</dd></div>
+                {% if post.author %}<div><dt>نویسنده</dt><dd>{{ post.author_display_name }}</dd></div>{% endif %}
+                <div><dt>آخرین ویرایش</dt><dd>{{ post.updated_at|date:"Y/m/d" }}</dd></div>
+            </dl>
+        </header>
+
+        {% if post.cover_image %}
+            <figure class="magazine-article__cover">
+                <img src="{{ post.cover_image.url }}" alt="{{ post.image_alt_text }}" width="1200" height="760" fetchpriority="high">
+            </figure>
+        {% endif %}
+
+        <div class="magazine-article__layout">
+            <aside class="magazine-article__aside">
+                <span>راهنمای واردات</span>
+                <strong>از انتخاب تا تحویل خودرو</strong>
+                <a href="{% url 'cars:vehicle_list' %}">مشاهدهٔ خودروهای موجود <span aria-hidden="true">←</span></a>
+            </aside>
+            <div class="magazine-article__body">{{ post.content|linebreaks }}</div>
+        </div>
+
+        <footer class="magazine-article__footer">
+            <a href="{% url 'blog:post_list' %}" class="magazine-read-link">بازگشت به مجله <span aria-hidden="true">→</span></a>
+            {% if site_config.telegram_url %}
+                <a href="{{ site_config.telegram_url }}" target="_blank" rel="noopener noreferrer" class="magazine-telegram-link">مشاوره در تلگرام <span aria-hidden="true">↗</span></a>
+            {% endif %}
+        </footer>
+    </div>
+</article>
+
+{% if related_posts %}
+    <section class="magazine-related section" aria-labelledby="related-posts-title">
+        <div class="container">
+            <div class="magazine-section-heading">
+                <div>
+                    <p class="eyebrow"><span></span>مطالعهٔ بیشتر</p>
+                    <h2 id="related-posts-title">مقاله‌های مرتبط</h2>
+                </div>
+                <a href="{% url 'blog:post_list' %}">همهٔ مقاله‌ها <span aria-hidden="true">←</span></a>
+            </div>
+            <div class="magazine-post-grid magazine-post-grid--related">
+                {% for related_post in related_posts %}
+                    <article class="magazine-post-card">
+                        <a class="magazine-post-card__media" href="{{ related_post.get_absolute_url }}" aria-label="مطالعهٔ {{ related_post.title }}">
+                            {% if related_post.cover_image %}
+                                <img src="{{ related_post.cover_image.url }}" alt="{{ related_post.image_alt_text }}" width="640" height="400" loading="lazy">
+                            {% else %}
+                                <span class="magazine-post-card__empty" aria-hidden="true"><i>+</i><strong>راهنمای خودرو</strong></span>
+                            {% endif %}
+                        </a>
+                        <div class="magazine-post-card__body">
+                            <div class="magazine-post-meta">
+                                <span>{% if related_post.category %}{{ related_post.category.name }}{% else %}مجله{% endif %}</span>
+                                {% if related_post.published_at %}<time datetime="{{ related_post.published_at|date:'c' }}">{{ related_post.published_at|date:"Y/m/d" }}</time>{% endif %}
+                            </div>
+                            <h3><a href="{{ related_post.get_absolute_url }}">{{ related_post.title }}</a></h3>
+                            <p>{{ related_post.excerpt|default:related_post.content|truncatechars:130 }}</p>
+                            <div class="magazine-post-card__footer">
+                                <span>{{ related_post.reading_time_minutes }} دقیقه مطالعه</span>
+                                <a href="{{ related_post.get_absolute_url }}" aria-label="مطالعهٔ {{ related_post.title }}"><span aria-hidden="true">←</span></a>
+                            </div>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+{% endif %}
+{% endblock %}

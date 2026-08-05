@@ -2,15 +2,23 @@ from io import StringIO
 
 from django.core.management import call_command
 
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.test import TestCase
 
-from accounts.services import RoleGroup, ensure_default_role_groups
+from accounts.services import (
+    RoleGroup,
+    StaffBusinessRole,
+    create_staff_member,
+    ensure_default_role_groups,
+    reset_staff_password,
+    set_staff_active_state,
+    update_staff_member,
+)
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
-from accounts.models import StaffProfile
+from accounts.models import StaffManagementEvent, StaffProfile
 from cars.models import Car
 from tracking.models import Stage, StageTransition
 from tracking.services import confirm_stage, start_tracking_for_sold_car
@@ -294,3 +302,150 @@ class SyncRolesCommandTests(TestCase):
             RoleGroup.CLEARANCE_EMPLOYEE,
             output.getvalue(),
         )
+
+
+class StaffAccountLifecycleServiceTests(TestCase):
+    def setUp(self):
+        ensure_default_role_groups()
+        user_model = get_user_model()
+        self.administrator = user_model.objects.create_superuser(
+            username="staff-system-administrator",
+            password="strong-admin-password-123",
+        )
+        self.first_stage = Stage.objects.create(name="Purchase confirmed", order=1)
+        self.clearance_stage = Stage.objects.create(name="Customs", order=2)
+
+    def create_staff(self, **overrides):
+        payload = {
+            "actor": self.administrator,
+            "username": "test-staff-member",
+            "raw_password": "A-secure-password-123!",
+            "first_name": "Ali",
+            "last_name": "Employee",
+            "email": "ali@example.com",
+            "phone": "09120000000",
+            "role": StaffBusinessRole.CLEARANCE_EMPLOYEE,
+            "assigned_stages": [self.clearance_stage],
+            "exceptional_permissions": [],
+        }
+        payload.update(overrides)
+        return create_staff_member(**payload)
+
+    def test_create_clearance_employee_builds_profile_role_stage_and_audit_event(self):
+        staff_user = self.create_staff()
+        profile = StaffProfile.objects.get(user=staff_user)
+
+        self.assertTrue(staff_user.is_staff)
+        self.assertTrue(staff_user.is_active)
+        self.assertTrue(
+            staff_user.groups.filter(name=RoleGroup.CLEARANCE_EMPLOYEE).exists()
+        )
+        self.assertTrue(staff_user.has_perm("tracking.confirm_tracking_stage"))
+        self.assertEqual(list(profile.assigned_stages.all()), [self.clearance_stage])
+
+        event = StaffManagementEvent.objects.get(staff_user=staff_user)
+        self.assertEqual(event.action, StaffManagementEvent.Action.CREATED)
+        self.assertEqual(event.performed_by, self.administrator)
+        self.assertEqual(event.changes["after"]["role"], StaffBusinessRole.CLEARANCE_EMPLOYEE)
+
+    def test_general_employee_can_receive_explicit_stage_confirmation_capability(self):
+        confirmation_permission = Permission.objects.get(
+            content_type__app_label="tracking",
+            codename="confirm_tracking_stage",
+        )
+        staff_user = self.create_staff(
+            username="authorized-general-employee",
+            email="authorized@example.com",
+            role=StaffBusinessRole.EMPLOYEE,
+            assigned_stages=[self.clearance_stage],
+            exceptional_permissions=[confirmation_permission],
+        )
+
+        profile = StaffProfile.objects.get(user=staff_user)
+        self.assertTrue(staff_user.has_perm("tracking.confirm_tracking_stage"))
+        self.assertEqual(list(profile.assigned_stages.all()), [self.clearance_stage])
+
+    def test_removing_stage_confirmation_capability_clears_stage_assignments(self):
+        staff_user = self.create_staff()
+
+        update_staff_member(
+            staff_user=staff_user,
+            actor=self.administrator,
+            username=staff_user.username,
+            first_name=staff_user.first_name,
+            last_name=staff_user.last_name,
+            email=staff_user.email,
+            phone="09123333333",
+            role=StaffBusinessRole.EMPLOYEE,
+            assigned_stages=[self.clearance_stage],
+            exceptional_permissions=[],
+        )
+
+        staff_user.refresh_from_db()
+        profile = StaffProfile.objects.get(user=staff_user)
+        self.assertFalse(staff_user.has_perm("tracking.confirm_tracking_stage"))
+        self.assertFalse(profile.assigned_stages.exists())
+        self.assertEqual(
+            StaffManagementEvent.objects.filter(
+                staff_user=staff_user,
+                action=StaffManagementEvent.Action.UPDATED,
+            ).count(),
+            1,
+        )
+
+    def test_deactivation_removes_stage_responsibility_and_preserves_account_history(self):
+        staff_user = self.create_staff()
+
+        deactivated_user = set_staff_active_state(
+            staff_user=staff_user,
+            actor=self.administrator,
+            is_active=False,
+            reason="End of employment",
+        )
+
+        deactivated_user.refresh_from_db()
+        profile = StaffProfile.objects.get(user=deactivated_user)
+        self.assertFalse(deactivated_user.is_active)
+        self.assertFalse(profile.assigned_stages.exists())
+        self.assertTrue(
+            StaffManagementEvent.objects.filter(
+                staff_user=deactivated_user,
+                action=StaffManagementEvent.Action.DEACTIVATED,
+            ).exists()
+        )
+
+    def test_password_reset_uses_django_password_hashing_and_is_audited(self):
+        staff_user = self.create_staff()
+        original_password_hash = staff_user.password
+
+        reset_staff_password(
+            staff_user=staff_user,
+            actor=self.administrator,
+            raw_password="Another-secure-password-456!",
+        )
+
+        staff_user.refresh_from_db()
+        self.assertNotEqual(staff_user.password, original_password_hash)
+        self.assertTrue(staff_user.check_password("Another-secure-password-456!"))
+        self.assertTrue(
+            StaffManagementEvent.objects.filter(
+                staff_user=staff_user,
+                action=StaffManagementEvent.Action.PASSWORD_RESET,
+            ).exists()
+        )
+
+    def test_non_administrator_cannot_create_a_staff_account(self):
+        user_model = get_user_model()
+        ordinary_employee = user_model.objects.create_user(
+            username="ordinary-staff-actor",
+            password="test-password",
+            is_staff=True,
+        )
+
+        with self.assertRaises(ValidationError):
+            create_staff_member(
+                actor=ordinary_employee,
+                username="denied-staff",
+                raw_password="A-secure-password-123!",
+                role=StaffBusinessRole.EMPLOYEE,
+            )

@@ -1,0 +1,12 @@
+{% extends "public/base.html" %}
+
+{% block content %}
+<article class="content-page section">
+    <div class="container content-page__inner">
+        <p class="eyebrow"><span></span>اطلاعات مجموعه</p>
+        <h1>{{ static_page.title }}</h1>
+        {% if static_page.intro %}<p class="content-page__intro">{{ static_page.intro }}</p>{% endif %}
+        {% if static_page.body %}<div class="content-page__body">{{ static_page.body|linebreaks }}</div>{% endif %}
+    </div>
+</article>
+{% endblock %}

@@ -1,16 +1,23 @@
+from io import BytesIO
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
+from PIL import Image
+
 from django.contrib.auth import get_user_model
 
 from django.contrib import admin
 
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 from accounts.services import RoleGroup, ensure_default_role_groups
 
-from cars.models import Car, VehicleArchiveEvent, VehicleHold
+from cars.models import Car, CarPhoto, CarSpinFrame, VehicleArchiveEvent, VehicleHold
 
 from cars.services import (
     archive_vehicle,
@@ -21,6 +28,7 @@ from cars.services import (
     release_vehicle_hold,
     restore_archived_vehicle,
 )
+from cars.spin import assess_car_spin_frames, get_public_spin_payload
 
 from integrations.models import TelegramCustomerActivationToken
 
@@ -1005,3 +1013,155 @@ class VehicleArchiveAdminWorkflowTests(TestCase):
                 administrator_request,
             )
         )
+
+
+class CarSpinFrameReadinessTests(TestCase):
+    def setUp(self):
+        self.temporary_media = TemporaryDirectory()
+        self.media_override = override_settings(MEDIA_ROOT=self.temporary_media.name)
+        self.media_override.enable()
+        self.car = Car.objects.create(
+            title="360 Test Vehicle",
+            brand="Test Brand",
+            model="Spin Model",
+            status=Car.Status.FOR_SALE,
+        )
+
+    def tearDown(self):
+        self.media_override.disable()
+        self.temporary_media.cleanup()
+
+    @staticmethod
+    def make_frame_file(sequence, size=(384, 256)):
+        image = Image.new("RGB", size, color=(12, 69, 145))
+        output = BytesIO()
+        image.save(output, format="WEBP", quality=80)
+        return SimpleUploadedFile(
+            f"frame-{sequence:02d}.webp",
+            output.getvalue(),
+            content_type="image/webp",
+        )
+
+    def create_frames(self, sequences, size=(384, 256)):
+        for sequence in sequences:
+            CarSpinFrame.objects.create(
+                car=self.car,
+                sequence=sequence,
+                image=self.make_frame_file(sequence, size=size),
+            )
+
+    def test_twelve_contiguous_compatible_frames_are_technically_ready(self):
+        self.create_frames(range(1, 13))
+
+        readiness = assess_car_spin_frames(self.car)
+
+        self.assertTrue(readiness.is_ready)
+        self.assertEqual(readiness.frame_count, 12)
+        self.assertFalse(readiness.is_recommended)
+        self.assertEqual(readiness.messages, ())
+
+    def test_gaps_and_aspect_ratio_mismatch_are_not_ready(self):
+        self.create_frames(range(1, 12))
+        CarSpinFrame.objects.create(
+            car=self.car,
+            sequence=13,
+            image=self.make_frame_file(13, size=(384, 300)),
+        )
+
+        readiness = assess_car_spin_frames(self.car)
+
+        self.assertFalse(readiness.is_ready)
+        self.assertTrue(
+            any("شمارهٔ فریم‌ها" in message for message in readiness.messages)
+        )
+        self.assertTrue(
+            any("نسبت تصویر" in message for message in readiness.messages)
+        )
+
+    def test_public_payload_requires_explicit_enablement_and_stays_safe(self):
+        self.create_frames(range(1, 13))
+
+        self.assertIsNone(get_public_spin_payload(self.car))
+
+        self.car.spin_360_enabled = True
+        self.car.save(update_fields=["spin_360_enabled"])
+        payload = get_public_spin_payload(self.car)
+
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["frame_count"], 12)
+        self.assertEqual(len(payload["frame_urls"]), 12)
+
+        self.car.spin_frames.get(sequence=12).delete()
+        self.assertIsNone(get_public_spin_payload(self.car))
+
+
+class PublicVehicleGalleryTemplateTests(TestCase):
+    """The public gallery must work from normal ``CarPhoto`` records for every car."""
+
+    def setUp(self):
+        self.temporary_media = TemporaryDirectory()
+        self.media_override = override_settings(MEDIA_ROOT=self.temporary_media.name)
+        self.media_override.enable()
+
+        self.car = Car.objects.create(
+            title="Gallery Test Vehicle",
+            brand="Test Brand",
+            model="Gallery Model",
+            status=Car.Status.FOR_SALE,
+        )
+        self.cover_photo = CarPhoto.objects.create(
+            car=self.car,
+            image=SimpleUploadedFile(
+                "cover.jpg",
+                b"cover-image",
+                content_type="image/jpeg",
+            ),
+            alt_text="Cover image",
+            is_cover=True,
+        )
+        self.alternate_photo = CarPhoto.objects.create(
+            car=self.car,
+            image=SimpleUploadedFile(
+                "alternate.jpg",
+                b"alternate-image",
+                content_type="image/jpeg",
+            ),
+            alt_text="Alternate image",
+            sort_order=1,
+        )
+
+    def tearDown(self):
+        self.media_override.disable()
+        self.temporary_media.cleanup()
+
+    def test_public_detail_renders_an_interactive_control_for_every_photo(self):
+        response = self.client.get(self.car.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-vehicle-gallery")
+        self.assertContains(response, "data-gallery-main-image")
+        self.assertContains(response, "data-gallery-thumbnail", count=2)
+        self.assertContains(response, "public-site.js?v=")
+        self.assertContains(
+            response,
+            f'data-gallery-image-src="{self.alternate_photo.image.url}"',
+        )
+        self.assertContains(response, 'aria-pressed="true"')
+
+    @patch("cars.views.get_public_spin_payload")
+    def test_spin_and_photo_modes_are_both_available_when_a_car_has_360_view(
+        self,
+        get_public_spin_payload_mock,
+    ):
+        get_public_spin_payload_mock.return_value = {
+            "frame_urls": ["/media/cars/spins/frame-01.webp"],
+            "frame_count": 1,
+        }
+
+        response = self.client.get(self.car.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-gallery-spin-viewer")
+        self.assertContains(response, "data-gallery-spin-control")
+        self.assertContains(response, "data-gallery-main-image")
+        self.assertContains(response, "data-gallery-thumbnail", count=2)

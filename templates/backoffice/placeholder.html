@@ -1,0 +1,23 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}{{ title }} | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_description %}
+    <p>{{ description }}</p>
+{% endblock %}
+
+{% block content %}
+    <section class="backoffice-placeholder-card">
+        <span class="backoffice-placeholder-card__icon">
+            <i class="fa fa-wrench" aria-hidden="true"></i>
+        </span>
+
+        <h2>{{ title }}</h2>
+
+        <p>
+            ساختار این صفحه آماده است و در گام بعدی، داده‌ها و عملیات واقعی آن را اضافه می‌کنیم.
+        </p>
+    </section>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}لغو اتصال Telegram | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+{% block page_title %}لغو اتصال Telegram{% endblock %}
+{% block page_description %}<p>اتصال فعلی ربات برای «{{ staff_user.get_full_name|default:staff_user.username }}» لغو می‌شود و در تاریخچه باقی می‌ماند.</p>{% endblock %}
+
+{% block content %}
+    <form method="post" class="backoffice-confirm-card backoffice-confirm-card--danger" novalidate>
+        {% csrf_token %}
+        <span class="backoffice-confirm-card__icon"><i class="fa fa-chain-broken" aria-hidden="true"></i></span>
+        <h2>لغو اتصال فعلی Telegram</h2>
+        <p>پس از لغو، کارمند دیگر نمی‌تواند با هویت فعلی Telegram عملیات داخلی انجام دهد. برای اتصال دوباره باید کد جدید صادر شود.</p>
+        {% if form.non_field_errors %}<div class="backoffice-form-errors">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="backoffice-field">{{ form.reason.label_tag }}{{ form.reason }}{{ form.reason.errors }}</div>
+        <footer class="backoffice-form-actions">
+            <a href="{% url 'backoffice:staff_detail' staff_user.pk %}" class="backoffice-button backoffice-button--secondary">انصراف</a>
+            <button type="submit" class="backoffice-button backoffice-button--danger"><i class="fa fa-chain-broken" aria-hidden="true"></i> لغو اتصال</button>
+        </footer>
+    </form>
+{% endblock %}

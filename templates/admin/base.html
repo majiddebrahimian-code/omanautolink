@@ -1,0 +1,136 @@
+{% load i18n static %}{% get_current_language_bidi as LANGUAGE_BIDI %}<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <title>{% block title %}{% endblock %}</title>
+    {% if admin_site_config.favicon %}<link rel="icon" href="{{ admin_site_config.favicon.url }}">{% endif %}
+
+    {# Keep Django's widget and third-party change-form media compatible. #}
+    <link rel="stylesheet" href="{% block stylesheet %}{% static 'admin/css/base.css' %}{% endblock %}">
+    {% if LANGUAGE_BIDI %}<link rel="stylesheet" href="{% block stylesheet_rtl %}{% static 'admin/css/rtl.css' %}{% endblock %}">{% endif %}
+    {% block dark-mode-vars %}{% endblock %}
+    {% block extrastyle %}{% endblock %}
+    {% block extrahead %}{% endblock %}
+    {% block responsive %}<meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="{% static 'admin/css/responsive.css' %}">{% endblock %}
+    {% block blockbots %}<meta name="robots" content="NONE,NOARCHIVE">{% endblock %}
+
+    {# Locally vendored PersianAdminLTE assets: no CDN or network dependency. #}
+    <link rel="stylesheet" href="{% static 'core/vendor/persian-adminlte/font-awesome/css/font-awesome.min.css' %}">
+    <link rel="stylesheet" href="{% static 'core/vendor/persian-adminlte/css/adminlte.min.css' %}">
+    <link rel="stylesheet" href="{% static 'core/vendor/persian-adminlte/css/bootstrap-rtl.min.css' %}">
+    <link rel="stylesheet" href="{% static 'core/vendor/persian-adminlte/css/custom-style.css' %}">
+    <link rel="stylesheet" href="{% static 'core/admin/django-adminlte-bridge.css' %}">
+</head>
+<body class="{% if is_popup %}admin-popup{% elif has_permission %}hold-transition sidebar-mini layout-fixed adminlte-shell{% else %}hold-transition login-page adminlte-login{% endif %} {% block bodyclass %}{% endblock %}">
+<a href="#content-start" class="skip-to-content-link">پرش به محتوای اصلی</a>
+
+<div id="container" class="{% if not is_popup and has_permission %}wrapper{% else %}admin-standalone-wrapper{% endif %}">
+    {% if not is_popup and has_permission %}
+        {% block header %}
+            <nav id="header" class="main-header navbar navbar-expand bg-white navbar-light border-bottom" aria-label="نوار بالای پنل">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <button class="nav-link adminlte-sidebar-toggle" type="button" aria-label="باز و بسته‌کردن منو" aria-controls="nav-sidebar" aria-expanded="true" data-admin-sidebar-toggle>
+                            <i class="fa fa-bars" aria-hidden="true"></i>
+                        </button>
+                    </li>
+                    <li class="nav-item d-none d-sm-inline-block"><a class="nav-link" href="{% url 'admin:index' %}">خانه</a></li>
+                    <li class="nav-item d-none d-sm-inline-block"><a class="nav-link" href="{{ site_url|default:'/' }}" target="_blank" rel="noopener noreferrer">مشاهدهٔ سایت</a></li>
+                </ul>
+
+                <form class="form-inline mr-auto adminlte-menu-search" role="search" onsubmit="return false;">
+                    <label class="sr-only" for="admin-nav-filter">جست‌وجو در منو</label>
+                    <div class="input-group input-group-sm">
+                        <input id="admin-nav-filter" class="form-control form-control-navbar" type="search" placeholder="جست‌وجو در منو" autocomplete="off" data-admin-nav-filter>
+                        <div class="input-group-append"><span class="input-group-text"><i class="fa fa-search" aria-hidden="true"></i></span></div>
+                    </div>
+                </form>
+
+                {% block usertools %}
+                    <ul id="user-tools" class="navbar-nav mr-0 adminlte-user-tools">
+                        <li class="nav-item dropdown">
+                            <details class="adminlte-user-menu">
+                                <summary class="nav-link">
+                                    <span class="adminlte-user-avatar">{{ user.get_username|first|upper }}</span>
+                                    <span class="d-none d-md-inline">{% firstof user.get_short_name user.get_username %}</span>
+                                    <i class="fa fa-angle-down mr-1" aria-hidden="true"></i>
+                                </summary>
+                                <div class="dropdown-menu dropdown-menu-left dropdown-menu-right adminlte-user-menu__content">
+                                    <span class="dropdown-item-text">{% firstof user.get_full_name user.get_username %}</span>
+                                    <div class="dropdown-divider"></div>
+                                    {% if user.has_usable_password %}<a class="dropdown-item" href="{% url 'admin:password_change' %}"><i class="fa fa-key ml-2" aria-hidden="true"></i>تغییر گذرواژه</a>{% endif %}
+                                    <form method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button class="dropdown-item" type="submit"><i class="fa fa-sign-out ml-2" aria-hidden="true"></i>خروج از حساب</button></form>
+                                </div>
+                            </details>
+                        </li>
+                    </ul>
+                {% endblock %}
+                {% block nav-global %}{% endblock %}
+                <span class="adminlte-hidden-brand">{% block branding %}{% endblock %}</span>
+            </nav>
+        {% endblock %}
+
+        <aside id="nav-sidebar" class="main-sidebar sidebar-dark-primary elevation-4" aria-label="منوی مدیریت">
+            {% block nav-sidebar %}{% include 'admin/nav_sidebar.html' %}{% endblock %}
+        </aside>
+    {% endif %}
+
+    <div class="content-wrapper{% if is_popup or not has_permission %} admin-standalone-content-wrapper{% endif %}">
+        {% block nav-breadcrumbs %}
+            <section class="content-header{% if is_popup or not has_permission %} admin-standalone-header{% endif %}">
+                <div class="container-fluid">
+                    <div class="row mb-2">
+                        <div class="col-sm-6">
+                            {% block pretitle %}{% endblock %}
+                            {% block content_title %}{% if title %}<h1 class="m-0 text-dark">{{ title }}</h1>{% endif %}{% endblock %}
+                            {% block content_subtitle %}{% if subtitle %}<p class="adminlte-subtitle">{{ subtitle }}</p>{% endif %}{% endblock %}
+                        </div>
+                        <div class="col-sm-6">
+                            {% block breadcrumbs %}
+                                {% if not is_popup and has_permission %}
+                                    <ol class="breadcrumb float-sm-left">
+                                        <li class="breadcrumb-item"><a href="{% url 'admin:index' %}">خانه</a></li>
+                                        {% if title %}<li class="breadcrumb-item active">{{ title }}</li>{% endif %}
+                                    </ol>
+                                {% endif %}
+                            {% endblock %}
+                        </div>
+                    </div>
+                </div>
+            </section>
+        {% endblock %}
+
+        <main id="content-start" class="content" tabindex="-1">
+            <div class="container-fluid">
+                {% block messages %}
+                    {% if messages %}
+                        <div class="adminlte-messages" aria-live="polite">
+                            {% for message in messages %}<div{% if message.tags %} class="alert alert-{{ message.tags }}"{% else %} class="alert alert-info"{% endif %}>{{ message|capfirst }}</div>{% endfor %}
+                        </div>
+                    {% endif %}
+                {% endblock messages %}
+
+                <div id="content" class="{% block coltype %}colM{% endblock %}">
+                    {% block content %}{% block object-tools %}{% endblock %}{{ content }}{% endblock %}
+                    {% block sidebar %}{% endblock %}
+                    <br class="clear">
+                </div>
+            </div>
+        </main>
+    </div>
+
+    {% block footer %}
+        {% if not is_popup and has_permission %}
+            <footer id="footer" class="main-footer">
+                <div class="float-left d-none d-sm-inline">تمام عملیات حساس از Service Layer مشترک عبور می‌کنند.</div>
+                <strong>پنل مدیریت {{ admin_site_config.site_name|default:'سایت' }}</strong>
+            </footer>
+        {% endif %}
+    {% endblock %}
+</div>
+
+{# A small native adapter is used instead of loading the legacy jQuery bundle. #}
+<script src="{% static 'core/admin/adminlte-bridge.js' %}" defer></script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}داشبورد | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}داشبورد{% endblock %}
+
+{% block page_description %}
+    <p>
+        مدیریت ماشین‌ها، وبلاگ و تنظیمات سایت از این پنل انجام می‌شود.
+    </p>
+{% endblock %}
+
+{% block content %}
+    <section class="backoffice-welcome-card">
+        <div>
+            <span class="backoffice-welcome-card__icon">
+                <i class="fa fa-tachometer" aria-hidden="true"></i>
+            </span>
+
+            <h2>پنل اختصاصی آماده است</h2>
+
+            <p>
+                در این مرحله ساختار اصلی منوها ایجاد شده است.
+                در مراحل بعدی، آمار واقعی، لیست ماشین‌ها، جست‌وجو و فرم‌ها را اضافه می‌کنیم.
+            </p>
+        </div>
+    </section>
+
+    <section class="backoffice-quick-grid">
+        <article class="backoffice-quick-card">
+            <i class="fa fa-car" aria-hidden="true"></i>
+            <h3>مدیریت ماشین</h3>
+            <p>ماشین‌ها، رزروهای موقت و وضعیت تحویل.</p>
+        </article>
+
+        <article class="backoffice-quick-card">
+            <i class="fa fa-newspaper-o" aria-hidden="true"></i>
+            <h3>وبلاگ</h3>
+            <p>افزودن مقاله و مدیریت فهرست مقالات.</p>
+        </article>
+
+        <article class="backoffice-quick-card">
+            <i class="fa fa-sliders" aria-hidden="true"></i>
+            <h3>تنظیمات</h3>
+            <p>تنظیمات سایت و مراحل تحویل ماشین.</p>
+        </article>
+    </section>
+{% endblock %}

@@ -1,0 +1,318 @@
+/*
+ * Django Admin -> PersianAdminLTE bridge
+ *
+ * PersianAdminLTE's MIT-licensed CSS supplies the shell.  These local rules
+ * style only Django-specific markup, so existing ModelAdmin pages, widgets,
+ * custom actions and permission checks retain their behaviour.
+ */
+
+:root {
+    --adminlte-brand: #198754;
+    --adminlte-teal: #17a2b8;
+    --adminlte-page: #f4f6f9;
+    --adminlte-line: #dee2e6;
+    --adminlte-ink: #343a40;
+}
+
+html { background: var(--adminlte-page); }
+body.adminlte-shell { min-height: 100vh; color: var(--adminlte-ink); background: var(--adminlte-page); }
+body.adminlte-shell .wrapper { min-height: 100vh; }
+body.adminlte-shell .content-wrapper { min-height: calc(100vh - 114px); background: var(--adminlte-page); }
+body.adminlte-shell .content { padding: 0 7px 22px; }
+body.adminlte-shell .content .container-fluid { max-width: 1650px; }
+body.adminlte-shell #container { min-width: 0; }
+body.adminlte-shell #content { padding: 0; margin: 0; }
+
+.skip-to-content-link {
+    position: fixed;
+    z-index: 10000;
+    top: 10px;
+    left: 10px;
+    padding: 8px 12px;
+    color: #fff !important;
+    background: var(--adminlte-brand);
+    border-radius: 4px;
+    transform: translateY(-150%);
+}
+.skip-to-content-link:focus { transform: translateY(0); }
+
+/* Override the legacy Django base.css header without touching Django's IDs. */
+.adminlte-shell .main-header#header {
+    display: flex;
+    min-height: 57px;
+    padding: .35rem .8rem;
+    color: #495057;
+    background: #fff;
+    border-bottom: 1px solid #dee2e6;
+    box-shadow: none;
+}
+.adminlte-shell .main-header .navbar-nav { align-items: center; }
+.adminlte-sidebar-toggle { padding: .5rem .75rem; color: #4f5d6a; cursor: pointer; background: transparent; border: 0; }
+.adminlte-sidebar-toggle:focus { outline: 2px solid rgba(23,162,184,.34); outline-offset: -2px; }
+.adminlte-menu-search { flex: 1; justify-content: center; min-width: 0; margin: 0 1rem; }
+.adminlte-menu-search .input-group { width: min(100%, 260px); }
+.adminlte-menu-search .input-group-text { color: #4f5d6a; background: #f4f6f9; border-color: #f4f6f9; }
+.adminlte-menu-search .form-control-navbar { color: #495057; background: #f4f6f9; border-color: #f4f6f9; }
+.adminlte-menu-search .form-control-navbar:focus { background: #fff; border-color: #17a2b8; box-shadow: none; }
+.adminlte-hidden-brand { display: none !important; }
+
+.adminlte-user-tools { margin: 0; padding: 0; }
+.adminlte-user-menu { position: relative; }
+.adminlte-user-menu summary { display: flex; align-items: center; gap: .42rem; color: #495057; cursor: pointer; list-style: none; }
+.adminlte-user-menu summary::-webkit-details-marker { display: none; }
+.adminlte-user-avatar, .adminlte-sidebar-avatar {
+    display: inline-grid;
+    width: 31px;
+    height: 31px;
+    place-items: center;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #1f9d55, #20c997);
+    border-radius: 50%;
+}
+.adminlte-user-menu__content { display: none; top: calc(100% + 8px); right: auto; left: 0; min-width: 190px; padding: .35rem 0; }
+.adminlte-user-menu[open] .adminlte-user-menu__content { display: block; }
+.adminlte-user-menu__content form { margin: 0; }
+.adminlte-user-menu__content button { width: 100%; color: #343a40; text-align: right; cursor: pointer; background: transparent; border: 0; }
+.adminlte-user-menu__content button:hover { color: #16181b; background: #f8f9fa; }
+
+/* Real PersianAdminLTE sidebar, filled with Django's permission-aware apps. */
+.adminlte-shell .main-sidebar { position: fixed; }
+.adminlte-shell .main-sidebar .brand-link { background: #198b3d; border-bottom-color: rgba(255,255,255,.14); }
+.adminlte-shell .brand-link { display: flex; align-items: center; gap: .45rem; color: rgba(255,255,255,.8); }
+.adminlte-shell .brand-link:hover { color: #fff; }
+.adminlte-brand-image {
+    width: 34px !important;
+    height: 34px !important;
+    object-fit: contain;
+    background: rgba(255,255,255,.08);
+}
+.adminlte-brand-fallback { display: grid; width: 33px; height: 33px; place-items: center; color: #fff; background: var(--adminlte-brand); }
+.adminlte-sidebar-avatar { width: 34px; height: 34px; margin: 0; }
+.main-sidebar .user-panel .image { padding-right: .8rem; padding-left: .5rem; }
+.main-sidebar .user-panel .info { padding: 5px 0 0; }
+.main-sidebar .user-panel .info a { overflow: hidden; max-width: 174px; text-overflow: ellipsis; white-space: nowrap; }
+.main-sidebar .nav-sidebar .nav-link { cursor: pointer; }
+.main-sidebar .nav-sidebar .nav-link p { min-width: 0; }
+.main-sidebar .nav-sidebar .nav-link.active { color: #fff; background-color: var(--adminlte-teal); box-shadow: none; }
+.main-sidebar .nav-sidebar .nav-treeview .nav-link.active { background: rgba(23,162,184,.74); }
+.main-sidebar .nav-sidebar .nav-treeview .nav-link { font-size: 12px; }
+.main-sidebar .nav-sidebar .nav-icon { width: 1.55rem; text-align: center; }
+.main-sidebar .nav-sidebar .has-treeview > .nav-link .right { transition: transform .16s ease; }
+.main-sidebar .nav-sidebar .has-treeview.menu-open > .nav-link .right { transform: rotate(-90deg); }
+.adminlte-sidebar-note { margin: 1.2rem .7rem; padding: .7rem; color: #adb5bd; font-size: 10px; line-height: 1.8; background: rgba(255,255,255,.04); border-right: 3px solid rgba(23,162,184,.8); border-radius: 3px; }
+.adminlte-sidebar-note i { margin-left: .3rem; color: #5bc0de; }
+
+/* Page chrome */
+.content-header { padding: 15px .5rem 8px; }
+.content-header h1 { font-size: 22px; font-weight: 600; }
+.content-header .breadcrumb { padding: 0; margin: 8px 0 0; background: transparent; }
+.content-header .breadcrumb-item { font-size: 12px; }
+.adminlte-subtitle { margin: 4px 0 0; color: #6c757d; font-size: 12px; }
+.main-footer { padding: 13px 1rem; color: #6c757d; font-size: 11px; background: #fff; border-top: 1px solid var(--adminlte-line); }
+
+/* Messages */
+.adminlte-messages { margin-bottom: 12px; }
+.adminlte-messages .alert { margin: 0 0 8px; padding: .72rem 1rem; border: 0; border-radius: .2rem; }
+.adminlte-messages .alert-success { color: #155724; background: #d4edda; }
+.adminlte-messages .alert-warning { color: #856404; background: #fff3cd; }
+.adminlte-messages .alert-error, .adminlte-messages .alert-danger { color: #721c24; background: #f8d7da; }
+
+/* Dashboard */
+.adminlte-stat-box { display: block; color: #fff !important; text-decoration: none; }
+.adminlte-stat-box:hover { color: #fff !important; filter: brightness(.98); }
+.adminlte-stat-box .small-box-footer { display: block; }
+.adminlte-route-card, .adminlte-activity-card { min-height: 288px; }
+.adminlte-route-layout { display: grid; grid-template-columns: minmax(280px, 1.35fr) minmax(190px, .85fr); align-items: center; gap: .4rem; min-height: 211px; }
+.adminlte-route-map { min-height: 190px; padding: .4rem; background: linear-gradient(135deg, #f3f9fb, #fff); border: 1px solid #eef2f5; border-radius: .2rem; }
+.adminlte-route-map svg { display: block; width: 100%; height: 205px; }
+.adminlte-route-copy { padding: .5rem 1.1rem; }
+.adminlte-route-copy h4 { margin: 0 0 .7rem; color: #37424d; font-size: 17px; font-weight: 600; }
+.adminlte-route-copy p { color: #6c757d; font-size: 12px; line-height: 2; }
+.adminlte-activity-list { padding: 0; margin: 0; list-style: none; }
+.adminlte-activity-list li { display: flex; align-items: flex-start; gap: 9px; padding: 12px 16px; border-bottom: 1px solid #f1f3f5; }
+.adminlte-activity-list li:last-child { border-bottom: 0; }
+.adminlte-activity-list li > i { width: 17px; margin-top: 3px; text-align: center; }
+.adminlte-activity-list strong, .adminlte-activity-list a { display: block; overflow: hidden; max-width: 300px; color: #3d4b59; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.adminlte-activity-list small { display: block; margin-top: 2px; color: #88929c; font-size: 10px; }
+.adminlte-activity-list__empty { color: #88929c; font-size: 12px; }
+.adminlte-settings-box { min-height: 78px; margin-bottom: 12px; color: #343a40; text-decoration: none; }
+.adminlte-settings-box:hover { color: #343a40; box-shadow: 0 2px 9px rgba(0,0,0,.09); }
+.adminlte-settings-box .info-box-icon { width: 60px; color: #fff; }
+.adminlte-settings-box .info-box-number { overflow: hidden; color: #6c757d; font-size: 10px; font-weight: 400; line-height: 1.7; text-overflow: ellipsis; white-space: nowrap; }
+.adminlte-app-card { min-height: 145px; margin-bottom: 16px; }
+.adminlte-app-card .card-header { padding: .58rem .8rem; }
+.adminlte-app-card .card-title { font-size: 12px; font-weight: 600; }
+.adminlte-app-card .list-group-item { display: flex; align-items: center; min-height: 31px; padding: .42rem .75rem; font-size: 11px; border-color: #f0f2f4; }
+.adminlte-app-card .list-group-item > a:first-child { flex: 1; color: #5d6975; }
+
+/* Django changelist: turn native markup into an AdminLTE card. */
+#content { min-width: 0; }
+#content-main { float: none; width: auto; }
+.object-tools { display: flex; justify-content: flex-start; flex-wrap: wrap; gap: .4rem; float: none; padding: 0; margin: 0 0 12px; }
+.object-tools li { display: block; float: none; list-style: none; }
+.object-tools a, .button, input[type="submit"], input[type="button"], .submit-row input, button.button {
+    display: inline-block;
+    min-height: 32px;
+    padding: .38rem .72rem;
+    color: #fff !important;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.5;
+    text-decoration: none;
+    cursor: pointer;
+    background: #17a2b8;
+    border: 1px solid #17a2b8;
+    border-radius: .2rem;
+    box-shadow: none;
+}
+.object-tools a:hover, .button:hover, input[type="submit"]:hover, input[type="button"]:hover, .submit-row input:hover, button.button:hover { color: #fff !important; background: #138496; border-color: #117a8b; }
+.button.default, input[type="submit"].default { background: var(--adminlte-brand); border-color: var(--adminlte-brand); }
+.button.default:hover, input[type="submit"].default:hover { background: #157347; border-color: #146c43; }
+.deletelink, .deletelink:link { color: #fff !important; background: #dc3545 !important; border-color: #dc3545 !important; }
+
+#changelist, .module, fieldset.module, .inline-group, .submit-row, .delete-confirmation form {
+    overflow: hidden;
+    margin: 0 0 16px;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,.125);
+    border-radius: .25rem;
+    box-shadow: none;
+}
+.change-list #changelist { display: grid; grid-template-columns: minmax(0, 1fr) 225px; }
+.change-list #changelist-form { grid-column: 1; grid-row: 2 / span 4; overflow-x: auto; }
+.change-list #changelist-search { grid-column: 1; grid-row: 1; padding: 12px 14px; margin: 0; background: #fff; border-bottom: 1px solid #eef0f2; }
+.change-list #changelist-search > div { display: flex; gap: 6px; max-width: 620px; }
+.change-list #changelist-search label { display: none; }
+.change-list #changelist-search input[type="text"] { flex: 1; }
+.change-list #changelist .actions { grid-column: 1; grid-row: 3; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 9px 14px; margin: 0; color: #6c757d; background: #f8f9fa; border-top: 1px solid #edf0f2; }
+.change-list #changelist .paginator { grid-column: 1; grid-row: 4; padding: 10px 14px; margin: 0; color: #6c757d; background: #fff; border-top: 1px solid #edf0f2; }
+.change-list #changelist-filter { grid-column: 2; grid-row: 1 / span 4; float: none; width: auto; margin: 0; color: #495057; background: #fbfcfd; border-right: 1px solid #e9ecef; }
+#changelist-filter h2 { padding: 12px 14px; margin: 0; color: #fff; font-size: 12px; font-weight: 500; background: #6c757d; }
+#changelist-filter h3 { padding: 13px 14px 4px; margin: 0; color: #5f6b76; font-size: 11px; font-weight: 600; }
+#changelist-filter ul { padding: 0 14px 8px; margin: 0; list-style: none; }
+#changelist-filter li { font-size: 11px; line-height: 1.9; }
+#changelist-filter li.selected a { color: #138496; font-weight: 700; }
+
+#result_list { width: 100%; margin: 0; color: #495057; border-collapse: collapse; }
+#result_list thead th { padding: .75rem; color: #4a5968; font-size: 11px; font-weight: 600; text-align: right; white-space: nowrap; background: #f8f9fa; border-bottom: 2px solid #dee2e6; }
+#result_list thead th a { color: inherit; }
+#result_list tbody th, #result_list tbody td { padding: .65rem .75rem; font-size: 12px; vertical-align: middle; border-top: 1px solid #dee2e6; }
+#result_list tbody tr:hover { background: rgba(0,0,0,.025); }
+#result_list tbody th a { color: #138496; font-weight: 600; }
+#result_list .action-checkbox { width: 15px; height: 15px; }
+.actions select { min-width: 165px; }
+
+/* Native Django change forms and inlines. */
+fieldset.module { padding: 0; }
+fieldset.module h2, .inline-group h2, .module caption, .module h2 {
+    padding: .7rem .9rem;
+    margin: 0;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: right;
+    background: #17a2b8;
+    border: 0;
+}
+.module table { width: 100%; margin: 0; }
+.module th, .module td { padding: .65rem .8rem; font-size: 12px; vertical-align: middle; border-top: 1px solid #edf0f2; }
+.module th { color: #4f5d6a; font-weight: 600; text-align: right; }
+.module td { text-align: left; }
+.form-row { padding: 14px 16px; border-bottom: 1px solid #edf0f2; }
+.form-row:last-child { border-bottom: 0; }
+.aligned label { display: inline-block; min-width: 170px; padding: 7px 0; color: #4b5967; font-size: 12px; font-weight: 600; }
+.aligned .form-row > div { display: inline-block; max-width: min(100%, 780px); vertical-align: top; }
+input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="url"], input[type="tel"], select, textarea, .vTextField, .vLargeTextField {
+    max-width: 100%;
+    min-height: 35px;
+    padding: .35rem .65rem;
+    color: #495057;
+    font-size: 12px;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-radius: .2rem;
+    box-shadow: none;
+}
+textarea, .vLargeTextField { min-height: 110px; line-height: 1.9; }
+input:focus, select:focus, textarea:focus { border-color: #80bdff; outline: 0; box-shadow: 0 0 0 .16rem rgba(0,123,255,.16); }
+.aligned input[type="checkbox"] { width: 16px; height: 16px; vertical-align: -3px; accent-color: var(--adminlte-brand); }
+.aligned .vCheckboxLabel { min-width: 0; }
+.help, p.help, .helptext { display: block; max-width: 700px; margin: 5px 0 0; color: #7e8994; font-size: 10px; line-height: 1.8; }
+.readonly { padding: 7px 0; color: #4f5d6a; }
+ul.errorlist, .errornote { color: #721c24 !important; background: #f8d7da; border-radius: .2rem; }
+ul.errorlist { padding: .45rem 1.7rem; margin: 4px 0; font-size: 11px; }
+.errornote { padding: .65rem .8rem; margin-bottom: 12px; }
+.submit-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: .75rem .9rem; }
+.submit-row input { margin: 0; }
+.submit-row .deletelink-box { margin-right: auto; }
+.inline-group { overflow: hidden; }
+.inline-related h3 { padding: .65rem .85rem; margin: 0; color: #4b5967; font-size: 12px; background: #f8f9fa; border-bottom: 1px solid #edf0f2; }
+.inline-group .tabular { overflow-x: auto; }
+.inline-group table { width: 100%; margin: 0; border-collapse: collapse; }
+.inline-group td, .inline-group th { padding: .55rem; font-size: 11px; vertical-align: middle; border-top: 1px solid #edf0f2; }
+.selector { width: min(100%, 780px); }
+.selector select { min-height: 180px; }
+.selector .selector-available h2, .selector .selector-chosen h2 { color: #4f5d6a; font-size: 11px; background: #f1f3f5; }
+.calendarbox, .clockbox { z-index: 10010; }
+
+/* Custom project admin pages and deletion confirmation. */
+.delete-confirmation form { padding: 18px; }
+.delete-confirmation ul { padding-right: 20px; }
+.related-widget-wrapper-link { margin-right: 5px; }
+.related-widget-wrapper-link.add-related { color: #198754; }
+.related-widget-wrapper-link.change-related { color: #0d6efd; }
+.related-widget-wrapper-link.delete-related { color: #dc3545; }
+
+/* Login and popups use the same vendor font/theme but no side bar. */
+body.adminlte-login { min-height: 100vh; background: #f4f6f9; }
+.admin-standalone-wrapper { min-height: 100vh; }
+.admin-standalone-content-wrapper { min-height: 100vh; margin: 0; background: transparent; }
+.adminlte-login .content { display: grid; min-height: 100vh; padding: 20px; place-items: center; }
+.adminlte-login .content .container-fluid { width: 100%; max-width: none; }
+.adminlte-login #content { width: 100%; }
+.adminlte-login .login-box { width: min(100%, 390px); margin: 0 auto; }
+.adminlte-login .login-logo { margin-bottom: 18px; font-size: 25px; line-height: 1.3; }
+.adminlte-login .login-logo a { color: #495057; }
+.adminlte-login .login-card-body { padding: 25px; }
+.adminlte-login #login-form input { width: 100%; height: calc(2.25rem + 2px); padding: .375rem .75rem; color: #495057; background: #fff; border: 1px solid #ced4da; border-radius: .25rem; }
+.adminlte-login .input-group-append .input-group-text { min-width: 42px; justify-content: center; color: #6c757d; }
+.adminlte-login .login-error { padding: .55rem .7rem; color: #721c24; font-size: 11px; background: #f8d7da; border-radius: .2rem; }
+.adminlte-login ul.errorlist { margin-top: -10px; margin-bottom: 10px; }
+.adminlte-login .adminlte-login-logo { max-width: 230px; max-height: 62px; object-fit: contain; }
+.admin-popup .content-wrapper { min-height: 100vh; margin: 0; background: #f4f6f9; }
+.admin-popup .content { padding: 17px; }
+
+@media (max-width: 991.98px) {
+    body.sidebar-open::before { position: fixed; z-index: 1030; inset: 0; content: ""; background: rgba(0,0,0,.32); }
+    .adminlte-menu-search { justify-content: flex-end; }
+    .adminlte-menu-search .input-group { width: 190px; }
+    .change-list #changelist { display: block; }
+    .change-list #changelist-filter { width: auto; border-top: 1px solid #e9ecef; border-right: 0; }
+    #changelist-filter ul { display: flex; flex-wrap: wrap; gap: 4px 13px; }
+}
+
+@media (max-width: 767.98px) {
+    .adminlte-shell .content { padding: 0 0 17px; }
+    .content-header { padding-top: 12px; }
+    .content-header h1 { font-size: 19px; }
+    .adminlte-route-layout { grid-template-columns: 1fr; }
+    .adminlte-route-card { min-height: auto; }
+    .adminlte-route-copy { padding: .4rem; }
+    .aligned label, .aligned .form-row > div { display: block; min-width: 0; }
+    .selector { width: 100%; }
+    .submit-row .deletelink-box { width: 100%; margin: 4px 0 0; }
+    .submit-row .deletelink { width: 100%; text-align: center; }
+    .adminlte-menu-search { display: none; }
+}
+
+@media (max-width: 575.98px) {
+    .adminlte-shell .main-header#header { padding: .3rem .15rem; }
+    .adminlte-shell .main-header .nav-link { padding-right: .45rem; padding-left: .45rem; }
+    .main-footer .float-left { display: none; }
+    .adminlte-activity-list strong, .adminlte-activity-list a { max-width: 210px; }
+    #changelist-search > div { display: block; }
+    #changelist-search input[type="submit"] { width: 100%; margin-top: 6px; }
+    #result_list thead th, #result_list tbody th, #result_list tbody td { padding: .48rem; font-size: 10px; }
+}

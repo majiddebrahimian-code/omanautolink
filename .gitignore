@@ -184,3 +184,9 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 /output
+
+# Development-only Phase 9 preview media.  The source assets are versioned in
+# core/demo_assets/phase9 and copied into MEDIA_ROOT by the safe demo command.
+/media/site/home/phase9-demo/
+/media/cars/phase9-demo/
+/media/cars/spins/*/phase9-demo/

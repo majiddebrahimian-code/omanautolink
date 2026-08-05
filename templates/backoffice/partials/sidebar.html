@@ -1,0 +1,107 @@
+<aside id="backoffice-sidebar" class="backoffice-sidebar">
+    <a href="{% url 'backoffice:dashboard' %}" class="backoffice-brand">
+        {% if site_config.logo_dark %}
+            <img
+                src="{{ site_config.logo_dark.url }}"
+                alt="{{ site_config.site_name }}"
+                class="backoffice-brand__logo"
+            >
+        {% else %}
+            <span class="backoffice-brand__icon">
+                <i class="fa fa-car" aria-hidden="true"></i>
+            </span>
+        {% endif %}
+
+        <span class="backoffice-brand__text">
+            <strong>{{ site_config.site_name|default:"برند شما" }}</strong>
+            <small>پنل مدیریت</small>
+        </span>
+    </a>
+
+    <div class="backoffice-sidebar-user">
+        <span class="backoffice-sidebar-user__avatar">
+            {{ request.user.get_username|first|upper }}
+        </span>
+
+        <div>
+            <strong>{{ request.user.get_full_name|default:request.user.get_username }}</strong>
+            <small>کاربر داخلی سیستم</small>
+        </div>
+    </div>
+
+    <nav class="backoffice-navigation" aria-label="منوی مدیریت">
+        <ul class="backoffice-nav-list">
+            <li>
+                <a
+                    href="{% url 'backoffice:dashboard' %}"
+                    class="backoffice-nav-link {% if request.resolver_match.url_name == 'dashboard' %}is-active{% endif %}"
+                >
+                    <i class="fa fa-dashboard" aria-hidden="true"></i>
+                    <span>داشبورد</span>
+                </a>
+            </li>
+
+            {% for section in panel_navigation %}
+                <li class="backoffice-nav-section">
+                    <details class="backoffice-nav-group" open>
+                        <summary>
+                            <span>
+                                <i class="fa {{ section.icon }}" aria-hidden="true"></i>
+                                {{ section.label }}
+                            </span>
+
+                            <i class="fa fa-angle-left backoffice-nav-chevron" aria-hidden="true"></i>
+                        </summary>
+
+                        <ul class="backoffice-nav-sublist">
+                            {% for item in section.items %}
+                                {% if item.children %}
+                                    <li>
+                                        <details class="backoffice-nav-subgroup" open>
+                                            <summary>
+                                                <span>
+                                                    <i class="fa {{ item.icon }}" aria-hidden="true"></i>
+                                                    {{ item.label }}
+                                                </span>
+
+                                                <i class="fa fa-angle-left backoffice-nav-chevron" aria-hidden="true"></i>
+                                            </summary>
+
+                                            <ul class="backoffice-nav-nested-list">
+                                                {% for child in item.children %}
+                                                    <li>
+                                                        <a
+                                                            href="{{ child.url }}"
+                                                            class="backoffice-nav-link backoffice-nav-link--nested {% if request.resolver_match.url_name == child.url_name %}is-active{% endif %}"
+                                                        >
+                                                            <i class="fa {{ child.icon }}" aria-hidden="true"></i>
+                                                            <span>{{ child.label }}</span>
+                                                        </a>
+                                                    </li>
+                                                {% endfor %}
+                                            </ul>
+                                        </details>
+                                    </li>
+                                {% else %}
+                                    <li>
+                                        <a
+                                            href="{{ item.url }}"
+                                            class="backoffice-nav-link backoffice-nav-link--sub {% if request.resolver_match.url_name == item.url_name %}is-active{% endif %}"
+                                        >
+                                            <i class="fa {{ item.icon }}" aria-hidden="true"></i>
+                                            <span>{{ item.label }}</span>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+                        </ul>
+                    </details>
+                </li>
+            {% empty %}
+                <li class="backoffice-nav-empty">
+                    هیچ بخش مجازی برای این حساب وجود ندارد.
+                </li>
+            {% endfor %}
+        </ul>
+    </nav>
+</aside>

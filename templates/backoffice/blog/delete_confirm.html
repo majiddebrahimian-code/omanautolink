@@ -1,0 +1,36 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}حذف مقاله | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}حذف مقاله{% endblock %}
+
+{% block page_description %}
+    <p>این عملیات پس از تأیید قابل بازگردانی نیست.</p>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'backoffice:blog_post_list' %}" class="backoffice-button backoffice-button--secondary">بازگشت به مقالات</a>
+{% endblock %}
+
+{% block content %}
+    <form method="post" class="backoffice-form-card backoffice-form-card--warning">
+        {% csrf_token %}
+        <div class="backoffice-confirmation-summary">
+            <span class="backoffice-confirmation-summary__icon"><i class="fa fa-trash" aria-hidden="true"></i></span>
+            <div>
+                <h2>{{ post.title }}</h2>
+                <p>
+                    {% if post.status == 'published' %}این مقاله اکنون در سایت عمومی قابل مشاهده است.{% else %}این مقاله در وضعیت پیش‌نویس است.{% endif %}
+                </p>
+            </div>
+        </div>
+        <p class="backoffice-warning-note">با تأیید این عملیات، مقاله و آدرس عمومی آن به‌طور دائمی حذف می‌شود.</p>
+        <div class="backoffice-form-actions">
+            <button type="submit" class="backoffice-button backoffice-button--danger">
+                <i class="fa fa-trash" aria-hidden="true"></i>
+                حذف دائمی مقاله
+            </button>
+            <a href="{% url 'backoffice:blog_post_edit' post.pk %}" class="backoffice-button backoffice-button--secondary">انصراف</a>
+        </div>
+    </form>
+{% endblock %}

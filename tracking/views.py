@@ -5,6 +5,7 @@ from django.shortcuts import render
 
 from customers.models import SearchLog
 from customers.services import record_successful_tracking_lookup
+from core.seo import breadcrumb_schema, page_context
 
 from .forms import PublicTrackingLookupForm
 from .rate_limits import is_public_tracking_lookup_allowed
@@ -57,6 +58,20 @@ def public_tracking_lookup(request):
         request,
         "tracking/public_lookup.html",
         {
+            **page_context(
+                request,
+                title="رهگیری خودرو",
+                description="با وارد کردن کد رهگیری، مرحلهٔ فعلی ارسال خودرو و زمان تقریبی باقی‌مانده را مشاهده کنید.",
+                canonical_path="/track/",
+                noindex=bool(tracking_data or lookup_error),
+                structured_data=breadcrumb_schema(
+                    request,
+                    [
+                        ("صفحهٔ اصلی", "/"),
+                        ("رهگیری خودرو", "/track/"),
+                    ],
+                ),
+            ),
             "form": form,
             "tracking_data": tracking_data,
             "lookup_error": lookup_error,

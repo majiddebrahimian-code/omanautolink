@@ -1,0 +1,250 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}مدیریت کارکنان | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}مدیریت کارکنان{% endblock %}
+
+{% block page_description %}
+    <p>حساب‌های داخلی، نقش‌های عملیاتی، مسئولیت مرحله‌های تحویل و وضعیت اتصال Telegram را از یک نقطه کنترل کنید.</p>
+{% endblock %}
+
+{% block page_actions %}
+    <span class="backoffice-result-count">{{ result_count }} حساب داخلی</span>
+    <a
+        href="{% url 'backoffice:staff_create' %}"
+        class="backoffice-button backoffice-button--primary backoffice-icon-button"
+        aria-label="افزودن کارمند"
+        data-tooltip="افزودن کارمند"
+        title="افزودن کارمند"
+    >
+        <i class="fa fa-user-plus" aria-hidden="true"></i>
+    </a>
+{% endblock %}
+
+{% block content %}
+    <section class="backoffice-staff-metrics" aria-label="خلاصهٔ کارکنان">
+        <article class="backoffice-staff-metric backoffice-staff-metric--active">
+            <span><i class="fa fa-user" aria-hidden="true"></i></span>
+            <div>
+                <small>کارکنان فعال</small>
+                <strong>{{ active_staff_count }}</strong>
+            </div>
+        </article>
+        <article class="backoffice-staff-metric backoffice-staff-metric--employee">
+            <span><i class="fa fa-briefcase" aria-hidden="true"></i></span>
+            <div>
+                <small>کارمند</small>
+                <strong>{{ employee_count }}</strong>
+            </div>
+        </article>
+        <article class="backoffice-staff-metric backoffice-staff-metric--clearance">
+            <span><i class="fa fa-truck" aria-hidden="true"></i></span>
+            <div>
+                <small>کارمند ترخیص</small>
+                <strong>{{ clearance_staff_count }}</strong>
+            </div>
+        </article>
+        <article class="backoffice-staff-metric backoffice-staff-metric--inactive">
+            <span><i class="fa fa-user-times" aria-hidden="true"></i></span>
+            <div>
+                <small>حساب غیرفعال</small>
+                <strong>{{ inactive_staff_count }}</strong>
+            </div>
+        </article>
+    </section>
+
+    <section class="backoffice-search-card backoffice-staff-filter-card">
+        <form method="get" class="backoffice-staff-filter-form">
+            <div class="backoffice-staff-filter-form__search">
+                <label for="staff-search" class="backoffice-search-label">جست‌وجوی کارمند</label>
+                <input
+                    id="staff-search"
+                    type="search"
+                    name="q"
+                    value="{{ query }}"
+                    class="backoffice-input"
+                    placeholder="نام، نام کاربری، ایمیل یا شماره تماس"
+                >
+            </div>
+
+            <div>
+                <label for="staff-role">نقش</label>
+                <select id="staff-role" name="role" class="backoffice-select">
+                    <option value="">همهٔ نقش‌ها</option>
+                    <option value="system_administrator" {% if selected_role == "system_administrator" %}selected{% endif %}>مدیر اصلی سیستم</option>
+                    <option value="employee" {% if selected_role == "employee" %}selected{% endif %}>کارمند</option>
+                    <option value="clearance_employee" {% if selected_role == "clearance_employee" %}selected{% endif %}>کارمند ترخیص</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="staff-status">وضعیت حساب</label>
+                <select id="staff-status" name="status" class="backoffice-select">
+                    <option value="">همه</option>
+                    <option value="active" {% if selected_status == "active" %}selected{% endif %}>فعال</option>
+                    <option value="inactive" {% if selected_status == "inactive" %}selected{% endif %}>غیرفعال</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="staff-telegram">Telegram</label>
+                <select id="staff-telegram" name="telegram" class="backoffice-select">
+                    <option value="">همه</option>
+                    <option value="connected" {% if selected_telegram == "connected" %}selected{% endif %}>متصل</option>
+                    <option value="pending" {% if selected_telegram == "pending" %}selected{% endif %}>کد در انتظار استفاده</option>
+                    <option value="disconnected" {% if selected_telegram == "disconnected" %}selected{% endif %}>بدون اتصال</option>
+                </select>
+            </div>
+
+            <div class="backoffice-search-actions">
+                <button type="submit" class="backoffice-button backoffice-button--primary">
+                    <i class="fa fa-search" aria-hidden="true"></i>
+                    جست‌وجو
+                </button>
+                {% if query or selected_role or selected_status or selected_telegram %}
+                    <a href="{% url 'backoffice:staff_list' %}" class="backoffice-button backoffice-button--secondary">پاک‌کردن</a>
+                {% endif %}
+            </div>
+        </form>
+    </section>
+
+    <section class="backoffice-table-card backoffice-staff-table-card">
+        <div class="backoffice-table-scroll">
+            <table class="backoffice-table backoffice-staff-table">
+                <thead>
+                    <tr>
+                        <th>کارمند</th>
+                        <th>نقش و دسترسی ویژه</th>
+                        <th>مرحله‌های مسئول</th>
+                        <th>Telegram</th>
+                        <th>وضعیت</th>
+                        <th>آخرین ورود</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for staff_user in page_obj %}
+                        <tr>
+                            <td>
+                                <div class="backoffice-staff-identity">
+                                    <span class="backoffice-staff-avatar">{{ staff_user.get_username|first|upper }}</span>
+                                    <div>
+                                        <strong>{{ staff_user.get_full_name|default:staff_user.get_username }}</strong>
+                                        <small dir="ltr">@{{ staff_user.username }}</small>
+                                        {% if staff_user.panel_profile.phone %}
+                                            <small dir="ltr">{{ staff_user.panel_profile.phone }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="backoffice-role-chip backoffice-role-chip--{{ staff_user.business_role_tone }}">
+                                    <i class="fa {% if staff_user.business_role == 'clearance_employee' %}fa-truck{% elif staff_user.business_role == 'system_administrator' %}fa-shield{% else %}fa-briefcase{% endif %}" aria-hidden="true"></i>
+                                    {{ staff_user.business_role_label }}
+                                </span>
+                                {% if staff_user.exceptional_capabilities %}
+                                    <div class="backoffice-capability-summary" title="{{ staff_user.exceptional_capabilities|length }} دسترسی ویژه">
+                                        <i class="fa fa-key" aria-hidden="true"></i>
+                                        {{ staff_user.exceptional_capabilities|length }} دسترسی ویژه
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="backoffice-staff-stage-chips">
+                                    {% for stage in staff_user.assigned_stage_list %}
+                                        <span>{{ stage.name }}</span>
+                                    {% empty %}
+                                        <span class="backoffice-empty-inline">—</span>
+                                    {% endfor %}
+                                </div>
+                            </td>
+                            <td>
+                                {% if staff_user.current_telegram_link %}
+                                    <span class="backoffice-telegram-state backoffice-telegram-state--connected" title="{{ staff_user.current_telegram_link.telegram_username|default:'حساب Telegram متصل' }}">
+                                        <i class="fa fa-paper-plane" aria-hidden="true"></i>
+                                        متصل
+                                    </span>
+                                {% elif staff_user.current_telegram_link_code %}
+                                    <span class="backoffice-telegram-state backoffice-telegram-state--pending" title="تا {{ staff_user.current_telegram_link_code.expires_at|date:'Y/m/d H:i' }} معتبر است">
+                                        <i class="fa fa-clock-o" aria-hidden="true"></i>
+                                        کد در انتظار
+                                    </span>
+                                {% else %}
+                                    <span class="backoffice-telegram-state backoffice-telegram-state--disconnected">
+                                        <i class="fa fa-chain-broken" aria-hidden="true"></i>
+                                        بدون اتصال
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if staff_user.is_active %}
+                                    <span class="backoffice-status backoffice-status--for-sale">فعال</span>
+                                {% else %}
+                                    <span class="backoffice-status backoffice-status--draft">غیرفعال</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ staff_user.last_login|date:"Y/m/d H:i"|default:"—" }}</td>
+                            <td>
+                                <div class="backoffice-row-actions">
+                                    <a
+                                        href="{% url 'backoffice:staff_detail' staff_user.pk %}"
+                                        class="backoffice-button backoffice-button--small backoffice-button--outline backoffice-icon-button"
+                                        aria-label="مشاهدهٔ پروندهٔ {{ staff_user.get_full_name|default:staff_user.username }}"
+                                        data-tooltip="مشاهدهٔ پرونده"
+                                        title="مشاهدهٔ پرونده"
+                                    >
+                                        <i class="fa fa-eye" aria-hidden="true"></i>
+                                    </a>
+                                    {% if not staff_user.is_superuser %}
+                                        <a
+                                            href="{% url 'backoffice:staff_edit' staff_user.pk %}"
+                                            class="backoffice-button backoffice-button--small backoffice-button--secondary backoffice-icon-button"
+                                            aria-label="ویرایش {{ staff_user.get_full_name|default:staff_user.username }}"
+                                            data-tooltip="ویرایش کارمند"
+                                            title="ویرایش کارمند"
+                                        >
+                                            <i class="fa fa-pencil" aria-hidden="true"></i>
+                                        </a>
+                                        <a
+                                            href="{% url 'backoffice:staff_status' staff_user.pk %}"
+                                            class="backoffice-button backoffice-button--small {% if staff_user.is_active %}backoffice-button--danger{% else %}backoffice-button--primary{% endif %} backoffice-icon-button"
+                                            aria-label="{% if staff_user.is_active %}غیرفعال‌سازی{% else %}فعال‌سازی{% endif %} {{ staff_user.get_full_name|default:staff_user.username }}"
+                                            data-tooltip="{% if staff_user.is_active %}غیرفعال‌سازی حساب{% else %}فعال‌سازی حساب{% endif %}"
+                                            title="{% if staff_user.is_active %}غیرفعال‌سازی حساب{% else %}فعال‌سازی حساب{% endif %}"
+                                        >
+                                            <i class="fa {% if staff_user.is_active %}fa-user-times{% else %}fa-user-plus{% endif %}" aria-hidden="true"></i>
+                                        </a>
+                                    {% else %}
+                                        <span class="backoffice-action-hint" title="حساب مدیر اصلی از این پنل تغییر نمی‌کند.">محافظت‌شده</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="backoffice-table-empty">
+                                {% if query or selected_role or selected_status or selected_telegram %}
+                                    حساب داخلی مطابق فیلترهای انتخاب‌شده پیدا نشد.
+                                {% else %}
+                                    هنوز کارمندی در سیستم ثبت نشده است.
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="backoffice-pagination" aria-label="صفحه‌بندی کارکنان">
+                {% if page_obj.has_previous %}
+                    <a href="?q={{ query|urlencode }}&amp;role={{ selected_role|urlencode }}&amp;status={{ selected_status|urlencode }}&amp;telegram={{ selected_telegram|urlencode }}&amp;page={{ page_obj.previous_page_number }}">قبلی</a>
+                {% endif %}
+                <span>صفحهٔ {{ page_obj.number }} از {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?q={{ query|urlencode }}&amp;role={{ selected_role|urlencode }}&amp;status={{ selected_status|urlencode }}&amp;telegram={{ selected_telegram|urlencode }}&amp;page={{ page_obj.next_page_number }}">بعدی</a>
+                {% endif %}
+            </nav>
+        {% endif %}
+    </section>
+{% endblock %}

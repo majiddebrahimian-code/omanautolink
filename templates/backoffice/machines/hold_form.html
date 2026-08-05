@@ -1,0 +1,53 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}ثبت رزرو موقت | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}ثبت رزرو موقت{% endblock %}
+
+{% block page_description %}
+    <p>
+        ماشین «{{ machine.title }}» پس از ثبت رزرو از فهرست ماشین‌های قابل فروش خارج می‌شود؛ فروش نهایی همچنان باید جداگانه تأیید شود.
+    </p>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'backoffice:machine_list' %}" class="backoffice-button backoffice-button--secondary">بازگشت</a>
+{% endblock %}
+
+{% block content %}
+    <form method="post" class="backoffice-form-card" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="backoffice-form-errors" role="alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <section class="backoffice-confirmation-summary">
+            <span class="backoffice-confirmation-summary__icon backoffice-confirmation-summary__icon--hold">
+                <i class="fa fa-clock-o" aria-hidden="true"></i>
+            </span>
+            <div>
+                <h2>{{ machine.title }}</h2>
+                <p>{{ machine.brand }} {{ machine.model }}</p>
+            </div>
+        </section>
+
+        <div class="backoffice-form-grid">
+            {% for field in form %}
+                <div class="backoffice-field">
+                    <label for="{{ field.id_for_label }}" class="backoffice-field__label">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}<div class="backoffice-field__error" role="alert">{{ field.errors }}</div>{% endif %}
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="backoffice-form-actions">
+            <button type="submit" class="backoffice-button backoffice-button--warning">
+                <i class="fa fa-clock-o" aria-hidden="true"></i>
+                ثبت رزرو موقت
+            </button>
+            <a href="{% url 'backoffice:machine_list' %}" class="backoffice-button backoffice-button--secondary">انصراف</a>
+        </div>
+    </form>
+{% endblock %}

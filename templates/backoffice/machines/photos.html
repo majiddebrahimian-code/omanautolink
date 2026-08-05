@@ -1,0 +1,121 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}تصاویر {{ machine.title }} | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}تصاویر ماشین{% endblock %}
+
+{% block page_description %}
+    <p>
+        گالری عادی «{{ machine.title }}». این تصاویر در سایت عمومی نمایش داده می‌شوند؛ تصاویر نمایش ۳۶۰ درجه مسیر جداگانه‌ای دارند.
+    </p>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'backoffice:machine_edit' machine.pk %}" class="backoffice-button backoffice-button--secondary">
+        <i class="fa fa-pencil" aria-hidden="true"></i>
+        بازگشت به ویرایش ماشین
+    </a>
+{% endblock %}
+
+{% block content %}
+    {% if can_modify_media and perms.cars.add_carphoto %}
+        <section class="backoffice-form-card backoffice-photo-upload-card">
+            <div class="backoffice-form-section__heading">
+                <h2>افزودن تصاویر جدید</h2>
+                <p>می‌توانید چند فایل JPG، PNG یا WebP را هم‌زمان انتخاب کنید. نخستین تصویر، در صورت نبود کاور، به‌طور خودکار کاور می‌شود.</p>
+            </div>
+
+            <form method="post" enctype="multipart/form-data" action="{% url 'backoffice:machine_photo_upload' machine.pk %}" class="backoffice-upload-form">
+                {% csrf_token %}
+                <div class="backoffice-field backoffice-field--wide">
+                    <label for="{{ upload_form.images.id_for_label }}" class="backoffice-field__label">{{ upload_form.images.label }}</label>
+                    {{ upload_form.images }}
+                </div>
+                <button type="submit" class="backoffice-button backoffice-button--primary">
+                    <i class="fa fa-upload" aria-hidden="true"></i>
+                    افزودن تصاویر
+                </button>
+            </form>
+        </section>
+    {% elif not can_modify_media %}
+        <section class="backoffice-readonly-notice">
+            <i class="fa fa-lock" aria-hidden="true"></i>
+            تصاویر این ماشین پس از رزرو یا فروش فقط قابل مشاهده هستند تا سابقهٔ معامله حفظ شود.
+        </section>
+    {% endif %}
+
+    <section class="backoffice-photo-grid" aria-label="گالری تصاویر ماشین">
+        {% for item in photo_items %}
+            {% with photo=item.photo form=item.form %}
+                <article class="backoffice-photo-card {% if photo.is_cover %}is-cover{% endif %}">
+                    <div class="backoffice-photo-card__image">
+                        {% if photo.image %}
+                            <img src="{{ photo.image.url }}" alt="{{ photo.alt_text|default:machine.title }}">
+                        {% else %}
+                            <div class="backoffice-photo-card__missing">
+                                <i class="fa fa-paper-plane" aria-hidden="true"></i>
+                                <span>تصویر Telegram</span>
+                            </div>
+                        {% endif %}
+
+                        {% if photo.is_cover %}
+                            <span class="backoffice-cover-badge"><i class="fa fa-star" aria-hidden="true"></i> کاور</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="backoffice-photo-card__body">
+                        {% if can_modify_media and perms.cars.change_carphoto %}
+                            <form method="post" action="{% url 'backoffice:machine_photo_update' machine.pk photo.pk %}" class="backoffice-photo-metadata-form">
+                                {% csrf_token %}
+                                <div class="backoffice-field">
+                                    <label for="{{ form.alt_text.id_for_label }}" class="backoffice-field__label">{{ form.alt_text.label }}</label>
+                                    {{ form.alt_text }}
+                                </div>
+                                <div class="backoffice-field">
+                                    <label for="{{ form.sort_order.id_for_label }}" class="backoffice-field__label">{{ form.sort_order.label }}</label>
+                                    {{ form.sort_order }}
+                                </div>
+                                <button type="submit" class="backoffice-button backoffice-button--small backoffice-button--secondary backoffice-icon-button" aria-label="ذخیرهٔ اطلاعات تصویر" data-tooltip="ذخیرهٔ اطلاعات تصویر" title="ذخیرهٔ اطلاعات تصویر">
+                                    <i class="fa fa-floppy-o" aria-hidden="true"></i>
+                                </button>
+                            </form>
+                        {% else %}
+                            <dl class="backoffice-photo-readonly-data">
+                                <div><dt>متن جایگزین</dt><dd>{{ photo.alt_text|default:"—" }}</dd></div>
+                                <div><dt>ترتیب</dt><dd>{{ photo.sort_order }}</dd></div>
+                            </dl>
+                        {% endif %}
+
+                        {% if can_modify_media %}
+                            <div class="backoffice-photo-card__actions">
+                                {% if perms.cars.change_carphoto and photo.image and not photo.is_cover %}
+                                    <form method="post" action="{% url 'backoffice:machine_photo_set_cover' machine.pk photo.pk %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="backoffice-button backoffice-button--small backoffice-button--warning backoffice-icon-button" aria-label="انتخاب به‌عنوان کاور" data-tooltip="انتخاب به‌عنوان کاور" title="انتخاب به‌عنوان کاور">
+                                            <i class="fa fa-star-o" aria-hidden="true"></i>
+                                        </button>
+                                    </form>
+                                {% endif %}
+
+                                {% if perms.cars.delete_carphoto %}
+                                    <form method="post" action="{% url 'backoffice:machine_photo_delete' machine.pk photo.pk %}" onsubmit="return confirm('آیا از حذف این تصویر مطمئن هستید؟');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="backoffice-button backoffice-button--small backoffice-button--danger backoffice-icon-button" aria-label="حذف تصویر" data-tooltip="حذف تصویر" title="حذف تصویر">
+                                            <i class="fa fa-trash" aria-hidden="true"></i>
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </article>
+            {% endwith %}
+        {% empty %}
+            <div class="backoffice-photo-empty">
+                <i class="fa fa-picture-o" aria-hidden="true"></i>
+                <strong>هنوز تصویری برای این ماشین ثبت نشده است.</strong>
+                <span>از بخش بالای صفحه تصاویر گالری را انتخاب و اضافه کنید.</span>
+            </div>
+        {% endfor %}
+    </section>
+{% endblock %}

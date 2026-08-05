@@ -1,165 +1,68 @@
-<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% extends "public/base.html" %}
 
-    <title>رهگیری خودرو | Oman Auto Link</title>
-</head>
-<body>
-    <header>
+{% block content %}
+<section class="form-page section">
+    <div class="container form-page__inner">
+        <p class="eyebrow"><span></span>پیگیری شفاف</p>
         <h1>رهگیری خودرو</h1>
-        <p>
-            کد رهگیری خود را وارد کنید تا وضعیت ارسال خودرو و زمان تقریبی
-            باقی‌مانده را مشاهده کنید.
-        </p>
-    </header>
+        <p class="form-page__intro">کد رهگیری اختصاصی خودرو را وارد کنید تا وضعیت ارسال و زمان تقریبی باقی‌مانده را ببینید.</p>
+        <form class="public-form" method="post" novalidate>
+            {% csrf_token %}
+            <div>
+                {{ form.tracking_code.label_tag }}
+                {{ form.tracking_code }}
+                {% for error in form.tracking_code.errors %}<p class="field-error" role="alert">{{ error }}</p>{% endfor %}
+            </div>
+            <button class="button button--primary" type="submit">مشاهدهٔ وضعیت رهگیری</button>
+        </form>
 
-    <main>
-        <section>
-            <form method="post" novalidate>
-                {% csrf_token %}
+        {% if lookup_error %}<section class="lookup-alert" role="alert"><p>{{ lookup_error }}</p></section>{% endif %}
+    </div>
+</section>
 
-                <div>
-                    {{ form.tracking_code.label_tag }}
-                    {{ form.tracking_code }}
+{% if tracking_data %}
+<section class="section"><div class="container tracking-result">
+    <section>
+        <h2>اطلاعات خودرو</h2>
+        <dl>
+            <dt>کد رهگیری</dt><dd dir="ltr">{{ tracking_data.tracking_code }}</dd>
+            <dt>خودرو</dt><dd>{{ tracking_data.vehicle.title }}</dd>
+            <dt>برند</dt><dd>{{ tracking_data.vehicle.brand }}</dd>
+            <dt>مدل</dt><dd>{{ tracking_data.vehicle.model }}</dd>
+            {% if tracking_data.vehicle.year %}<dt>سال ساخت</dt><dd>{{ tracking_data.vehicle.year }}</dd>{% endif %}
+            {% if tracking_data.vehicle.color %}<dt>رنگ</dt><dd>{{ tracking_data.vehicle.color }}</dd>{% endif %}
+        </dl>
+    </section>
 
-                    {% for error in form.tracking_code.errors %}
-                        <p role="alert">{{ error }}</p>
-                    {% endfor %}
-                </div>
-
-                <button type="submit">مشاهده وضعیت رهگیری</button>
-            </form>
-        </section>
-
-        {% if lookup_error %}
-            <section role="alert">
-                <p>{{ lookup_error }}</p>
-            </section>
+    <section>
+        <h2>وضعیت فعلی</h2>
+        {% if tracking_data.current_stage %}
+            <p>مرحلهٔ فعلی: <strong>{{ tracking_data.current_stage.name }}</strong></p>
+            {% if tracking_data.current_stage.state == "completed" %}<p>وضعیت مرحله: تکمیل‌شده</p>{% elif tracking_data.current_stage.state == "entered" %}<p>وضعیت مرحله: در حال انجام</p>{% elif tracking_data.current_stage.state == "pending" %}<p>وضعیت مرحله: در انتظار تأیید</p>{% elif tracking_data.current_stage.state == "skipped" %}<p>وضعیت مرحله: رد شده</p>{% endif %}
         {% endif %}
+        {% if tracking_data.remaining_eta_days is not None %}<p>زمان تقریبی باقی‌مانده تا تحویل: <strong>{{ tracking_data.remaining_eta_days }} روز</strong></p>{% endif %}
+    </section>
 
-        {% if tracking_data %}
-            <section>
-                <h2>اطلاعات خودرو</h2>
+    <section>
+        <h2>تاریخچهٔ مراحل ارسال</h2>
+        <ol class="tracking-history">
+            {% for stage in tracking_data.stages %}
+                <li>
+                    <h3>{{ stage.name }}</h3>
+                    {% if stage.state == "completed" %}<p>وضعیت: تکمیل‌شده</p>{% elif stage.state == "entered" %}<p>وضعیت: در حال انجام</p>{% elif stage.state == "pending" %}<p>وضعیت: در انتظار</p>{% elif stage.state == "skipped" %}<p>وضعیت: رد شده</p>{% endif %}
+                    {% if stage.planned_date %}<p>تاریخ برنامه‌ریزی‌شده: {{ stage.planned_date|date:"Y/m/d" }}</p>{% endif %}
+                    {% if stage.actual_arrival %}<p>زمان ورود: {{ stage.actual_arrival|date:"Y/m/d H:i" }}</p>{% endif %}
+                    {% if stage.completed_at %}<p>زمان تکمیل: {{ stage.completed_at|date:"Y/m/d H:i" }}</p>{% endif %}
+                    {% if stage.skipped_at %}<p>زمان رد شدن: {{ stage.skipped_at|date:"Y/m/d H:i" }}</p>{% endif %}
+                </li>
+            {% endfor %}
+        </ol>
+    </section>
 
-                <dl>
-                    <dt>کد رهگیری</dt>
-                    <dd dir="ltr">{{ tracking_data.tracking_code }}</dd>
-
-                    <dt>خودرو</dt>
-                    <dd>{{ tracking_data.vehicle.title }}</dd>
-
-                    <dt>برند</dt>
-                    <dd>{{ tracking_data.vehicle.brand }}</dd>
-
-                    <dt>مدل</dt>
-                    <dd>{{ tracking_data.vehicle.model }}</dd>
-
-                    {% if tracking_data.vehicle.year %}
-                        <dt>سال ساخت</dt>
-                        <dd>{{ tracking_data.vehicle.year }}</dd>
-                    {% endif %}
-
-                    {% if tracking_data.vehicle.color %}
-                        <dt>رنگ</dt>
-                        <dd>{{ tracking_data.vehicle.color }}</dd>
-                    {% endif %}
-                </dl>
-            </section>
-
-            <section>
-                <h2>وضعیت فعلی</h2>
-
-                {% if tracking_data.current_stage %}
-                    <p>
-                        مرحلهٔ فعلی:
-                        <strong>{{ tracking_data.current_stage.name }}</strong>
-                    </p>
-
-                    {% if tracking_data.current_stage.state == "completed" %}
-                        <p>وضعیت مرحله: تکمیل‌شده</p>
-                    {% elif tracking_data.current_stage.state == "entered" %}
-                        <p>وضعیت مرحله: در حال انجام</p>
-                    {% elif tracking_data.current_stage.state == "pending" %}
-                        <p>وضعیت مرحله: در انتظار تأیید</p>
-                    {% elif tracking_data.current_stage.state == "skipped" %}
-                        <p>وضعیت مرحله: رد شده</p>
-                    {% endif %}
-                {% endif %}
-
-                {% if tracking_data.remaining_eta_days is not None %}
-                    <p>
-                        زمان تقریبی باقی‌مانده تا تحویل:
-                        <strong>{{ tracking_data.remaining_eta_days }} روز</strong>
-                    </p>
-                {% endif %}
-            </section>
-
-            <section>
-                <h2>تاریخچهٔ مراحل ارسال</h2>
-
-                <ol>
-                    {% for stage in tracking_data.stages %}
-                        <li>
-                            <h3>{{ stage.name }}</h3>
-
-                            {% if stage.state == "completed" %}
-                                <p>وضعیت: تکمیل‌شده</p>
-                            {% elif stage.state == "entered" %}
-                                <p>وضعیت: در حال انجام</p>
-                            {% elif stage.state == "pending" %}
-                                <p>وضعیت: در انتظار</p>
-                            {% elif stage.state == "skipped" %}
-                                <p>وضعیت: رد شده</p>
-                            {% endif %}
-
-                            {% if stage.planned_date %}
-                                <p>
-                                    تاریخ برنامه‌ریزی‌شده:
-                                    {{ stage.planned_date|date:"Y/m/d" }}
-                                </p>
-                            {% endif %}
-
-                            {% if stage.actual_arrival %}
-                                <p>
-                                    زمان ورود:
-                                    {{ stage.actual_arrival|date:"Y/m/d H:i" }}
-                                </p>
-                            {% endif %}
-
-                            {% if stage.completed_at %}
-                                <p>
-                                    زمان تکمیل:
-                                    {{ stage.completed_at|date:"Y/m/d H:i" }}
-                                </p>
-                            {% endif %}
-
-                            {% if stage.skipped_at %}
-                                <p>
-                                    زمان رد شدن:
-                                    {{ stage.skipped_at|date:"Y/m/d H:i" }}
-                                </p>
-                            {% endif %}
-                        </li>
-                    {% endfor %}
-                </ol>
-            </section>
-
-            <section aria-labelledby="telegram-notification-heading">
-                <h2 id="telegram-notification-heading">اعلان‌های تلگرام</h2>
-                <p>
-                    اگر خودرو را از عمان اتولینک خریداری کرده‌اید، می‌توانید
-                    کد فعال‌سازی یک‌بارمصرف ربات را از مشاور خود دریافت کنید.
-                    با واردکردن آن در ربات، تغییرات مهم رهگیری به‌صورت خودکار
-                    برای شما ارسال می‌شود.
-                </p>
-                <p>
-                    کد فعال‌سازی با کد رهگیری متفاوت است و فقط برای اتصال امن
-                    حساب تلگرام شما استفاده می‌شود.
-                </p>
-            </section>
-        {% endif %}
-    </main>
-</body>
-</html>
+    <section aria-labelledby="telegram-notification-heading">
+        <h2 id="telegram-notification-heading">اعلان‌های تلگرام</h2>
+        <p>کد فعال‌سازی یک‌بارمصرف ربات را از مشاور دریافت و در ربات وارد کنید تا تغییرات مهم رهگیری برایتان ارسال شود.</p>
+    </section>
+</div></section>
+{% endif %}
+{% endblock %}

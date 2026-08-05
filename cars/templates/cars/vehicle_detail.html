@@ -1,0 +1,58 @@
+{% extends "public/base.html" %}
+
+{% block content %}
+<section class="vehicle-detail section">
+    <div class="container vehicle-detail__grid">
+        <div class="vehicle-gallery" data-vehicle-gallery>
+            <div class="vehicle-gallery__main" data-gallery-main>
+                {% if vehicle_spin %}
+                    <div class="vehicle-spin-viewer" data-spin-viewer data-gallery-spin-viewer data-spin-frames-id="vehicle-spin-frames" tabindex="0" role="group" aria-label="نمای ۳۶۰ درجهٔ {{ vehicle.title }}. برای چرخش، تصویر را بکشید یا از کلیدهای جهت‌دار استفاده کنید.">
+                        <img data-spin-image src="{{ vehicle_spin.frame_urls.0 }}" alt="نمای ۳۶۰ درجهٔ {{ vehicle.title }}" width="768" height="512" fetchpriority="high">
+                        <p class="vehicle-spin-viewer__hint"><strong>360°</strong> برای چرخش بکشید</p>
+                    </div>
+                    {{ vehicle_spin.frame_urls|json_script:"vehicle-spin-frames" }}
+                    {% if vehicle.cover_photo %}
+                        <img class="vehicle-gallery__main-image" data-gallery-main-image src="{{ vehicle.cover_photo.image.url }}" alt="{{ vehicle.cover_photo.alt_text|default:vehicle.title }}" width="1200" height="760" hidden>
+                    {% endif %}
+                {% elif vehicle.cover_photo %}
+                    <img class="vehicle-gallery__main-image" data-gallery-main-image src="{{ vehicle.cover_photo.image.url }}" alt="{{ vehicle.cover_photo.alt_text|default:vehicle.title }}" width="1200" height="760" fetchpriority="high">
+                {% else %}
+                    <div class="vehicle-gallery__empty" aria-hidden="true">◈</div>
+                {% endif %}
+            </div>
+            {% if vehicle_spin or vehicle_images %}
+                <div class="vehicle-thumbnails" aria-label="تصاویر خودرو">
+                    {% if vehicle_spin %}
+                        <button class="vehicle-thumbnail vehicle-thumbnail--spin is-active" type="button" data-gallery-spin-control aria-label="نمایش نمای ۳۶۰ درجهٔ {{ vehicle.title }}" aria-pressed="true">
+                            <span class="vehicle-thumbnail__spin-symbol" aria-hidden="true">360°</span>
+                            <span>نمای ۳۶۰°</span>
+                        </button>
+                    {% endif %}
+                    {% for photo in vehicle_images %}
+                        <button class="vehicle-thumbnail{% if not vehicle_spin and forloop.first %} is-active{% endif %}" type="button" data-gallery-thumbnail data-gallery-image-src="{{ photo.image.url }}" data-gallery-image-alt="{{ photo.alt_text|default:vehicle.title }}" aria-label="نمایش تصویر {{ forloop.counter }} از {{ vehicle.title }}" aria-pressed="{% if not vehicle_spin and forloop.first %}true{% else %}false{% endif %}">
+                            <img src="{{ photo.image.url }}" alt="" width="160" height="110" loading="lazy">
+                        </button>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        <article class="vehicle-detail__info">
+            <p class="eyebrow"><span></span>آمادهٔ فروش</p>
+            <h1>{{ vehicle.title }}</h1>
+            <p>{{ vehicle.brand }} · {{ vehicle.model }}</p>
+            <p class="vehicle-detail__price">{{ vehicle.price_display }}</p>
+            <ul class="vehicle-specs">
+                {% if vehicle.year %}<li>سال ساخت: {{ vehicle.year }}</li>{% endif %}
+                {% if vehicle.color %}<li>رنگ: {{ vehicle.color }}</li>{% endif %}
+                {% if vehicle.mileage %}<li>کارکرد: {{ vehicle.mileage }}</li>{% endif %}
+                {% if vehicle.location %}<li>موقعیت: {{ vehicle.location }}</li>{% endif %}
+            </ul>
+            {% if vehicle.description %}<p class="vehicle-description">{{ vehicle.description|linebreaksbr }}</p>{% endif %}
+            <div class="vehicle-detail__actions">
+                {% if site_config.telegram_url %}<a class="button button--primary" href="{{ site_config.telegram_url }}" target="_blank" rel="noopener noreferrer">مشاوره در تلگرام</a>{% endif %}
+                <a class="button button--secondary" href="{% url 'customers:custom_vehicle_request_create' %}">درخواست خودروی دیگر</a>
+            </div>
+        </article>
+    </div>
+</section>
+{% endblock %}

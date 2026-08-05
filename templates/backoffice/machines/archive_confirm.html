@@ -1,0 +1,65 @@
+{% extends "backoffice/base.html" %}
+{% load backoffice_ui %}
+
+{% block title %}بایگانی ماشین | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}بایگانی ماشین{% endblock %}
+
+{% block page_description %}
+    <p>این عملیات حذف دائمی نیست؛ اطلاعات و سابقهٔ ماشین حفظ می‌شوند.</p>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'backoffice:machine_list' %}" class="backoffice-button backoffice-button--secondary">
+        بازگشت
+    </a>
+{% endblock %}
+
+{% block content %}
+    <form method="post" class="backoffice-form-card backoffice-form-card--warning" novalidate>
+        {% csrf_token %}
+
+        <section class="backoffice-confirmation-summary">
+            <span class="backoffice-confirmation-summary__icon">
+                <i class="fa fa-archive" aria-hidden="true"></i>
+            </span>
+            <div>
+                <h2>{{ machine.title }}</h2>
+                <p>
+                    {{ machine.brand }} {{ machine.model }}
+                    <span class="backoffice-status backoffice-status--{{ machine.status|car_status_tone }}">
+                        {{ machine.status|car_status_label }}
+                    </span>
+                </p>
+            </div>
+        </section>
+
+        <p class="backoffice-warning-note">
+            پس از تأیید، ماشین از فهرست فعال و نمایش عمومی خارج می‌شود. فقط مدیر اصلی سیستم می‌تواند بعداً آن را بازگرداند.
+        </p>
+
+        {% if form.non_field_errors %}
+            <div class="backoffice-form-errors" role="alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="backoffice-field backoffice-field--wide">
+            <label for="{{ form.reason.id_for_label }}" class="backoffice-field__label">
+                {{ form.reason.label }} <span class="backoffice-required">*</span>
+            </label>
+            {{ form.reason }}
+            {% if form.reason.errors %}
+                <div class="backoffice-field__error" role="alert">{{ form.reason.errors }}</div>
+            {% endif %}
+        </div>
+
+        <div class="backoffice-form-actions">
+            <button type="submit" class="backoffice-button backoffice-button--danger">
+                <i class="fa fa-archive" aria-hidden="true"></i>
+                تأیید بایگانی ماشین
+            </button>
+            <a href="{% url 'backoffice:machine_list' %}" class="backoffice-button backoffice-button--secondary">
+                انصراف
+            </a>
+        </div>
+    </form>
+{% endblock %}

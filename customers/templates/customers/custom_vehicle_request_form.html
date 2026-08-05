@@ -1,60 +1,22 @@
-<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% extends "public/base.html" %}
 
-    <title>درخواست خودروی سفارشی | Oman Auto Link</title>
-</head>
-<body>
-    <header>
-        <h1>درخواست خودروی سفارشی</h1>
-
-        <p>
-            اگر خودروی موردنظر شما در موجودی فعلی ما نیست،
-            مشخصات و توضیحات آن را ثبت کنید تا کارشناسان ما
-            خودرو را در بازار بررسی کنند.
-        </p>
-    </header>
-
-    <main>
-        <section>
-            <form method="post" novalidate>
-                {% csrf_token %}
-
-                {% if form.non_field_errors %}
-                    <div role="alert">
-                        {% for error in form.non_field_errors %}
-                            <p>{{ error }}</p>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-
-                {% for field in form %}
-                    <div>
-                        <p>
-                            {{ field.label_tag }}
-                        </p>
-
-                        <p>
-                            {{ field }}
-                        </p>
-
-                        {% if field.help_text %}
-                            <p>{{ field.help_text }}</p>
-                        {% endif %}
-
-                        {% for error in field.errors %}
-                            <p role="alert">{{ error }}</p>
-                        {% endfor %}
-                    </div>
-                {% endfor %}
-
-                <button type="submit">
-                    ثبت درخواست
-                </button>
-            </form>
-        </section>
-    </main>
-</body>
-</html>
+{% block content %}
+<section class="form-page section"><div class="container form-page__inner">
+    <p class="eyebrow"><span></span>جست‌وجوی اختصاصی</p>
+    <h1>درخواست خودروی سفارشی</h1>
+    <p class="form-page__intro">اگر خودروی دلخواه شما در موجودی فعلی نیست، مشخصات آن را ثبت کنید تا کارشناسان ما در بازار بررسی کنند.</p>
+    <form class="public-form" method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="form-error" role="alert">{% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+        {% for field in form %}
+            <div>
+                {{ field.label_tag }}
+                {{ field }}
+                {% if field.help_text %}<p class="form-help">{{ field.help_text }}</p>{% endif %}
+                {% for error in field.errors %}<p class="field-error" role="alert">{{ error }}</p>{% endfor %}
+            </div>
+        {% endfor %}
+        <button class="button button--primary" type="submit">ثبت درخواست</button>
+    </form>
+</div></section>
+{% endblock %}

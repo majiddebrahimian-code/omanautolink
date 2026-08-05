@@ -1,13 +1,21 @@
+import mimetypes
 from pathlib import Path
 from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Windows does not always register WebP in its MIME database.  Django's
+# development media server should still return the right Content-Type, and
+# production should mirror this mapping in its web server configuration.
+mimetypes.add_type("image/webp", ".webp", strict=True)
+
 SECRET_KEY = config("SECRET_KEY")
 
 DEBUG = config("DEBUG", default=False, cast=bool)
 
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
+# ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
+
+ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -16,8 +24,10 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sitemaps",
     "rest_framework",
     # local apps
+    "backoffice",
     "accounts",
     "cars",
     "core",
@@ -50,6 +60,9 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "core.context_processors.public_site",
+                "core.admin_context.admin_shell",
+                "backoffice.context_processors.panel_navigation",
             ],
         },
     },
@@ -77,16 +90,20 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = "fa"
 TIME_ZONE = "Asia/Tehran"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-MEDIA_URL = "media/"
+MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# The canonical production domain belongs to deployment configuration, not the
+# editable site settings table. Leave blank locally to use the current request.
+PUBLIC_SITE_URL = config("PUBLIC_SITE_URL", default="")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CACHE_REDIS_URL = config(

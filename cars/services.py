@@ -1,7 +1,11 @@
 import secrets
+from collections.abc import Mapping
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Max
 from django.utils import timezone
 
 from accounts.authorization import (
@@ -11,7 +15,38 @@ from accounts.authorization import (
 from customers.models import Customer
 from tracking.services import start_tracking_for_sold_car
 
-from .models import Car, VehicleArchiveEvent, VehicleHold
+from .models import (
+    Car,
+    CarPhoto,
+    VehicleArchiveEvent,
+    VehicleHold,
+    VehicleInventoryEvent,
+)
+
+
+# This is intentionally the single allow-list used by all interfaces that
+# create or edit inventory information. Lifecycle state belongs to dedicated
+# services below and must never arrive through a generic form payload.
+INVENTORY_EDITABLE_FIELDS = (
+    "title",
+    "brand",
+    "model",
+    "year",
+    "color",
+    "mileage",
+    "price_amount",
+    "description",
+    "location",
+    "seo_title",
+    "seo_description",
+    "seo_keywords",
+    "is_featured",
+)
+
+INVENTORY_EDITABLE_STATUSES = {
+    Car.Status.DRAFT,
+    Car.Status.FOR_SALE,
+}
 
 
 def generate_tracking_code():
@@ -27,6 +62,458 @@ def generate_tracking_code():
 
         if not Car.objects.filter(tracking_code=code).exists():
             return code
+
+
+def _validate_inventory_source(*, source):
+    valid_sources = {value for value, _label in VehicleInventoryEvent.Source.choices}
+
+    if source not in valid_sources:
+        raise ValidationError("منبع ثبت عملیات موجودی معتبر نیست.")
+
+    return source
+
+
+def _normalise_inventory_value(value):
+    """Return JSON-safe values for the immutable inventory audit log."""
+
+    if isinstance(value, Decimal):
+        return format(value, "f")
+
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+
+    return value
+
+
+def _clean_inventory_data(*, vehicle_data):
+    """Validate the shared inventory payload before it reaches ``Car``."""
+
+    if not isinstance(vehicle_data, Mapping):
+        raise ValidationError("اطلاعات ماشین باید به‌صورت ساختاریافته ارسال شود.")
+
+    unexpected_fields = set(vehicle_data) - set(INVENTORY_EDITABLE_FIELDS)
+
+    if unexpected_fields:
+        invalid_names = "، ".join(sorted(unexpected_fields))
+        raise ValidationError(
+            f"این فیلدها از طریق ویرایش موجودی قابل تغییر نیستند: {invalid_names}"
+        )
+
+    cleaned_data = dict(vehicle_data)
+
+    for field_name in (
+        "title",
+        "brand",
+        "model",
+        "color",
+        "description",
+        "location",
+        "seo_title",
+        "seo_description",
+        "seo_keywords",
+    ):
+        value = cleaned_data.get(field_name)
+
+        if isinstance(value, str):
+            cleaned_data[field_name] = value.strip()
+
+    if "price_amount" in cleaned_data and cleaned_data["price_amount"] not in (
+        None,
+        "",
+    ):
+        try:
+            price_amount = Decimal(str(cleaned_data["price_amount"]))
+        except (InvalidOperation, TypeError, ValueError):
+            raise ValidationError("قیمت ماشین معتبر نیست.")
+
+        if price_amount < 0:
+            raise ValidationError("قیمت ماشین نمی‌تواند منفی باشد.")
+
+        cleaned_data["price_amount"] = price_amount
+
+    return cleaned_data
+
+
+def _validate_inventory_car(*, car):
+    """Run model-level validation while keeping service errors uniform."""
+
+    try:
+        car.full_clean()
+    except ValidationError as error:
+        raise ValidationError(error.messages)
+
+
+@transaction.atomic
+def create_inventory_car(
+    *,
+    actor,
+    vehicle_data,
+    source=VehicleInventoryEvent.Source.BACKOFFICE,
+):
+    """Create a non-public draft car through the shared inventory boundary."""
+
+    require_permission(
+        actor=actor,
+        permission="cars.add_car",
+        error_message="شما اجازهٔ ثبت ماشین جدید را ندارید.",
+    )
+
+    cleaned_data = _clean_inventory_data(vehicle_data=vehicle_data)
+    validated_source = _validate_inventory_source(source=source)
+
+    car = Car(
+        **cleaned_data,
+        status=Car.Status.DRAFT,
+        is_deleted=False,
+    )
+    _validate_inventory_car(car=car)
+    car.save()
+
+    VehicleInventoryEvent.objects.create(
+        car=car,
+        action=VehicleInventoryEvent.Action.CREATED,
+        performed_by=actor,
+        source=validated_source,
+        changes={
+            "fields": {
+                field_name: {
+                    "before": None,
+                    "after": _normalise_inventory_value(
+                        getattr(car, field_name)
+                    ),
+                }
+                for field_name in cleaned_data
+            }
+        },
+    )
+
+    return car
+
+
+@transaction.atomic
+def update_inventory_car(
+    *,
+    car_id,
+    actor,
+    vehicle_data,
+    source=VehicleInventoryEvent.Source.BACKOFFICE,
+):
+    """Update mutable inventory fields and record a precise audit diff."""
+
+    require_permission(
+        actor=actor,
+        permission="cars.change_car",
+        error_message="شما اجازهٔ ویرایش اطلاعات ماشین را ندارید.",
+    )
+
+    cleaned_data = _clean_inventory_data(vehicle_data=vehicle_data)
+    validated_source = _validate_inventory_source(source=source)
+
+    car = Car.objects.select_for_update().get(pk=car_id)
+
+    if car.is_deleted:
+        raise ValidationError("ماشین بایگانی‌شده قابل ویرایش نیست.")
+
+    if car.status not in INVENTORY_EDITABLE_STATUSES:
+        raise ValidationError(
+            "پس از رزرو یا فروش، اطلاعات موجودی ماشین از این صفحه قابل ویرایش نیست."
+        )
+
+    changes = {}
+    changed_fields = []
+
+    for field_name, new_value in cleaned_data.items():
+        old_value = getattr(car, field_name)
+
+        if old_value == new_value:
+            continue
+
+        changes[field_name] = {
+            "before": _normalise_inventory_value(old_value),
+            "after": _normalise_inventory_value(new_value),
+        }
+        setattr(car, field_name, new_value)
+        changed_fields.append(field_name)
+
+    _validate_inventory_car(car=car)
+
+    if not changed_fields:
+        return car
+
+    car.save(update_fields=[*changed_fields, "updated_at"])
+
+    VehicleInventoryEvent.objects.create(
+        car=car,
+        action=VehicleInventoryEvent.Action.UPDATED,
+        performed_by=actor,
+        source=validated_source,
+        changes={"fields": changes},
+    )
+
+    return car
+
+
+def _get_mutable_inventory_car(*, car_id):
+    """Lock an active car whose public inventory data may still change."""
+
+    car = Car.objects.select_for_update().get(pk=car_id)
+
+    if car.is_deleted:
+        raise ValidationError("ماشین بایگانی‌شده قابل تغییر نیست.")
+
+    if car.status not in INVENTORY_EDITABLE_STATUSES:
+        raise ValidationError(
+            "پس از رزرو یا فروش، تصاویر موجودی ماشین از این صفحه قابل تغییر نیستند."
+        )
+
+    return car
+
+
+def _record_inventory_photo_event(*, car, actor, source, changes):
+    """Add photo activity to the same immutable manager audit stream."""
+
+    VehicleInventoryEvent.objects.create(
+        car=car,
+        action=VehicleInventoryEvent.Action.UPDATED,
+        performed_by=actor,
+        source=source,
+        changes={"photos": changes},
+    )
+
+
+@transaction.atomic
+def upload_car_photos(
+    *,
+    car_id,
+    actor,
+    images,
+    source=VehicleInventoryEvent.Source.BACKOFFICE,
+):
+    """Create normal gallery photos for a mutable inventory car.
+
+    360-degree frames intentionally use their own model and services.  They
+    must not be inserted into this public gallery because their ordering and
+    technical readiness rules are different.
+    """
+
+    require_permission(
+        actor=actor,
+        permission="cars.add_carphoto",
+        error_message="شما اجازهٔ افزودن تصویر ماشین را ندارید.",
+    )
+
+    image_files = list(images or [])
+
+    if not image_files:
+        raise ValidationError("حداقل یک تصویر را انتخاب کنید.")
+
+    validated_source = _validate_inventory_source(source=source)
+    car = _get_mutable_inventory_car(car_id=car_id)
+    current_max_order = (
+        CarPhoto.objects.filter(car=car).aggregate(max_order=Max("sort_order"))["max_order"]
+        or 0
+    )
+    has_cover = CarPhoto.objects.filter(car=car, is_cover=True).exists()
+    created_photos = []
+
+    for index, image_file in enumerate(image_files, start=1):
+        photo = CarPhoto(
+            car=car,
+            image=image_file,
+            is_cover=not has_cover and index == 1,
+            sort_order=current_max_order + index,
+        )
+        photo.full_clean()
+        photo.save()
+        created_photos.append(photo)
+
+    _record_inventory_photo_event(
+        car=car,
+        actor=actor,
+        source=validated_source,
+        changes={
+            "operation": "added",
+            "photo_ids": [photo.id for photo in created_photos],
+            "count": len(created_photos),
+        },
+    )
+
+    return created_photos
+
+
+def _get_mutable_car_photo(*, car_id, photo_id):
+    """Lock one photo and verify that its URL cannot target another car."""
+
+    photo = CarPhoto.objects.select_for_update().get(pk=photo_id)
+
+    if photo.car_id != car_id:
+        raise ValidationError("این تصویر به ماشین انتخاب‌شده تعلق ندارد.")
+
+    car = _get_mutable_inventory_car(car_id=car_id)
+    return car, photo
+
+
+@transaction.atomic
+def update_car_photo_metadata(
+    *,
+    car_id,
+    photo_id,
+    actor,
+    photo_data,
+    source=VehicleInventoryEvent.Source.BACKOFFICE,
+):
+    """Update a photo's public alt text and sort order through one boundary."""
+
+    require_permission(
+        actor=actor,
+        permission="cars.change_carphoto",
+        error_message="شما اجازهٔ ویرایش اطلاعات تصویر ماشین را ندارید.",
+    )
+
+    if not isinstance(photo_data, Mapping):
+        raise ValidationError("اطلاعات تصویر معتبر نیست.")
+
+    allowed_fields = {"alt_text", "sort_order"}
+    unexpected_fields = set(photo_data) - allowed_fields
+
+    if unexpected_fields:
+        raise ValidationError("فیلد نامعتبر برای تصویر ارسال شده است.")
+
+    validated_source = _validate_inventory_source(source=source)
+    car, photo = _get_mutable_car_photo(car_id=car_id, photo_id=photo_id)
+    changes = {}
+    changed_fields = []
+
+    for field_name, new_value in photo_data.items():
+        if field_name == "alt_text" and isinstance(new_value, str):
+            new_value = new_value.strip()
+
+        old_value = getattr(photo, field_name)
+
+        if old_value == new_value:
+            continue
+
+        setattr(photo, field_name, new_value)
+        changes[field_name] = {
+            "before": _normalise_inventory_value(old_value),
+            "after": _normalise_inventory_value(new_value),
+        }
+        changed_fields.append(field_name)
+
+    try:
+        photo.full_clean()
+    except ValidationError as error:
+        raise ValidationError(error.messages)
+
+    if not changed_fields:
+        return photo
+
+    photo.save(update_fields=changed_fields)
+    _record_inventory_photo_event(
+        car=car,
+        actor=actor,
+        source=validated_source,
+        changes={
+            "operation": "metadata_updated",
+            "photo_id": photo.id,
+            "fields": changes,
+        },
+    )
+
+    return photo
+
+
+@transaction.atomic
+def set_car_photo_cover(
+    *,
+    car_id,
+    photo_id,
+    actor,
+    source=VehicleInventoryEvent.Source.BACKOFFICE,
+):
+    """Make exactly one normal gallery photo the public cover image."""
+
+    require_permission(
+        actor=actor,
+        permission="cars.change_carphoto",
+        error_message="شما اجازهٔ انتخاب تصویر کاور را ندارید.",
+    )
+
+    validated_source = _validate_inventory_source(source=source)
+    car, photo = _get_mutable_car_photo(car_id=car_id, photo_id=photo_id)
+
+    if photo.is_cover:
+        return photo
+
+    CarPhoto.objects.filter(car=car, is_cover=True).update(is_cover=False)
+    photo.is_cover = True
+    photo.save(update_fields=["is_cover"])
+
+    _record_inventory_photo_event(
+        car=car,
+        actor=actor,
+        source=validated_source,
+        changes={
+            "operation": "cover_changed",
+            "photo_id": photo.id,
+        },
+    )
+
+    return photo
+
+
+@transaction.atomic
+def delete_car_photo(
+    *,
+    car_id,
+    photo_id,
+    actor,
+    source=VehicleInventoryEvent.Source.BACKOFFICE,
+):
+    """Remove one gallery record and delete its stored file after commit."""
+
+    require_permission(
+        actor=actor,
+        permission="cars.delete_carphoto",
+        error_message="شما اجازهٔ حذف تصویر ماشین را ندارید.",
+    )
+
+    validated_source = _validate_inventory_source(source=source)
+    car, photo = _get_mutable_car_photo(car_id=car_id, photo_id=photo_id)
+    deleted_photo_id = photo.id
+    deleted_was_cover = photo.is_cover
+    image_storage = photo.image.storage if photo.image else None
+    image_name = photo.image.name if photo.image else ""
+
+    photo.delete()
+
+    if deleted_was_cover:
+        replacement_photo = CarPhoto.objects.filter(car=car).order_by(
+            "sort_order",
+            "pk",
+        ).first()
+
+        if replacement_photo is not None:
+            replacement_photo.is_cover = True
+            replacement_photo.save(update_fields=["is_cover"])
+
+    _record_inventory_photo_event(
+        car=car,
+        actor=actor,
+        source=validated_source,
+        changes={
+            "operation": "deleted",
+            "photo_id": deleted_photo_id,
+            "replacement_cover_photo_id": (
+                replacement_photo.id if deleted_was_cover and replacement_photo else None
+            ),
+        },
+    )
+
+    if image_storage is not None and image_name:
+        transaction.on_commit(lambda: image_storage.delete(image_name))
+
+    return car
 
 
 def _clean_required_reason(*, reason):

@@ -1,0 +1,115 @@
+{% extends "backoffice/base.html" %}
+{% load backoffice_ui %}
+
+{% block title %}{{ page_title }} | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}{{ page_title }}{% endblock %}
+
+{% block page_description %}<p>{{ page_description }}</p>{% endblock %}
+
+{% block page_actions %}<span class="backoffice-result-count">{{ result_count }} ماشین</span>{% endblock %}
+
+{% block content %}
+    <section class="backoffice-search-card">
+        <form method="get" class="backoffice-search-form">
+            <div>
+                <label for="sold-machine-search" class="backoffice-search-label">جست‌وجوی خریدار یا کد رهگیری</label>
+                <input
+                    id="sold-machine-search"
+                    type="search"
+                    name="q"
+                    value="{{ query }}"
+                    class="backoffice-input"
+                    placeholder="نام خریدار یا کد رهگیری ماشین"
+                >
+            </div>
+            <div class="backoffice-search-actions">
+                <button type="submit" class="backoffice-button backoffice-button--primary">
+                    <i class="fa fa-search" aria-hidden="true"></i>
+                    جست‌وجو
+                </button>
+                {% if query %}
+                    <a href="{% if is_delivered_list %}{% url 'backoffice:delivered_machine_list' %}{% else %}{% url 'backoffice:pending_delivery_list' %}{% endif %}" class="backoffice-button backoffice-button--secondary">پاک‌کردن</a>
+                {% endif %}
+            </div>
+        </form>
+    </section>
+
+    <section class="backoffice-table-card">
+        <div class="backoffice-table-scroll">
+            <table class="backoffice-table backoffice-delivery-table">
+                <thead>
+                    <tr>
+                        <th>ماشین</th>
+                        <th>خریدار</th>
+                        <th>شماره تماس</th>
+                        <th>کد رهگیری</th>
+                        <th>نشانگر مرحله</th>
+                        <th>وضعیت تحویل</th>
+                        <th>آخرین تغییر</th>
+                        <th><span class="sr-only">مشاهده پرونده</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for machine in page_obj %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'backoffice:delivery_machine_detail' machine.pk %}" class="backoffice-delivery-machine-link">
+                                    <span class="backoffice-delivery-machine-media" aria-hidden="true">
+                                        {% if machine.cover_photo %}
+                                            <img src="{{ machine.cover_photo.image.url }}" alt="">
+                                        {% else %}
+                                            <i class="fa fa-car"></i>
+                                        {% endif %}
+                                    </span>
+                                    <span>
+                                        <strong>{{ machine.title }}</strong>
+                                        <small>{{ machine.brand }} {{ machine.model }}{% if machine.year %} — {{ machine.year }}{% endif %}</small>
+                                    </span>
+                                </a>
+                            </td>
+                            <td>{{ machine.customer.full_name|default:"اطلاعات ناقص" }}</td>
+                            <td dir="ltr">{{ machine.customer.phone|default:"—" }}</td>
+                            <td>
+                                {% if machine.tracking_code %}
+                                    <a href="{% url 'backoffice:delivery_machine_detail' machine.pk %}" class="backoffice-tracking-code backoffice-tracking-code--link" dir="ltr" title="مشاهده پروندهٔ تحویل">
+                                        {{ machine.tracking_code }}
+                                    </a>
+                                {% else %}
+                                    <span class="backoffice-data-warning">کد ثبت نشده</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ machine.current_stage.name|default:"رهگیری ناقص" }}</td>
+                            <td><span class="backoffice-status backoffice-status--{{ machine.status|car_status_tone }}">{{ machine.status|car_status_label }}</span></td>
+                            <td>{{ machine.updated_at|date:"Y/m/d H:i" }}</td>
+                            <td>
+                                <a
+                                    href="{% url 'backoffice:delivery_machine_detail' machine.pk %}"
+                                    class="backoffice-button backoffice-button--small backoffice-button--outline backoffice-icon-button"
+                                    aria-label="مشاهدهٔ پروندهٔ تحویل {{ machine.title }}"
+                                    data-tooltip="مشاهدهٔ پروندهٔ تحویل"
+                                    title="مشاهدهٔ پروندهٔ تحویل"
+                                >
+                                    <i class="fa fa-folder-open-o" aria-hidden="true"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="8" class="backoffice-table-empty">
+                                {% if query %}نتیجه‌ای برای «{{ query }}» پیدا نشد.{% else %}{{ empty_message }}{% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="backoffice-pagination" aria-label="صفحه‌بندی ماشین‌های فروخته‌شده">
+                {% if page_obj.has_previous %}<a href="?{% if query %}q={{ query|urlencode }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">قبلی</a>{% endif %}
+                <span>صفحهٔ {{ page_obj.number }} از {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}<a href="?{% if query %}q={{ query|urlencode }}&amp;{% endif %}page={{ page_obj.next_page_number }}">بعدی</a>{% endif %}
+            </nav>
+        {% endif %}
+    </section>
+{% endblock %}

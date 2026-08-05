@@ -1,0 +1,182 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}مراحل تحویل ماشین | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}مراحل تحویل ماشین{% endblock %}
+
+{% block page_description %}
+    <p>مسیر تحویل به‌صورت خطی مدیریت می‌شود. زمان هر Transition مستقیماً ETA ماشین‌های در حال تحویل را تعیین می‌کند.</p>
+{% endblock %}
+
+{% block page_actions %}
+    <span class="backoffice-result-count">{{ active_stage_count }} مرحلهٔ فعال</span>
+    <a
+        href="{% url 'backoffice:stage_create' %}"
+        class="backoffice-button backoffice-button--primary backoffice-icon-button"
+        aria-label="تعریف مرحلهٔ جدید"
+        data-tooltip="تعریف مرحلهٔ جدید"
+        title="تعریف مرحلهٔ جدید"
+    >
+        <i class="fa fa-plus" aria-hidden="true"></i>
+    </a>
+{% endblock %}
+
+{% block content %}
+    {% if not route_integrity.is_valid %}
+        <section class="backoffice-route-integrity-alert" role="alert">
+            <span class="backoffice-route-integrity-alert__icon"><i class="fa fa-exclamation-triangle" aria-hidden="true"></i></span>
+            <div>
+                <h2>مسیر تحویل برای استفاده عملیاتی آماده نیست</h2>
+                <p>
+                    {% if route_integrity.missing_pairs %}
+                        {{ route_integrity.missing_pairs|length }} Transition ضروری بین مرحله‌های مجاور وجود ندارد.
+                    {% endif %}
+                    {% if route_integrity.unexpected_transitions %}
+                        {{ route_integrity.unexpected_transitions|length }} Transition غیرخطی نیز شناسایی شده است.
+                    {% endif %}
+                    پیش از ثبت یا ویرایش مرحله، مسیر را از همین پنل بررسی و ترمیم کنید.
+                </p>
+            </div>
+            <a href="{% url 'backoffice:stage_transition_repair' %}" class="backoffice-button backoffice-button--danger">
+                <i class="fa fa-wrench" aria-hidden="true"></i>
+                ترمیم مسیر و Transitionها
+            </a>
+        </section>
+    {% endif %}
+
+    <section class="backoffice-stage-intro">
+        <span class="backoffice-stage-intro__icon"><i class="fa fa-random" aria-hidden="true"></i></span>
+        <div>
+            <h2>مسیر فعال تحویل</h2>
+            <p>
+                نام مرحله، مسئولان مجاز و مدت زمان انتقال را از همین صفحه کنترل کنید.
+                جابه‌جایی ترتیب مرحله‌ها عمداً در این نسخه مستقیم نیست تا تاریخچه و ETA ماشین‌های در حال تحویل آسیب نبیند.
+            </p>
+        </div>
+    </section>
+
+    {% if active_stages %}
+        <section class="backoffice-stage-route" aria-label="مسیر فعال مراحل تحویل">
+            {% for stage in active_stages %}
+                <article class="backoffice-stage-card {% if stage.entered_vehicle_count %}has-entered-vehicles{% endif %}">
+                    <header class="backoffice-stage-card__header">
+                        <span class="backoffice-stage-order">{{ forloop.counter }}</span>
+                        <span class="backoffice-stage-active-label"><i class="fa fa-check-circle" aria-hidden="true"></i> فعال</span>
+                    </header>
+
+                    <div class="backoffice-stage-card__body">
+                        <h2>{{ stage.name }}</h2>
+                        <p class="backoffice-stage-card__order-note">ترتیب فنی: {{ stage.order }}</p>
+
+                        <dl class="backoffice-stage-metrics">
+                            <div>
+                                <dt>ماشین با نشانگر این مرحله</dt>
+                                <dd>{{ stage.current_vehicle_count }}</dd>
+                            </div>
+                            <div>
+                                <dt>واردشده و تکمیل‌نشده</dt>
+                                <dd>{{ stage.entered_vehicle_count }}</dd>
+                            </div>
+                            <div class="backoffice-stage-metrics__wide">
+                                <dt>زمان انتقال</dt>
+                                <dd>
+                                    {% if stage.outgoing_transition %}
+                                        تا «{{ stage.next_active_stage.name }}»: {{ stage.outgoing_transition.estimated_duration_days }} روز
+                                    {% elif stage.next_active_stage %}
+                                        <span class="backoffice-data-warning">Transition تعریف نشده</span>
+                                    {% else %}
+                                        مرحلهٔ نهایی مسیر
+                                    {% endif %}
+                                </dd>
+                            </div>
+                        </dl>
+
+                        <div class="backoffice-stage-staff">
+                            <h3><i class="fa fa-users" aria-hidden="true"></i> کارمندان مسئول</h3>
+                            <div class="backoffice-staff-chips">
+                                {% for profile in stage.staff_members.all %}
+                                    <span class="backoffice-staff-chip">
+                                        <span>{{ profile.user.get_username|first|upper }}</span>
+                                        {{ profile.user.get_full_name|default:profile.user.get_username }}
+                                    </span>
+                                {% empty %}
+                                    <span class="backoffice-empty-inline">هنوز کارمندی تعیین نشده است.</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <footer class="backoffice-stage-card__actions">
+                        <a
+                            href="{% url 'backoffice:stage_edit' stage.pk %}"
+                            class="backoffice-button backoffice-button--small backoffice-button--secondary backoffice-icon-button"
+                            aria-label="ویرایش مرحلهٔ {{ stage.name }}"
+                            data-tooltip="ویرایش مرحله"
+                            title="ویرایش مرحله"
+                        >
+                            <i class="fa fa-pencil" aria-hidden="true"></i>
+                        </a>
+                        {% if stage.can_archive %}
+                            <a
+                                href="{% url 'backoffice:stage_archive' stage.pk %}"
+                                class="backoffice-button backoffice-button--small backoffice-button--danger backoffice-icon-button"
+                                aria-label="بررسی و بایگانی مرحلهٔ {{ stage.name }}"
+                                data-tooltip="بررسی اثر و بایگانی مرحله"
+                                title="بررسی اثر و بایگانی مرحله"
+                            >
+                                <i class="fa fa-archive" aria-hidden="true"></i>
+                            </a>
+                        {% else %}
+                            <span class="backoffice-action-hint">اولین و آخرین مرحله بایگانی نمی‌شوند</span>
+                        {% endif %}
+                    </footer>
+                </article>
+            {% endfor %}
+        </section>
+    {% else %}
+        <section class="backoffice-empty-state">
+            <i class="fa fa-map-signs" aria-hidden="true"></i>
+            <h2>هنوز مرحلهٔ فعالی تعریف نشده است</h2>
+            <p>ابتدا اولین مرحلهٔ مسیر تحویل را تعریف کنید؛ سپس مرحله‌های بعد و زمان انتقالشان را اضافه کنید.</p>
+            <a href="{% url 'backoffice:stage_create' %}" class="backoffice-button backoffice-button--primary">تعریف اولین مرحله</a>
+        </section>
+    {% endif %}
+
+    {% if archived_stages %}
+        <section class="backoffice-table-card backoffice-stage-archive-list">
+            <div class="backoffice-section-heading">
+                <div>
+                    <p class="backoffice-eyebrow">تاریخچهٔ پیکربندی</p>
+                    <h2>مرحله‌های بایگانی‌شده</h2>
+                </div>
+                <span>این مرحله‌ها حذف نشده‌اند تا تاریخچهٔ رهگیری معتبر بماند.</span>
+            </div>
+            <div class="backoffice-table-scroll">
+                <table class="backoffice-table">
+                    <thead>
+                        <tr>
+                            <th>ترتیب سابق</th>
+                            <th>نام مرحله</th>
+                            <th>کارمندان ثبت‌شده</th>
+                            <th>وضعیت</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stage in archived_stages %}
+                            <tr>
+                                <td>{{ stage.order }}</td>
+                                <td><strong>{{ stage.name }}</strong></td>
+                                <td>
+                                    {% for profile in stage.staff_members.all %}
+                                        {{ profile.user.get_full_name|default:profile.user.get_username }}{% if not forloop.last %}، {% endif %}
+                                    {% empty %}—{% endfor %}
+                                </td>
+                                <td><span class="backoffice-status backoffice-status--draft">بایگانی‌شده</span></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    {% endif %}
+{% endblock %}

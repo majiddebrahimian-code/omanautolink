@@ -140,6 +140,27 @@ def create_telegram_staff_link_code(*, staff_user, actor, ttl_minutes=None):
 
 
 @transaction.atomic
+def revoke_pending_telegram_staff_link_codes(*, staff_user, actor):
+    """Invalidate unused staff-link codes without retaining or exposing them.
+
+    This is used when an internal account is deactivated.  The tokens remain
+    as protected audit records, but cannot be used to establish a Telegram
+    connection later.
+    """
+
+    _require_system_administrator(actor=actor)
+
+    return TelegramStaffLinkToken.objects.select_for_update().filter(
+        user=staff_user,
+        used_at__isnull=True,
+        revoked_at__isnull=True,
+    ).update(
+        revoked_at=timezone.now(),
+        revoked_by=actor,
+    )
+
+
+@transaction.atomic
 def revoke_telegram_staff_link(*, staff_link, actor, reason=""):
     """Revokes an active staff link while preserving its audit history."""
 

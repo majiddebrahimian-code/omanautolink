@@ -1,0 +1,163 @@
+{% extends "public/base.html" %}
+
+{% block content %}
+<section class="lobby"{% if home_config.hero_background_image or home_config.hero_mobile_background_image %} style="{% if home_config.hero_background_image %}--lobby-background: url('{{ home_config.hero_background_image.url }}');{% endif %}{% if home_config.hero_mobile_background_image %}--lobby-mobile-background: url('{{ home_config.hero_mobile_background_image.url }}');{% endif %}"{% endif %} aria-labelledby="home-title">
+    <div class="lobby__ambient" aria-hidden="true"></div>
+
+    <div class="container lobby-layout">
+        <nav class="lobby-rail" aria-label="دسترسی سریع">
+            {% for action in quick_actions %}
+                <a class="lobby-rail__action" href="{{ action.destination }}" title="{{ action.label }}" aria-label="{{ action.aria_label|default:action.label }}"{% if action.open_in_new_tab %} target="_blank" rel="noopener noreferrer"{% endif %}>
+                    <span class="lobby-icon lobby-icon--{{ action.action }}" aria-hidden="true"></span>
+                    <span class="sr-only">{{ action.label }}</span>
+                </a>
+            {% endfor %}
+        </nav>
+
+        <section class="lobby-showroom">
+            <div class="lobby-showroom__media{% if hero_spin %} lobby-showroom__media--spin{% endif %}"{% if hero_spin %} data-spin-viewer data-spin-frames-id="hero-spin-frames" tabindex="0" role="group" aria-label="نمای ۳۶۰ درجهٔ {{ hero_car.title }}. برای چرخش، تصویر را بکشید یا از کلیدهای جهت‌دار استفاده کنید."{% endif %}>
+                {% if hero_spin %}
+                    {% if home_config.hero_background_image %}
+                        <picture class="lobby-showroom__spin-background" aria-hidden="true">
+                            {% if home_config.hero_mobile_background_image %}<source media="(max-width: 760px)" srcset="{{ home_config.hero_mobile_background_image.url }}">{% endif %}
+                            <img src="{{ home_config.hero_background_image.url }}" alt="" width="1672" height="941" fetchpriority="high">
+                        </picture>
+                    {% else %}
+                        <div class="lobby-showroom__empty" aria-hidden="true"></div>
+                    {% endif %}
+                    <img class="lobby-showroom__spin-car" data-spin-image src="{{ hero_spin.frame_urls.0 }}" alt="نمای ۳۶۰ درجهٔ {{ hero_car.title }}" width="1280" height="800" fetchpriority="high">
+                {% elif home_config.hero_background_image %}
+                    <picture>
+                        {% if home_config.hero_mobile_background_image %}<source media="(max-width: 760px)" srcset="{{ home_config.hero_mobile_background_image.url }}">{% endif %}
+                        <img src="{{ home_config.hero_background_image.url }}" alt="{{ home_config.hero_image_alt|default:home_config.hero_title }}" width="1672" height="941" fetchpriority="high">
+                    </picture>
+                {% else %}
+                    <div class="lobby-showroom__empty" aria-hidden="true"></div>
+                {% endif %}
+            </div>
+            {% if hero_spin %}{{ hero_spin.frame_urls|json_script:"hero-spin-frames" }}{% endif %}
+
+            <div class="lobby-showroom__hud">
+                {% if home_config.hero_eyebrow %}<p class="lobby-kicker"><span></span>{{ home_config.hero_eyebrow }}</p>{% endif %}
+                <h1 id="home-title">{{ home_config.hero_title|default:site_config.tagline|default:site_config.site_name }}</h1>
+                {% if home_config.hero_description %}<p class="lobby-showroom__description">{{ home_config.hero_description }}</p>{% endif %}
+            </div>
+
+            {% if hero_car %}
+                <a class="lobby-showroom__selected" href="{{ hero_car.get_absolute_url }}">
+                    <span>خودروی منتخب</span>
+                    <strong>{{ hero_car.title }}</strong>
+                    <i aria-hidden="true">←</i>
+                </a>
+            {% endif %}
+
+            <div class="lobby-showroom__ring" aria-hidden="true"></div>
+            <div class="lobby-showroom__view-label"{% if not hero_spin %} aria-hidden="true"{% endif %}><strong>360°</strong><span>{% if hero_spin %}برای چرخش بکشید{% else %}نمایش خودرو{% endif %}</span></div>
+
+            {% if home_config.primary_cta_label and home_config.primary_cta_destination or home_config.secondary_cta_label and home_config.secondary_cta_destination %}
+                <div class="lobby-showroom__actions">
+                    {% if home_config.primary_cta_label and home_config.primary_cta_destination %}
+                        <a class="lobby-button lobby-button--primary" href="{{ home_config.primary_cta_destination }}">{{ home_config.primary_cta_label }}</a>
+                    {% endif %}
+                    {% if home_config.secondary_cta_label and home_config.secondary_cta_destination %}
+                        <a class="lobby-button" href="{{ home_config.secondary_cta_destination }}">{{ home_config.secondary_cta_label }}</a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </section>
+
+        <aside class="lobby-sidebar">
+            <section class="lobby-panel lobby-route" id="import-route" aria-labelledby="route-title">
+                <div class="lobby-panel__heading">
+                    <div>
+                        <p class="lobby-panel__kicker">مسیر شفاف</p>
+                        <h2 id="route-title">{{ home_config.route_title|default:"مسیر واردات" }}</h2>
+                    </div>
+                    <span class="lobby-panel__status"><i></i> فعال</span>
+                </div>
+
+                <div class="lobby-route__map">
+                    {% if home_config.route_panel_image %}
+                        <img src="{{ home_config.route_panel_image.url }}" alt="مسیر {{ home_config.route_origin_label }} تا {{ home_config.route_destination_label }}" width="720" height="420">
+                    {% else %}
+                        <div class="lobby-route__map-empty" aria-hidden="true"></div>
+                    {% endif %}
+                    <span class="lobby-route__label lobby-route__label--origin">{{ home_config.route_origin_label|default:"عمان" }}</span>
+                    <span class="lobby-route__label lobby-route__label--destination">{{ home_config.route_destination_label|default:"ایران" }}</span>
+                </div>
+
+                <dl class="lobby-route__facts">
+                    {% if home_config.route_transport_label %}<div><dt>روش انتقال</dt><dd>{{ home_config.route_transport_label }}</dd></div>{% endif %}
+                    {% if home_config.route_duration_label %}<div><dt>زمان تقریبی</dt><dd>{{ home_config.route_duration_label }}</dd></div>{% endif %}
+                </dl>
+            </section>
+
+            <section class="lobby-panel lobby-tracking" id="tracking" aria-labelledby="tracking-title">
+                <div class="lobby-panel__heading">
+                    <div>
+                        <p class="lobby-panel__kicker">رهگیری خودرو</p>
+                        <h2 id="tracking-title">{{ home_config.tracking_section_heading|default:"وضعیت تحویل" }}</h2>
+                    </div>
+                    <a href="{% url 'tracking:public_lookup' %}" class="lobby-tracking__lookup">رهگیری <span aria-hidden="true">←</span></a>
+                </div>
+
+                <ol class="lobby-tracking__timeline" aria-label="مراحل ارسال">
+                    {% for stage in active_stages %}
+                        <li{% if forloop.first %} class="is-current"{% endif %}>
+                            <span class="lobby-tracking__point">{{ forloop.counter }}</span>
+                            <strong>{{ stage.name }}</strong>
+                        </li>
+                    {% empty %}
+                        <li class="lobby-tracking__empty">مراحل ارسال پس از تنظیم مدیر در اینجا نمایش داده می‌شوند.</li>
+                    {% endfor %}
+                </ol>
+            </section>
+        </aside>
+
+        <section class="lobby-vehicle-strip" aria-labelledby="featured-vehicles-title">
+            <div class="lobby-vehicle-strip__heading">
+                <p>انتخاب خودرو</p>
+                <h2 id="featured-vehicles-title">{{ home_config.featured_vehicles_heading|default:"خودروهای موجود" }}</h2>
+            </div>
+            <div class="lobby-vehicle-strip__items">
+                {% for vehicle in featured_vehicles %}
+                    <article class="lobby-vehicle{% if hero_car and vehicle.pk == hero_car.pk %} is-selected{% endif %}">
+                        <a href="{{ vehicle.get_absolute_url }}">
+                            {% if vehicle.cover_photo %}
+                                <img src="{{ vehicle.cover_photo.image.url }}" alt="{{ vehicle.cover_photo.alt_text|default:vehicle.title }}" width="300" height="180" loading="lazy">
+                            {% else %}
+                                <span class="lobby-vehicle__placeholder" aria-hidden="true">{{ vehicle.brand|slice:":1" }}</span>
+                            {% endif %}
+                            <span class="lobby-vehicle__title">{{ vehicle.title }}</span>
+                        </a>
+                    </article>
+                {% empty %}
+                    <p class="lobby-vehicle-strip__empty">خودروی قابل‌نمایش هنوز ثبت نشده است.</p>
+                {% endfor %}
+            </div>
+            <a class="lobby-vehicle-strip__all" href="{% url 'cars:vehicle_list' %}" aria-label="مشاهدهٔ همهٔ خودروهای موجود">همه <span aria-hidden="true">←</span></a>
+        </section>
+
+        {% if site_config.telegram_url %}
+            <a class="lobby-telegram-cta" href="{{ site_config.telegram_url }}" target="_blank" rel="noopener noreferrer">
+                <span>مشاوره در تلگرام</span><i aria-hidden="true">➤</i>
+            </a>
+        {% endif %}
+    </div>
+</section>
+
+{% if feature_cards %}
+<section class="feature-cards section" aria-label="خدمات اصلی">
+    <div class="container feature-cards__grid">
+        {% for card in feature_cards %}
+            <article class="feature-card">
+                <span class="feature-card__icon feature-card__icon--{{ card.icon }}" aria-hidden="true"></span>
+                <h2>{{ card.title }}</h2>
+                {% if card.description %}<p>{{ card.description }}</p>{% endif %}
+                {% if card.cta_label and card.cta_destination %}<a class="text-link" href="{{ card.cta_destination }}">{{ card.cta_label }} <span aria-hidden="true">←</span></a>{% endif %}
+            </article>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,877 @@
+from datetime import timedelta
+from io import BytesIO
+from tempfile import TemporaryDirectory
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.exceptions import ValidationError
+from django.test import TestCase, override_settings
+from django.urls import reverse
+
+from PIL import Image
+
+from accounts.services import RoleGroup, ensure_default_role_groups
+from blog.models import Category, Post
+from cars.models import (
+    Car,
+    CarPhoto,
+    VehicleArchiveEvent,
+    VehicleHold,
+    VehicleInventoryEvent,
+)
+from cars.services import create_inventory_car
+from customers.models import Customer
+from accounts.models import StaffProfile
+from tracking.models import CarStageProgress, Stage, StageTransition
+from tracking.services import complete_stage, confirm_stage, start_tracking_for_sold_car
+
+
+class BackofficeMachineWorkflowTests(TestCase):
+    def setUp(self):
+        role_groups = ensure_default_role_groups()
+        user_model = get_user_model()
+
+        self.employee = user_model.objects.create_user(
+            username="backoffice-inventory-employee",
+            password="test-password",
+            is_staff=True,
+        )
+        self.employee.groups.add(role_groups[RoleGroup.EMPLOYEE])
+
+        self.clearance_employee = user_model.objects.create_user(
+            username="backoffice-clearance-employee",
+            password="test-password",
+            is_staff=True,
+        )
+        self.clearance_employee.groups.add(role_groups[RoleGroup.CLEARANCE_EMPLOYEE])
+
+        self.customer = Customer.objects.create(
+            full_name="مشتری آزمون",
+            phone="09120000000",
+            telegram_id="backoffice-customer",
+        )
+
+    @staticmethod
+    def inventory_payload(**overrides):
+        data = {
+            "title": "تویوتا لندکروزر",
+            "brand": "Toyota",
+            "model": "Land Cruiser",
+            "year": "2024",
+            "color": "سفید",
+            "mileage": "1200",
+            "price_amount": "2500000000",
+            "description": "توضیحات آزمون",
+            "location": "مسقط",
+            "seo_title": "خرید لندکروزر",
+            "seo_description": "توضیحات SEO آزمون",
+            "seo_keywords": "لندکروزر، خودرو عمان",
+        }
+        data.update(overrides)
+        return data
+
+    def create_machine(self, **overrides):
+        return Car.objects.create(
+            title=overrides.pop("title", "ماشین آزمون"),
+            brand=overrides.pop("brand", "Toyota"),
+            model=overrides.pop("model", "Camry"),
+            **overrides,
+        )
+
+    def test_employee_creates_a_draft_and_an_immutable_inventory_event(self):
+        self.client.force_login(self.employee)
+
+        response = self.client.post(
+            reverse("backoffice:machine_create"),
+            data=self.inventory_payload(),
+        )
+
+        self.assertRedirects(response, reverse("backoffice:machine_list"))
+
+        machine = Car.objects.get(title="تویوتا لندکروزر")
+        event = VehicleInventoryEvent.objects.get(car=machine)
+
+        self.assertEqual(machine.status, Car.Status.DRAFT)
+        self.assertFalse(machine.is_deleted)
+        self.assertIsNone(machine.customer)
+        self.assertIsNone(machine.tracking_code)
+        self.assertEqual(event.action, VehicleInventoryEvent.Action.CREATED)
+        self.assertEqual(event.performed_by, self.employee)
+        self.assertEqual(event.source, VehicleInventoryEvent.Source.BACKOFFICE)
+        self.assertEqual(event.changes["fields"]["title"]["after"], machine.title)
+
+    def test_clearance_employee_cannot_open_or_submit_machine_creation(self):
+        self.client.force_login(self.clearance_employee)
+        create_url = reverse("backoffice:machine_create")
+
+        self.assertEqual(self.client.get(create_url).status_code, 403)
+        self.assertEqual(
+            self.client.post(create_url, data=self.inventory_payload()).status_code,
+            403,
+        )
+        self.assertEqual(Car.objects.count(), 0)
+
+    def test_create_service_rejects_lifecycle_fields_even_for_authorized_staff(self):
+        payload = self.inventory_payload(status=Car.Status.FOR_SALE)
+
+        with self.assertRaises(ValidationError):
+            create_inventory_car(
+                actor=self.employee,
+                vehicle_data=payload,
+            )
+
+        self.assertEqual(Car.objects.count(), 0)
+
+    def test_machine_edit_updates_allowed_fields_and_records_a_json_safe_diff(self):
+        machine = self.create_machine(
+            status=Car.Status.DRAFT,
+            price_amount=1000000000,
+        )
+        self.client.force_login(self.employee)
+
+        response = self.client.post(
+            reverse("backoffice:machine_edit", args=[machine.pk]),
+            data=self.inventory_payload(
+                title="تویوتا لندکروزر جدید",
+                price_amount="2600000000",
+            ),
+        )
+
+        self.assertRedirects(response, reverse("backoffice:machine_list"))
+        machine.refresh_from_db()
+        event = VehicleInventoryEvent.objects.filter(
+            car=machine,
+            action=VehicleInventoryEvent.Action.UPDATED,
+        ).get()
+
+        self.assertEqual(machine.title, "تویوتا لندکروزر جدید")
+        self.assertEqual(event.performed_by, self.employee)
+        self.assertEqual(
+            event.changes["fields"]["price_amount"]["before"],
+            "1000000000",
+        )
+        self.assertEqual(
+            event.changes["fields"]["price_amount"]["after"],
+            "2600000000",
+        )
+
+    def test_edit_of_a_sold_machine_is_rejected_by_the_shared_service(self):
+        machine = self.create_machine(
+            status=Car.Status.SOLD,
+            customer=self.customer,
+            tracking_code="OAL-panel-sold",
+        )
+        self.client.force_login(self.employee)
+
+        response = self.client.post(
+            reverse("backoffice:machine_edit", args=[machine.pk]),
+            data=self.inventory_payload(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "پس از رزرو یا فروش، اطلاعات موجودی ماشین از این صفحه قابل ویرایش نیست.",
+        )
+        machine.refresh_from_db()
+        self.assertEqual(machine.status, Car.Status.SOLD)
+        self.assertEqual(VehicleInventoryEvent.objects.count(), 0)
+
+    def test_machine_archive_is_soft_and_creates_the_existing_archive_audit_event(self):
+        machine = self.create_machine(status=Car.Status.FOR_SALE)
+        self.client.force_login(self.employee)
+
+        response = self.client.post(
+            reverse("backoffice:machine_archive", args=[machine.pk]),
+            data={"reason": "تصمیم به خروج از موجودی فعال"},
+        )
+
+        self.assertRedirects(response, reverse("backoffice:machine_list"))
+        machine.refresh_from_db()
+        event = VehicleArchiveEvent.objects.get(car=machine)
+
+        self.assertTrue(machine.is_deleted)
+        self.assertEqual(event.performed_by, self.employee)
+        self.assertEqual(event.source, VehicleArchiveEvent.Source.ADMIN_DASHBOARD)
+
+    def test_machine_list_shows_actions_only_to_an_authorized_inventory_employee(self):
+        machine = self.create_machine(status=Car.Status.DRAFT)
+        self.client.force_login(self.employee)
+
+        response = self.client.get(reverse("backoffice:machine_list"))
+
+        self.assertContains(response, "افزودن ماشین")
+        self.assertContains(
+            response,
+            reverse("backoffice:machine_edit", args=[machine.pk]),
+        )
+        self.assertContains(
+            response,
+            reverse("backoffice:machine_archive", args=[machine.pk]),
+        )
+
+        self.client.force_login(self.clearance_employee)
+        response = self.client.get(reverse("backoffice:machine_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "افزودن ماشین")
+        self.assertNotContains(
+            response,
+            reverse("backoffice:machine_edit", args=[machine.pk]),
+        )
+
+    def test_publish_action_moves_a_draft_to_for_sale(self):
+        machine = self.create_machine(status=Car.Status.DRAFT)
+        self.client.force_login(self.employee)
+
+        response = self.client.post(
+            reverse("backoffice:machine_publish", args=[machine.pk]),
+        )
+
+        self.assertRedirects(response, reverse("backoffice:machine_list"))
+        machine.refresh_from_db()
+        self.assertEqual(machine.status, Car.Status.FOR_SALE)
+
+    def test_authorized_sales_employee_can_create_a_temporary_hold(self):
+        machine = self.create_machine(status=Car.Status.FOR_SALE)
+        hold_permission = Permission.objects.get(
+            content_type__app_label="cars",
+            codename="hold_vehicle",
+        )
+        self.employee.user_permissions.add(hold_permission)
+        self.client.force_login(self.employee)
+
+        response = self.client.post(
+            reverse("backoffice:machine_hold_create", args=[machine.pk]),
+            data={
+                "customer_name": "مشتری مذاکره",
+                "customer_phone": "09121111111",
+                "expires_at": "",
+            },
+        )
+
+        self.assertRedirects(response, reverse("backoffice:vehicle_hold_list"))
+        machine.refresh_from_db()
+        hold = VehicleHold.objects.get(car=machine)
+
+        self.assertEqual(machine.status, Car.Status.ON_HOLD)
+        self.assertTrue(hold.is_active)
+        self.assertEqual(hold.created_by, self.employee)
+
+    def test_pending_and_delivered_lists_use_the_shared_car_statuses_and_search(self):
+        sold_machine = self.create_machine(
+            title="ماشین فروخته‌شده",
+            status=Car.Status.SOLD,
+            customer=self.customer,
+            tracking_code="OAL-pending",
+        )
+        transit_machine = self.create_machine(
+            title="ماشین در مسیر",
+            status=Car.Status.IN_TRANSIT,
+            customer=self.customer,
+            tracking_code="OAL-transit",
+        )
+        delivered_machine = self.create_machine(
+            title="ماشین تحویل‌شده",
+            status=Car.Status.DELIVERED,
+            customer=self.customer,
+            tracking_code="OAL-delivered",
+        )
+        self.client.force_login(self.employee)
+
+        pending_response = self.client.get(
+            reverse("backoffice:pending_delivery_list"),
+            {"q": self.customer.full_name},
+        )
+        delivered_response = self.client.get(
+            reverse("backoffice:delivered_machine_list"),
+            {"q": "OAL-delivered"},
+        )
+
+        self.assertContains(pending_response, sold_machine.title)
+        self.assertContains(pending_response, transit_machine.title)
+        self.assertNotContains(pending_response, delivered_machine.title)
+        self.assertContains(delivered_response, delivered_machine.title)
+        self.assertNotContains(delivered_response, sold_machine.title)
+
+
+class BackofficeDeliveryOperationsTests(TestCase):
+    def setUp(self):
+        role_groups = ensure_default_role_groups()
+        user_model = get_user_model()
+
+        self.administrator = user_model.objects.create_superuser(
+            username="delivery-system-admin",
+            password="test-password",
+            email="admin@example.com",
+        )
+        self.clearance_employee = user_model.objects.create_user(
+            username="delivery-clearance-worker",
+            password="test-password",
+            is_staff=True,
+        )
+        self.clearance_employee.groups.add(
+            role_groups[RoleGroup.CLEARANCE_EMPLOYEE]
+        )
+        self.clearance_profile = StaffProfile.objects.create(
+            user=self.clearance_employee,
+        )
+        self.first_stage = Stage.objects.create(name="ثبت فروش", order=1)
+        self.second_stage = Stage.objects.create(name="ارسال از عمان", order=2)
+        self.third_stage = Stage.objects.create(name="ترخیص", order=3)
+        StageTransition.objects.create(
+            from_stage=self.first_stage,
+            to_stage=self.second_stage,
+            estimated_duration_days=3,
+        )
+        StageTransition.objects.create(
+            from_stage=self.second_stage,
+            to_stage=self.third_stage,
+            estimated_duration_days=5,
+        )
+        self.clearance_profile.assigned_stages.add(
+            self.second_stage,
+            self.third_stage,
+        )
+        self.customer = Customer.objects.create(
+            full_name="خریدار پروندهٔ تحویل",
+            phone="09120000001",
+            telegram_id="delivery-customer",
+        )
+        self.machine = Car.objects.create(
+            title="ماشین پروندهٔ تحویل",
+            brand="Toyota",
+            model="Camry",
+            status=Car.Status.SOLD,
+            tracking_code="OAL-delivery-dossier",
+            customer=self.customer,
+        )
+        start_tracking_for_sold_car(
+            car=self.machine,
+            actor=self.administrator,
+        )
+
+    def test_superuser_can_append_a_stage_and_tracking_progress_is_backfilled(self):
+        self.client.force_login(self.administrator)
+
+        response = self.client.post(
+            reverse("backoffice:stage_create"),
+            data={
+                "name": "تحویل نهایی",
+                "duration_from_previous": "2",
+                "assigned_staff": [str(self.clearance_profile.pk)],
+            },
+        )
+
+        created_stage = Stage.objects.get(name="تحویل نهایی")
+        self.assertRedirects(response, reverse("backoffice:stage_list"))
+        self.assertTrue(
+            StageTransition.objects.filter(
+                from_stage=self.third_stage,
+                to_stage=created_stage,
+                estimated_duration_days=2,
+                is_active=True,
+            ).exists()
+        )
+        self.assertTrue(
+            CarStageProgress.objects.filter(
+                car=self.machine,
+                stage=created_stage,
+                planned_date__isnull=False,
+            ).exists()
+        )
+
+    def test_delivery_dossier_distinguishes_entered_and_waiting_next_stage(self):
+        confirm_stage(
+            car=self.machine,
+            stage=self.second_stage,
+            staff=self.clearance_employee,
+        )
+        self.client.force_login(self.administrator)
+
+        entered_response = self.client.get(
+            reverse("backoffice:delivery_machine_detail", args=[self.machine.pk])
+        )
+        self.assertContains(entered_response, self.machine.tracking_code)
+        self.assertContains(entered_response, "وارد مرحله")
+        self.assertContains(entered_response, self.clearance_employee.username)
+        self.assertContains(entered_response, "تصویر ماشین ثبت نشده است")
+
+        complete_stage(
+            car=self.machine,
+            stage=self.second_stage,
+            staff=self.clearance_employee,
+        )
+        waiting_response = self.client.get(
+            reverse("backoffice:delivery_machine_detail", args=[self.machine.pk])
+        )
+
+        self.assertContains(waiting_response, "منتظر دریافت")
+        self.assertContains(waiting_response, self.third_stage.name)
+        self.assertContains(waiting_response, self.clearance_employee.username)
+
+    def test_legacy_sold_machine_without_tracking_code_is_explicitly_flagged(self):
+        legacy_machine = Car.objects.create(
+            title="ماشین فروش دستی",
+            brand="Kia",
+            model="K5",
+            status=Car.Status.SOLD,
+            customer=self.customer,
+        )
+        self.client.force_login(self.administrator)
+
+        response = self.client.get(
+            reverse("backoffice:delivery_machine_detail", args=[legacy_machine.pk])
+        )
+
+        self.assertContains(response, "کد ثبت نشده")
+        self.assertContains(response, "رهگیری هنوز شروع نشده")
+
+    def test_regular_employee_cannot_open_stage_configuration(self):
+        user_model = get_user_model()
+        employee = user_model.objects.create_user(
+            username="ordinary-delivery-employee",
+            password="test-password",
+            is_staff=True,
+        )
+        self.client.force_login(employee)
+
+        self.assertEqual(
+            self.client.get(reverse("backoffice:stage_list")).status_code,
+            403,
+        )
+
+    def test_system_administrator_can_repair_missing_route_transitions(self):
+        """The repair screen removes the legacy configuration dead-end."""
+
+        StageTransition.objects.update(is_active=False)
+        self.client.force_login(self.administrator)
+        repair_url = reverse("backoffice:stage_transition_repair")
+
+        response = self.client.get(repair_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.first_stage.name)
+        self.assertContains(response, self.second_stage.name)
+
+        response = self.client.post(
+            repair_url,
+            data={
+                f"duration_to_stage_{self.second_stage.pk}": "7",
+                f"duration_to_stage_{self.third_stage.pk}": "5",
+                "confirm_route_repair": "on",
+            },
+        )
+
+        self.assertRedirects(response, reverse("backoffice:stage_list"))
+        self.assertEqual(
+            StageTransition.objects.filter(is_active=True).count(),
+            2,
+        )
+        self.second_stage.refresh_from_db()
+        self.assertEqual(self.second_stage.default_duration_days, 7)
+
+        first_progress = CarStageProgress.objects.get(
+            car=self.machine,
+            stage=self.first_stage,
+        )
+        third_progress = CarStageProgress.objects.get(
+            car=self.machine,
+            stage=self.third_stage,
+        )
+        self.assertEqual(
+            third_progress.planned_date,
+            first_progress.planned_date + timedelta(days=12),
+        )
+
+
+class BackofficeMachinePhotoWorkflowTests(TestCase):
+    def setUp(self):
+        self.temporary_media = TemporaryDirectory()
+        self.media_override = override_settings(MEDIA_ROOT=self.temporary_media.name)
+        self.media_override.enable()
+
+        role_groups = ensure_default_role_groups()
+        user_model = get_user_model()
+        self.employee = user_model.objects.create_user(
+            username="backoffice-photo-employee",
+            password="test-password",
+            is_staff=True,
+        )
+        self.employee.groups.add(role_groups[RoleGroup.EMPLOYEE])
+
+        self.clearance_employee = user_model.objects.create_user(
+            username="backoffice-photo-clearance",
+            password="test-password",
+            is_staff=True,
+        )
+        self.clearance_employee.groups.add(
+            role_groups[RoleGroup.CLEARANCE_EMPLOYEE]
+        )
+
+        self.machine = Car.objects.create(
+            title="ماشین تصویر آزمون",
+            brand="Toyota",
+            model="Camry",
+            status=Car.Status.DRAFT,
+        )
+
+    def tearDown(self):
+        self.media_override.disable()
+        self.temporary_media.cleanup()
+
+    @staticmethod
+    def make_image_file(name, color):
+        image = Image.new("RGB", (320, 220), color=color)
+        output = BytesIO()
+        image.save(output, format="WEBP", quality=80)
+
+        return SimpleUploadedFile(
+            name,
+            output.getvalue(),
+            content_type="image/webp",
+        )
+
+    def test_employee_can_upload_multiple_photos_and_first_image_becomes_cover(self):
+        self.client.force_login(self.employee)
+
+        response = self.client.post(
+            reverse("backoffice:machine_photo_upload", args=[self.machine.pk]),
+            data={
+                "images": [
+                    self.make_image_file("front.webp", (18, 82, 156)),
+                    self.make_image_file("rear.webp", (123, 42, 67)),
+                ]
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("backoffice:machine_photo_manage", args=[self.machine.pk]),
+        )
+        photos = list(CarPhoto.objects.filter(car=self.machine).order_by("sort_order"))
+        event = VehicleInventoryEvent.objects.filter(car=self.machine).get()
+
+        self.assertEqual(len(photos), 2)
+        self.assertTrue(photos[0].is_cover)
+        self.assertFalse(photos[1].is_cover)
+        self.assertEqual(event.changes["photos"]["operation"], "added")
+
+    def test_cover_can_change_and_deleting_it_promotes_the_next_photo(self):
+        first_photo = CarPhoto.objects.create(
+            car=self.machine,
+            image=self.make_image_file("first.webp", (40, 60, 80)),
+            is_cover=True,
+            sort_order=1,
+        )
+        second_photo = CarPhoto.objects.create(
+            car=self.machine,
+            image=self.make_image_file("second.webp", (80, 60, 40)),
+            sort_order=2,
+        )
+        self.client.force_login(self.employee)
+
+        response = self.client.post(
+            reverse(
+                "backoffice:machine_photo_set_cover",
+                args=[self.machine.pk, second_photo.pk],
+            ),
+        )
+        self.assertRedirects(
+            response,
+            reverse("backoffice:machine_photo_manage", args=[self.machine.pk]),
+        )
+
+        first_photo.refresh_from_db()
+        second_photo.refresh_from_db()
+        self.assertFalse(first_photo.is_cover)
+        self.assertTrue(second_photo.is_cover)
+
+        response = self.client.post(
+            reverse(
+                "backoffice:machine_photo_delete",
+                args=[self.machine.pk, second_photo.pk],
+            ),
+        )
+        self.assertRedirects(
+            response,
+            reverse("backoffice:machine_photo_manage", args=[self.machine.pk]),
+        )
+
+        first_photo.refresh_from_db()
+        self.assertTrue(first_photo.is_cover)
+        self.assertFalse(CarPhoto.objects.filter(pk=second_photo.pk).exists())
+
+    def test_clearance_employee_can_view_but_cannot_upload_machine_photos(self):
+        self.client.force_login(self.clearance_employee)
+        gallery_url = reverse(
+            "backoffice:machine_photo_manage",
+            args=[self.machine.pk],
+        )
+        upload_url = reverse(
+            "backoffice:machine_photo_upload",
+            args=[self.machine.pk],
+        )
+
+        self.assertEqual(self.client.get(gallery_url).status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                upload_url,
+                data={"images": [self.make_image_file("denied.webp", (0, 0, 0))]},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(CarPhoto.objects.count(), 0)
+
+
+class BackofficeBlogWorkflowTests(TestCase):
+    def setUp(self):
+        role_groups = ensure_default_role_groups()
+        user_model = get_user_model()
+        self.employee = user_model.objects.create_user(
+            username="backoffice-blog-employee",
+            password="test-password",
+            is_staff=True,
+        )
+        self.employee.groups.add(role_groups[RoleGroup.EMPLOYEE])
+
+        self.clearance_employee = user_model.objects.create_user(
+            username="backoffice-blog-clearance",
+            password="test-password",
+            is_staff=True,
+        )
+        self.clearance_employee.groups.add(
+            role_groups[RoleGroup.CLEARANCE_EMPLOYEE]
+        )
+        self.category = Category.objects.create(
+            name="راهنمای واردات",
+            slug="import-guide",
+        )
+        self.post = Post.objects.create(
+            title="راهنمای اولیهٔ وبلاگ",
+            slug="initial-blog-guide",
+            author=self.employee,
+            category=self.category,
+            excerpt="خلاصهٔ اولیه",
+            content="متن اولیهٔ مقاله برای آزمون پنل اختصاصی.",
+        )
+
+    def post_payload(self, **overrides):
+        payload = {
+            "title": "راهنمای خرید خودرو از عمان",
+            "slug": "oman-car-buying-guide",
+            "category": str(self.category.pk),
+            "cover_image_alt": "خودرو در بندر عمان",
+            "excerpt": "خلاصهٔ کاربردی برای خریداران خودرو.",
+            "content": "متن کامل مقاله دربارهٔ انتخاب و واردات خودرو.",
+            "seo_title": "راهنمای SEO خرید خودرو از عمان",
+            "meta_description": "توضیح SEO مقالهٔ آزمایشی.",
+            "meta_keywords": "خودرو، عمان، واردات",
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_employee_creates_a_draft_article_through_the_shared_service(self):
+        self.client.force_login(self.employee)
+
+        response = self.client.post(
+            reverse("backoffice:blog_post_create"),
+            data=self.post_payload(),
+        )
+
+        created_post = Post.objects.get(slug="oman-car-buying-guide")
+        self.assertRedirects(
+            response,
+            reverse("backoffice:blog_post_edit", args=[created_post.pk]),
+        )
+        self.assertEqual(created_post.author, self.employee)
+        self.assertEqual(created_post.status, Post.Status.DRAFT)
+        self.assertIsNone(created_post.published_at)
+
+    def test_article_list_searches_only_by_title_and_filters_status(self):
+        published_post = Post.objects.create(
+            title="راهنمای تخصصی بندر عمان",
+            slug="published-port-guide",
+            author=self.employee,
+            content="متن مقالهٔ منتشرشده.",
+            status=Post.Status.PUBLISHED,
+        )
+        self.client.force_login(self.employee)
+
+        response = self.client.get(
+            reverse("backoffice:blog_post_list"),
+            {"q": "تخصصی", "status": Post.Status.PUBLISHED},
+        )
+
+        self.assertContains(response, published_post.title)
+        self.assertNotContains(response, self.post.title)
+        self.assertContains(response, "جست‌وجو در عنوان مقاله")
+
+    def test_edit_preserves_author_and_publish_workflow_uses_shared_rules(self):
+        self.client.force_login(self.employee)
+
+        edit_response = self.client.post(
+            reverse("backoffice:blog_post_edit", args=[self.post.pk]),
+            data=self.post_payload(
+                title="راهنمای ویرایش‌شدهٔ وبلاگ",
+                slug=self.post.slug,
+            ),
+        )
+        self.assertRedirects(
+            edit_response,
+            reverse("backoffice:blog_post_edit", args=[self.post.pk]),
+        )
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.author, self.employee)
+        self.assertEqual(self.post.title, "راهنمای ویرایش‌شدهٔ وبلاگ")
+
+        self.assertEqual(
+            self.client.get(
+                reverse("backoffice:blog_post_publish", args=[self.post.pk])
+            ).status_code,
+            405,
+        )
+        publish_response = self.client.post(
+            reverse("backoffice:blog_post_publish", args=[self.post.pk])
+        )
+        self.assertRedirects(publish_response, reverse("backoffice:blog_post_list"))
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.status, Post.Status.PUBLISHED)
+        self.assertIsNotNone(self.post.published_at)
+        self.assertEqual(self.client.get(self.post.get_absolute_url()).status_code, 200)
+
+        unpublish_response = self.client.post(
+            reverse("backoffice:blog_post_unpublish", args=[self.post.pk])
+        )
+        self.assertRedirects(unpublish_response, reverse("backoffice:blog_post_list"))
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.status, Post.Status.DRAFT)
+        self.assertIsNone(self.post.published_at)
+        self.assertEqual(self.client.get(self.post.get_absolute_url()).status_code, 404)
+
+    def test_delete_requires_confirmation_and_clearance_employee_is_denied(self):
+        self.client.force_login(self.clearance_employee)
+        self.assertEqual(
+            self.client.get(reverse("backoffice:blog_post_list")).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(reverse("backoffice:blog_post_create")).status_code,
+            403,
+        )
+
+        self.client.force_login(self.employee)
+        delete_url = reverse("backoffice:blog_post_delete", args=[self.post.pk])
+        self.assertEqual(self.client.get(delete_url).status_code, 200)
+        self.assertTrue(Post.objects.filter(pk=self.post.pk).exists())
+
+        response = self.client.post(delete_url)
+        self.assertRedirects(response, reverse("backoffice:blog_post_list"))
+        self.assertFalse(Post.objects.filter(pk=self.post.pk).exists())
+
+    def test_invalid_cover_upload_does_not_create_an_article(self):
+        self.client.force_login(self.employee)
+
+        response = self.client.post(
+            reverse("backoffice:blog_post_create"),
+            data={
+                **self.post_payload(slug="invalid-cover-post"),
+                "cover_image": SimpleUploadedFile(
+                    "not-an-image.jpg",
+                    b"not a real image",
+                    content_type="image/jpeg",
+                ),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Post.objects.filter(slug="invalid-cover-post").exists())
+
+
+class BackofficeStaffManagementTests(TestCase):
+    def setUp(self):
+        role_groups = ensure_default_role_groups()
+        user_model = get_user_model()
+        self.administrator = user_model.objects.create_superuser(
+            username="backoffice-staff-administrator",
+            password="strong-admin-password-123",
+        )
+        self.employee = user_model.objects.create_user(
+            username="backoffice-staff-employee",
+            password="test-password",
+            first_name="Ali",
+            last_name="Employee",
+            is_staff=True,
+        )
+        self.employee.groups.add(role_groups[RoleGroup.EMPLOYEE])
+        StaffProfile.objects.create(user=self.employee, phone="09120000000")
+        self.stage = Stage.objects.create(name="Clearance stage", order=1)
+
+    def test_only_system_administrator_can_open_staff_management_pages(self):
+        self.client.force_login(self.employee)
+        self.assertEqual(
+            self.client.get(reverse("backoffice:staff_list")).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(reverse("backoffice:staff_create")).status_code,
+            403,
+        )
+
+        self.client.force_login(self.administrator)
+        response = self.client.get(reverse("backoffice:staff_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "مدیریت کارکنان")
+        self.assertContains(response, self.employee.username)
+        self.assertContains(
+            response,
+            reverse("backoffice:staff_detail", args=[self.employee.pk]),
+        )
+
+    def test_administrator_creates_staff_account_through_the_panel(self):
+        self.client.force_login(self.administrator)
+
+        response = self.client.post(
+            reverse("backoffice:staff_create"),
+            data={
+                "username": "panel-clearance-employee",
+                "first_name": "Reza",
+                "last_name": "Clearance",
+                "email": "reza@example.com",
+                "phone": "09123333333",
+                "role": "clearance_employee",
+                "assigned_stages": [str(self.stage.pk)],
+                "exceptional_permissions": [],
+                "password1": "Secure-panel-password-123!",
+                "password2": "Secure-panel-password-123!",
+            },
+        )
+
+        created_user = get_user_model().objects.get(
+            username="panel-clearance-employee"
+        )
+        self.assertRedirects(
+            response,
+            reverse("backoffice:staff_detail", args=[created_user.pk]),
+        )
+        self.assertTrue(created_user.has_perm("tracking.confirm_tracking_stage"))
+        self.assertTrue(
+            StaffProfile.objects.get(user=created_user).assigned_stages.filter(
+                pk=self.stage.pk
+            ).exists()
+        )
+
+    def test_staff_profile_displays_controlled_telegram_actions(self):
+        self.client.force_login(self.administrator)
+
+        response = self.client.get(
+            reverse("backoffice:staff_detail", args=[self.employee.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "اتصال Telegram")
+        self.assertContains(
+            response,
+            reverse("backoffice:staff_telegram_link_issue", args=[self.employee.pk]),
+        )

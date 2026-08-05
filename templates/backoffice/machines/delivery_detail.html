@@ -1,0 +1,153 @@
+{% extends "backoffice/base.html" %}
+{% load backoffice_ui %}
+
+{% block title %}{{ page_title }} | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}{{ page_title }}{% endblock %}
+
+{% block page_description %}<p>{{ page_description }}</p>{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url list_url_name %}" class="backoffice-button backoffice-button--secondary">
+        <i class="fa fa-arrow-right" aria-hidden="true"></i>
+        بازگشت به فهرست
+    </a>
+{% endblock %}
+
+{% block content %}
+    <section class="backoffice-delivery-dossier">
+        <div class="backoffice-delivery-dossier__media">
+            {% if cover_photo %}
+                <img src="{{ cover_photo.image.url }}" alt="{{ cover_photo.alt_text|default:car.title }}">
+            {% else %}
+                <div class="backoffice-delivery-dossier__placeholder">
+                    <i class="fa fa-car" aria-hidden="true"></i>
+                    <span>تصویر ماشین ثبت نشده است</span>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="backoffice-delivery-dossier__summary">
+            <div class="backoffice-delivery-dossier__title-row">
+                <div>
+                    <p class="backoffice-eyebrow">پروندهٔ عملیاتی تحویل</p>
+                    <h2>{{ car.title }}</h2>
+                    <p>{{ car.brand }} {{ car.model }}{% if car.year %} — {{ car.year }}{% endif %}</p>
+                </div>
+                <span class="backoffice-status backoffice-status--{{ car.status|car_status_tone }}">{{ car.status|car_status_label }}</span>
+            </div>
+
+            <div class="backoffice-tracking-code-card {% if tracking_code_is_missing %}is-missing{% endif %}">
+                <span>کد رهگیری مشتری</span>
+                {% if car.tracking_code %}
+                    <strong dir="ltr">{{ car.tracking_code }}</strong>
+                    <button type="button" class="backoffice-copy-code" data-copy-text="{{ car.tracking_code }}" aria-label="کپی کد رهگیری" title="کپی کد رهگیری">
+                        <i class="fa fa-copy" aria-hidden="true"></i>
+                    </button>
+                {% else %}
+                    <strong>کد ثبت نشده</strong>
+                    <p>این پرونده با مسیر استاندارد فروش ساخته نشده است؛ کد را از روند رسمی و دارای Audit اصلاح کنید.</p>
+                {% endif %}
+            </div>
+
+            <div class="backoffice-delivery-meta-grid">
+                <div><span>خریدار</span><strong>{{ car.customer.full_name|default:"اطلاعات ناقص" }}</strong></div>
+                <div><span>شماره تماس</span><strong dir="ltr">{{ car.customer.phone|default:"—" }}</strong></div>
+                <div><span>مرحلهٔ نشانگر</span><strong>{{ current_stage.name|default:"نامشخص" }}</strong></div>
+                <div>
+                    <span>ETA باقی‌مانده</span>
+                    <strong>{% if eta_is_available %}{{ remaining_eta_days }} روز{% else %}قابل محاسبه نیست{% endif %}</strong>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="backoffice-workflow-status backoffice-workflow-status--{{ workflow.tone }}">
+        <span class="backoffice-workflow-status__icon"><i class="fa fa-map-marker" aria-hidden="true"></i></span>
+        <div>
+            <h2>{{ workflow.title }}</h2>
+            <p>{{ workflow.description }}</p>
+        </div>
+    </section>
+
+    <section class="backoffice-delivery-info-grid">
+        <article class="backoffice-delivery-info-card">
+            <header><i class="fa fa-users" aria-hidden="true"></i><h2>کارمندان مسئول مرحلهٔ عملیاتی</h2></header>
+            {% if workflow.responsible_stage %}
+                <p class="backoffice-delivery-info-card__context">مرحله: <strong>{{ workflow.responsible_stage.name }}</strong></p>
+            {% endif %}
+            <div class="backoffice-staff-chips">
+                {% for profile in workflow.responsible_staff %}
+                    <span class="backoffice-staff-chip"><span>{{ profile.user.get_username|first|upper }}</span>{{ profile.user.get_full_name|default:profile.user.get_username }}</span>
+                {% empty %}
+                    <span class="backoffice-empty-inline">برای این مرحله هنوز کارمند مسئول تعیین نشده است.</span>
+                {% endfor %}
+            </div>
+        </article>
+
+        <article class="backoffice-delivery-info-card">
+            <header><i class="fa fa-user" aria-hidden="true"></i><h2>آخرین کارمند درگیر</h2></header>
+            {% if workflow.last_handler %}
+                <strong class="backoffice-last-handler">{{ workflow.last_handler.get_full_name|default:workflow.last_handler.get_username }}</strong>
+                <p>این نام از تأیید ورود، تکمیل/رد مرحله یا آخرین رویداد ثبت‌شده به دست آمده است.</p>
+            {% else %}
+                <span class="backoffice-empty-inline">هنوز کارمند عملیاتی برای این پرونده ثبت نشده است.</span>
+            {% endif %}
+            {% if latest_event %}
+                <dl class="backoffice-last-event-meta">
+                    <div><dt>آخرین اقدام</dt><dd>{{ latest_event.created_at|date:"Y/m/d H:i" }}</dd></div>
+                    <div><dt>منبع</dt><dd>{{ latest_event_source_label }}</dd></div>
+                </dl>
+            {% endif %}
+        </article>
+    </section>
+
+    <section class="backoffice-delivery-detail-section">
+        <div class="backoffice-section-heading">
+            <div><p class="backoffice-eyebrow">مرحله به مرحله</p><h2>تاریخچهٔ پیشرفت تحویل</h2></div>
+            <span>وضعیت هر مرحله بدون تغییر در Audit نمایش داده می‌شود.</span>
+        </div>
+        <ol class="backoffice-progress-timeline">
+            {% for item in timeline %}
+                <li class="backoffice-progress-timeline__item is-{{ item.state }}">
+                    <span class="backoffice-progress-timeline__marker"><i class="fa {% if item.state == 'completed' %}fa-check{% elif item.state == 'entered' %}fa-map-marker{% elif item.state == 'skipped' %}fa-forward{% else %}fa-clock-o{% endif %}" aria-hidden="true"></i></span>
+                    <div>
+                        <header><h3>{{ item.progress.stage.name }}</h3><span class="backoffice-progress-state backoffice-progress-state--{{ item.state }}">{{ item.state_label }}</span></header>
+                        <dl>
+                            <div><dt>برنامه</dt><dd>{{ item.progress.planned_date|date:"Y/m/d"|default:"—" }}</dd></div>
+                            <div><dt>ورود</dt><dd>{{ item.progress.actual_arrival|date:"Y/m/d H:i"|default:"—" }}</dd></div>
+                            <div><dt>تکمیل</dt><dd>{{ item.progress.completed_at|date:"Y/m/d H:i"|default:"—" }}</dd></div>
+                        </dl>
+                    </div>
+                </li>
+            {% empty %}
+                <li class="backoffice-empty-inline">هیچ رکورد مرحله‌ای برای این ماشین ثبت نشده است.</li>
+            {% endfor %}
+        </ol>
+    </section>
+
+    <section class="backoffice-delivery-detail-section">
+        <div class="backoffice-section-heading">
+            <div><p class="backoffice-eyebrow">Audit Trail</p><h2>رویدادهای ثبت‌شده</h2></div>
+            <span>منبع هر اقدام: پنل، ربات تلگرام، Excel یا سیستم</span>
+        </div>
+        <div class="backoffice-event-list">
+            {% for item in events %}
+                <article class="backoffice-event-row">
+                    <span class="backoffice-event-row__icon"><i class="fa fa-history" aria-hidden="true"></i></span>
+                    <div>
+                        <h3>{{ item.event_label }}</h3>
+                        <p>{{ item.event.note|default:"بدون توضیح تکمیلی" }}</p>
+                    </div>
+                    <dl>
+                        <div><dt>کاربر</dt><dd>{{ item.event.performed_by.get_full_name|default:item.event.performed_by.get_username|default:"سیستم" }}</dd></div>
+                        <div><dt>منبع</dt><dd>{{ item.source_label }}</dd></div>
+                        <div><dt>زمان</dt><dd>{{ item.event.created_at|date:"Y/m/d H:i" }}</dd></div>
+                    </dl>
+                </article>
+            {% empty %}
+                <div class="backoffice-empty-state backoffice-empty-state--compact"><i class="fa fa-history" aria-hidden="true"></i><p>برای این ماشین هنوز رویداد رهگیری ثبت نشده است.</p></div>
+            {% endfor %}
+        </div>
+    </section>
+{% endblock %}

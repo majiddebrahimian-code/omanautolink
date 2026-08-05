@@ -1,0 +1,124 @@
+{% extends "admin/base_site.html" %}
+{% load log %}
+
+{% block bodyclass %}dashboard{% endblock %}
+
+{% block content_title %}<h1 class="m-0 text-dark">داشبورد</h1>{% endblock %}
+{% block content_subtitle %}<p class="adminlte-subtitle">نمای زندهٔ خودروها، رهگیری، محتوا و عملیات داخلی.</p>{% endblock %}
+
+{% block breadcrumbs %}
+    <ol class="breadcrumb float-sm-left">
+        <li class="breadcrumb-item"><a href="{% url 'admin:index' %}">خانه</a></li>
+        <li class="breadcrumb-item active">داشبورد</li>
+    </ol>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    {% for card in admin_dashboard_cards %}
+        <div class="col-lg-3 col-6">
+            <a href="{{ card.url }}" class="small-box bg-{{ card.adminlte_tone }} adminlte-stat-box">
+                <div class="inner">
+                    <h3>{{ card.value }}</h3>
+                    <p>{{ card.label }}</p>
+                </div>
+                <div class="icon"><i class="fa {{ card.adminlte_icon }}" aria-hidden="true"></i></div>
+                <span class="small-box-footer">مشاهدهٔ جزئیات <i class="fa fa-arrow-circle-left" aria-hidden="true"></i></span>
+            </a>
+        </div>
+    {% empty %}
+        <div class="col-12"><div class="alert alert-info">برای مشاهدهٔ آمار، دسترسی مناسب لازم است.</div></div>
+    {% endfor %}
+</div>
+
+<div class="row">
+    <section class="col-lg-7">
+        <div class="card card-outline card-primary adminlte-route-card">
+            <div class="card-header border-0">
+                <h3 class="card-title"><i class="fa fa-map-marker text-primary ml-2" aria-hidden="true"></i>نمای عملیاتی مسیر واردات</h3>
+                <div class="card-tools"><a class="btn btn-tool" href="{% url 'admin:tracking_stage_changelist' %}" title="مدیریت مراحل"><i class="fa fa-cog" aria-hidden="true"></i></a></div>
+            </div>
+            <div class="card-body">
+                <div class="adminlte-route-layout">
+                    <div class="adminlte-route-map" role="img" aria-label="مسیر واردات خودرو از عمان تا ایران">
+                        <svg viewBox="0 0 680 260" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+                            <defs>
+                                <linearGradient id="routeSea" x1="0" x2="1"><stop stop-color="#1d8ece"/><stop offset="1" stop-color="#29b765"/></linearGradient>
+                                <filter id="routeGlow"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                            </defs>
+                            <path d="M30 184C145 110 215 207 315 139S490 68 648 92" fill="none" stroke="#dce7ee" stroke-width="26" stroke-linecap="round" opacity=".6"/>
+                            <path d="M52 183C150 130 222 201 318 143S483 76 625 95" fill="none" stroke="url(#routeSea)" stroke-width="5" stroke-linecap="round" stroke-dasharray="10 9" filter="url(#routeGlow)"/>
+                            <circle cx="55" cy="183" r="16" fill="#f4b740" stroke="#fff" stroke-width="5"/><circle cx="625" cy="95" r="16" fill="#2077c7" stroke="#fff" stroke-width="5"/>
+                            <text x="30" y="227" fill="#495866" font-size="21" font-family="Vazir, sans-serif">عمان</text><text x="595" y="57" fill="#495866" font-size="21" font-family="Vazir, sans-serif">ایران</text>
+                            <g fill="#82a5bb" opacity=".9"><circle cx="173" cy="148" r="5"/><circle cx="287" cy="164" r="5"/><circle cx="423" cy="108" r="5"/><circle cx="534" cy="92" r="5"/></g>
+                        </svg>
+                    </div>
+                    <div class="adminlte-route-copy">
+                        <p class="text-muted mb-1">رهگیری خودرو</p>
+                        <h4>از انتخاب خودرو تا تحویل</h4>
+                        <p>مراحل، تاریخچه و تأییدهای کارکنان از یک منطق مشترک مدیریت می‌شوند.</p>
+                        <a href="{% url 'admin:tracking_stage_changelist' %}" class="btn btn-primary btn-sm">مدیریت مراحل <i class="fa fa-arrow-circle-left mr-1" aria-hidden="true"></i></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <aside class="col-lg-5">
+        <div class="card card-outline card-success adminlte-activity-card">
+            <div class="card-header border-0"><h3 class="card-title"><i class="fa fa-clock-o text-success ml-2" aria-hidden="true"></i>فعالیت‌های اخیر شما</h3></div>
+            <div class="card-body p-0">
+                {% get_admin_log 8 as admin_log for_user user %}
+                <ul class="adminlte-activity-list">
+                    {% for entry in admin_log %}
+                        <li>
+                            <i class="fa {% if entry.is_addition %}fa-plus-circle text-success{% elif entry.is_change %}fa-pencil text-primary{% else %}fa-trash text-danger{% endif %}" aria-hidden="true"></i>
+                            <div>{% if entry.is_deletion or not entry.get_admin_url %}<strong>{{ entry.object_repr }}</strong>{% else %}<a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>{% endif %}<small>{{ entry.content_type.name|default:'تغییر سیستمی' }}</small></div>
+                        </li>
+                    {% empty %}
+                        <li class="adminlte-activity-list__empty">هنوز فعالیتی برای نمایش وجود ندارد.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </aside>
+</div>
+
+{% if admin_control_shortcuts %}
+<section class="card card-outline card-info">
+    <div class="card-header"><h3 class="card-title"><i class="fa fa-sliders ml-2 text-info" aria-hidden="true"></i>تنظیمات قابل‌کنترل سایت</h3><div class="card-tools"><span class="text-muted small">اطلاعات ظاهری و محتوایی از این بخش مدیریت می‌شوند.</span></div></div>
+    <div class="card-body">
+        <div class="row">
+            {% for shortcut in admin_control_shortcuts %}
+                <div class="col-lg-4 col-md-6">
+                    <a class="info-box adminlte-settings-box" href="{{ shortcut.url }}">
+                        <span class="info-box-icon bg-info elevation-1"><i class="fa {% if shortcut.icon == 'identity' %}fa-paint-brush{% elif shortcut.icon == 'home' %}fa-home{% elif shortcut.icon == 'blog-settings' %}fa-newspaper-o{% elif shortcut.icon == 'navigation' %}fa-bars{% elif shortcut.icon == 'footer' %}fa-columns{% elif shortcut.icon == 'social' %}fa-share-alt{% else %}fa-file-text-o{% endif %}" aria-hidden="true"></i></span>
+                        <span class="info-box-content"><span class="info-box-text">{{ shortcut.label }}</span><span class="info-box-number">{{ shortcut.description }}</span></span>
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section class="card card-outline card-secondary">
+    <div class="card-header"><h3 class="card-title"><i class="fa fa-th-large ml-2 text-secondary" aria-hidden="true"></i>بخش‌های قابل دسترس</h3></div>
+    <div class="card-body">
+        <div class="row">
+            {% for app in app_list %}
+                <div class="col-xl-3 col-lg-4 col-md-6">
+                    <div class="card card-light adminlte-app-card">
+                        <div class="card-header"><h3 class="card-title">{% if app.app_label == 'cars' %}خودروها و فروش{% elif app.app_label == 'customers' %}مشتریان و درخواست‌ها{% elif app.app_label == 'tracking' %}رهگیری و مراحل{% elif app.app_label == 'blog' %}محتوا و وبلاگ{% elif app.app_label == 'core' %}تنظیمات وب‌سایت{% elif app.app_label == 'integrations' %}Telegram و یکپارچه‌سازی{% elif app.app_label == 'accounts' %}کارمندان و دسترسی‌ها{% elif app.app_label == 'auth' %}کاربران و گروه‌ها{% else %}{{ app.name }}{% endif %}</h3></div>
+                        <ul class="list-group list-group-flush">
+                            {% for model in app.models %}
+                                <li class="list-group-item"><a href="{{ model.admin_url }}">{{ model.name|capfirst }}</a>{% if model.add_url %}<a class="float-left text-info" href="{{ model.add_url }}" aria-label="افزودن {{ model.name }}"><i class="fa fa-plus-circle" aria-hidden="true"></i></a>{% endif %}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}

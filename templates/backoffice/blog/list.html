@@ -1,0 +1,200 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}لیست مقالات | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}لیست مقالات{% endblock %}
+
+{% block page_description %}
+    <p>مقاله‌ها را بر اساس عنوان جست‌وجو کنید، وضعیت انتشار آن‌ها را ببینید و عملیات محتوایی را از یک محل مدیریت کنید.</p>
+{% endblock %}
+
+{% block page_actions %}
+    <span class="backoffice-result-count">{{ result_count }} مقاله</span>
+
+    {% if perms.blog.add_post %}
+        <a
+            href="{% url 'backoffice:blog_post_create' %}"
+            class="backoffice-button backoffice-button--primary backoffice-icon-button"
+            aria-label="افزودن مقاله"
+            data-tooltip="افزودن مقاله"
+            title="افزودن مقاله"
+        >
+            <i class="fa fa-plus" aria-hidden="true"></i>
+        </a>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    <section class="backoffice-search-card">
+        <form method="get" class="backoffice-search-form">
+            <input type="hidden" name="status" value="{{ status_filter }}">
+
+            <div>
+                <label for="post-search" class="backoffice-search-label">جست‌وجو در عنوان مقاله</label>
+                <input
+                    id="post-search"
+                    type="search"
+                    name="q"
+                    value="{{ query }}"
+                    class="backoffice-input"
+                    placeholder="عنوان مقاله را وارد کنید"
+                >
+            </div>
+
+            <div class="backoffice-search-actions">
+                <button type="submit" class="backoffice-button backoffice-button--primary">
+                    <i class="fa fa-search" aria-hidden="true"></i>
+                    جست‌وجو
+                </button>
+
+                {% if query %}
+                    <a href="{% url 'backoffice:blog_post_list' %}?status={{ status_filter }}" class="backoffice-button backoffice-button--secondary">پاک‌کردن</a>
+                {% endif %}
+            </div>
+        </form>
+
+        <nav class="backoffice-filter-tabs" aria-label="فیلتر وضعیت مقاله‌ها">
+            <a href="{% url 'backoffice:blog_post_list' %}{% if query %}?q={{ query|urlencode }}{% endif %}" class="{% if status_filter == 'all' %}is-active{% endif %}">همه</a>
+            <a href="{% url 'backoffice:blog_post_list' %}?status=draft{% if query %}&amp;q={{ query|urlencode }}{% endif %}" class="{% if status_filter == 'draft' %}is-active{% endif %}">پیش‌نویس‌ها</a>
+            <a href="{% url 'backoffice:blog_post_list' %}?status=published{% if query %}&amp;q={{ query|urlencode }}{% endif %}" class="{% if status_filter == 'published' %}is-active{% endif %}">منتشرشده‌ها</a>
+        </nav>
+    </section>
+
+    <section class="backoffice-table-card">
+        <div class="backoffice-table-scroll">
+            <table class="backoffice-table backoffice-post-table">
+                <thead>
+                    <tr>
+                        <th>مقاله</th>
+                        <th>وضعیت</th>
+                        <th>نویسنده</th>
+                        <th>آخرین ویرایش</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for post in page_obj %}
+                        <tr>
+                            <td>
+                                <div class="backoffice-post-title">
+                                    <span class="backoffice-post-title__media">
+                                        {% if post.cover_image %}
+                                            <img src="{{ post.cover_image.url }}" alt="">
+                                        {% else %}
+                                            <i class="fa fa-newspaper-o" aria-hidden="true"></i>
+                                        {% endif %}
+                                    </span>
+                                    <div>
+                                        <strong>{{ post.title }}</strong>
+                                        <small>
+                                            {% if post.category %}{{ post.category.name }}{% else %}بدون دسته‌بندی{% endif %}
+                                            <span aria-hidden="true">•</span>
+                                            {{ post.slug }}
+                                        </small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="backoffice-post-status backoffice-post-status--{{ post.status }}">
+                                    {{ post.get_status_display }}
+                                </span>
+                                {% if post.status == 'published' and post.published_at %}
+                                    <small class="backoffice-post-status__date">{{ post.published_at|date:"Y/m/d" }}</small>
+                                {% endif %}
+                            </td>
+                            <td>{{ post.author_display_name|default:"—" }}</td>
+                            <td>{{ post.updated_at|date:"Y/m/d H:i" }}</td>
+                            <td>
+                                <div class="backoffice-row-actions">
+                                    {% if perms.blog.change_post %}
+                                        <a
+                                            href="{% url 'backoffice:blog_post_edit' post.pk %}"
+                                            class="backoffice-button backoffice-button--outline backoffice-button--small backoffice-icon-button"
+                                            aria-label="ویرایش مقالهٔ {{ post.title }}"
+                                            data-tooltip="ویرایش مقاله"
+                                            title="ویرایش مقاله"
+                                        >
+                                            <i class="fa fa-pencil" aria-hidden="true"></i>
+                                        </a>
+                                    {% endif %}
+
+                                    {% if post.status == 'draft' and perms.blog.change_post or post.status == 'draft' and perms.blog.publish_post %}
+                                        <form method="post" action="{% url 'backoffice:blog_post_publish' post.pk %}">
+                                            {% csrf_token %}
+                                            <button
+                                                type="submit"
+                                                class="backoffice-button backoffice-button--primary backoffice-button--small backoffice-icon-button"
+                                                aria-label="انتشار مقالهٔ {{ post.title }}"
+                                                data-tooltip="انتشار در سایت"
+                                                title="انتشار در سایت"
+                                            >
+                                                <i class="fa fa-cloud-upload" aria-hidden="true"></i>
+                                            </button>
+                                        </form>
+                                    {% elif post.status == 'published' and perms.blog.change_post or post.status == 'published' and perms.blog.publish_post %}
+                                        <form method="post" action="{% url 'backoffice:blog_post_unpublish' post.pk %}">
+                                            {% csrf_token %}
+                                            <button
+                                                type="submit"
+                                                class="backoffice-button backoffice-button--warning backoffice-button--small backoffice-icon-button"
+                                                aria-label="بازگرداندن مقالهٔ {{ post.title }} به پیش‌نویس"
+                                                data-tooltip="بازگرداندن به پیش‌نویس"
+                                                title="بازگرداندن به پیش‌نویس"
+                                            >
+                                                <i class="fa fa-eye-slash" aria-hidden="true"></i>
+                                            </button>
+                                        </form>
+                                    {% endif %}
+
+                                    {% if post.status == 'published' and post.published_at %}
+                                        <a
+                                            href="{{ post.get_absolute_url }}"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="backoffice-button backoffice-button--secondary backoffice-button--small backoffice-icon-button"
+                                            aria-label="مشاهدهٔ عمومی مقالهٔ {{ post.title }}"
+                                            data-tooltip="مشاهده در سایت"
+                                            title="مشاهده در سایت"
+                                        >
+                                            <i class="fa fa-external-link" aria-hidden="true"></i>
+                                        </a>
+                                    {% endif %}
+
+                                    {% if perms.blog.delete_post %}
+                                        <a
+                                            href="{% url 'backoffice:blog_post_delete' post.pk %}"
+                                            class="backoffice-button backoffice-button--danger backoffice-button--small backoffice-icon-button"
+                                            aria-label="حذف مقالهٔ {{ post.title }}"
+                                            data-tooltip="حذف مقاله"
+                                            title="حذف مقاله"
+                                        >
+                                            <i class="fa fa-trash" aria-hidden="true"></i>
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="5" class="backoffice-table-empty">
+                                هنوز مقاله‌ای با این مشخصات وجود ندارد.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="backoffice-pagination" aria-label="صفحه‌بندی مقاله‌ها">
+                {% if page_obj.has_previous %}
+                    <a href="?status={{ status_filter }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}&amp;page={{ page_obj.previous_page_number }}">قبلی</a>
+                {% endif %}
+                <span>صفحهٔ {{ page_obj.number }} از {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?status={{ status_filter }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}&amp;page={{ page_obj.next_page_number }}">بعدی</a>
+                {% endif %}
+            </nav>
+        {% endif %}
+    </section>
+{% endblock %}

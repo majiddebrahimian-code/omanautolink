@@ -1,0 +1,82 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}بایگانی مرحلهٔ {{ stage.name }} | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}بررسی اثر بایگانی مرحله{% endblock %}
+
+{% block page_description %}
+    <p>مرحلهٔ «{{ stage.name }}» حذف نمی‌شود؛ بایگانی می‌شود و تاریخچهٔ آن حفظ خواهد شد.</p>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'backoffice:stage_list' %}" class="backoffice-button backoffice-button--secondary">بازگشت به فهرست مراحل</a>
+{% endblock %}
+
+{% block content %}
+    <section class="backoffice-stage-archive-impact">
+        <header>
+            <span><i class="fa fa-exclamation-triangle" aria-hidden="true"></i></span>
+            <div>
+                <h2>اثر این تغییر روی مسیر و ماشین‌ها</h2>
+                <p>
+                    مسیر جایگزین: <strong>{{ previous_stage.name|default:"—" }}</strong>
+                    <i class="fa fa-long-arrow-left" aria-hidden="true"></i>
+                    <strong>{{ next_stage.name|default:"—" }}</strong>
+                </p>
+            </div>
+        </header>
+
+        <div class="backoffice-impact-grid">
+            <article>
+                <strong>{{ impact.counts.entered_not_completed }}</strong>
+                <span>وارد مرحله شده‌اند؛ به مرحلهٔ قبلی بازمی‌گردند</span>
+            </article>
+            <article>
+                <strong>{{ impact.counts.completed_waiting_for_next }}</strong>
+                <span>مرحله را کامل کرده‌اند؛ منتظر دریافت در مرحلهٔ بعدی می‌مانند</span>
+            </article>
+            <article>
+                <strong>{{ impact.counts.not_reached }}</strong>
+                <span>هنوز نرسیده‌اند؛ این مرحله برایشان رد می‌شود</span>
+            </article>
+            <article>
+                <strong>{{ impact.counts.total_affected }}</strong>
+                <span>مجموع ماشین‌های اثرپذیر</span>
+            </article>
+        </div>
+
+        {% if impact.counts.total_affected %}
+            <details class="backoffice-impact-details">
+                <summary>مشاهدهٔ چند نمونه از ماشین‌های اثرپذیر</summary>
+                <div>
+                    {% for machine in impact.entered_not_completed|slice:":5" %}<span>{{ machine.title }} — {{ machine.tracking_code|default:"بدون کد" }}</span>{% endfor %}
+                    {% for machine in impact.completed_waiting_for_next|slice:":5" %}<span>{{ machine.title }} — {{ machine.tracking_code|default:"بدون کد" }}</span>{% endfor %}
+                    {% for machine in impact.not_reached|slice:":5" %}<span>{{ machine.title }} — {{ machine.tracking_code|default:"بدون کد" }}</span>{% endfor %}
+                </div>
+            </details>
+        {% endif %}
+    </section>
+
+    <form method="post" class="backoffice-form-card backoffice-form-card--warning" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="backoffice-form-errors" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+
+        {% for field in form %}
+            <div class="backoffice-field {% if field.name == 'confirm_affected_vehicles' %}backoffice-field--checkbox{% endif %}">
+                {% if field.name == 'confirm_affected_vehicles' %}
+                    <label class="backoffice-checkbox-label" for="{{ field.id_for_label }}">{{ field }}<span>{{ field.label }}</span></label>
+                {% else %}
+                    <label for="{{ field.id_for_label }}" class="backoffice-field__label">{{ field.label }}{% if field.field.required %}<span class="backoffice-required">*</span>{% endif %}</label>
+                    {{ field }}
+                {% endif %}
+                {% if field.help_text %}<small class="backoffice-field__help">{{ field.help_text }}</small>{% endif %}
+                {% if field.errors %}<div class="backoffice-field__error" role="alert">{{ field.errors }}</div>{% endif %}
+            </div>
+        {% endfor %}
+
+        <div class="backoffice-form-actions">
+            <button type="submit" class="backoffice-button backoffice-button--danger"><i class="fa fa-archive" aria-hidden="true"></i> بایگانی امن مرحله</button>
+            <a href="{% url 'backoffice:stage_list' %}" class="backoffice-button backoffice-button--secondary">انصراف</a>
+        </div>
+    </form>
+{% endblock %}

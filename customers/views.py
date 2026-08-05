@@ -1,6 +1,8 @@
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 
+from core.seo import breadcrumb_schema, page_context
+
 from .forms import PublicCustomVehicleRequestForm
 from .models import CustomVehicleRequest
 from .services import create_custom_vehicle_request
@@ -57,6 +59,19 @@ def public_custom_vehicle_request_create(request):
         request,
         "customers/custom_vehicle_request_form.html",
         {
+            **page_context(
+                request,
+                title="درخواست خودروی سفارشی",
+                description="مشخصات خودروی موردنظر خود را ثبت کنید تا کارشناسان بازار عمان آن را برای شما بررسی کنند.",
+                canonical_path="/requests/vehicle/",
+                structured_data=breadcrumb_schema(
+                    request,
+                    [
+                        ("صفحهٔ اصلی", "/"),
+                        ("درخواست خودرو", "/requests/vehicle/"),
+                    ],
+                ),
+            ),
             "form": form,
         },
     )
@@ -66,4 +81,10 @@ def public_custom_vehicle_request_success(request):
     return render(
         request,
         "customers/custom_vehicle_request_success.html",
+        page_context(
+            request,
+            title="درخواست ثبت شد",
+            canonical_path="/requests/vehicle/success/",
+            noindex=True,
+        ),
     )

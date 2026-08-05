@@ -1,0 +1,53 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}تأیید فروش ماشین | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}تأیید فروش ماشین{% endblock %}
+
+{% block page_description %}
+    <p>این عملیات فروش را ثبت می‌کند، کد رهگیری یکتا می‌سازد و فرایند تحویل را آغاز می‌کند.</p>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'backoffice:vehicle_hold_list' %}" class="backoffice-button backoffice-button--secondary">بازگشت به رزروها</a>
+{% endblock %}
+
+{% block content %}
+    <form method="post" class="backoffice-form-card backoffice-form-card--sale" novalidate>
+        {% csrf_token %}
+
+        <section class="backoffice-confirmation-summary">
+            <span class="backoffice-confirmation-summary__icon backoffice-confirmation-summary__icon--sale">
+                <i class="fa fa-check" aria-hidden="true"></i>
+            </span>
+            <div>
+                <h2>{{ hold.car.title }}</h2>
+                <p>رزرو موقت ثبت‌شده برای {{ hold.customer_name|default:"مشتری جدید" }}</p>
+            </div>
+        </section>
+
+        {% if form.non_field_errors %}
+            <div class="backoffice-form-errors" role="alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="backoffice-form-grid">
+            {% for field in form %}
+                <div class="backoffice-field">
+                    <label for="{{ field.id_for_label }}" class="backoffice-field__label">
+                        {{ field.label }} <span class="backoffice-required">*</span>
+                    </label>
+                    {{ field }}
+                    {% if field.errors %}<div class="backoffice-field__error" role="alert">{{ field.errors }}</div>{% endif %}
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="backoffice-form-actions">
+            <button type="submit" class="backoffice-button backoffice-button--primary">
+                <i class="fa fa-check-circle" aria-hidden="true"></i>
+                تأیید نهایی فروش
+            </button>
+            <a href="{% url 'backoffice:vehicle_hold_list' %}" class="backoffice-button backoffice-button--secondary">انصراف</a>
+        </div>
+    </form>
+{% endblock %}

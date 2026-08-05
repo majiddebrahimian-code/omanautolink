@@ -27,8 +27,10 @@ from tracking.services import (
     complete_stage,
     confirm_stage,
     correct_tracking_stage,
+    get_linear_stage_route_integrity,
     get_public_tracking_data,
     get_stage_archive_impact,
+    repair_linear_stage_transitions,
     skip_stage,
     start_tracking_for_sold_car,
 )
@@ -1165,8 +1167,19 @@ class StageTransitionTests(TestCase):
         )
 
 
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "public-tracking-lookup-view-tests",
+        }
+    }
+)
 class PublicTrackingLookupViewTests(TestCase):
     def setUp(self):
+        # The application normally uses Redis.  Isolate these view tests so
+        # repeated --keepdb runs cannot inherit a previous rate-limit counter.
+        cache.clear()
         self.actor = get_user_model().objects.create_user(
             username="public-tracking-actor",
             password="test-password",
@@ -1209,6 +1222,9 @@ class PublicTrackingLookupViewTests(TestCase):
             car=self.car,
             actor=self.actor,
         )
+
+    def tearDown(self):
+        cache.clear()
 
     def test_get_displays_the_public_tracking_lookup_form(self):
         response = self.client.get(reverse("tracking:public_lookup"))
@@ -1385,3 +1401,242 @@ class TrackingAdminSafetyTests(TestCase):
             self.stage_admin.readonly_fields,
         )
         self.assertFalse(self.stage_admin.has_delete_permission(self.request))
+
+
+class TrackingCarStatusSynchronizationTests(TestCase):
+    """The panel lists rely on these shared lifecycle state transitions."""
+
+    def setUp(self):
+        self.sale_confirmed_stage = Stage.objects.create(
+            name="Sale Confirmed",
+            order=1,
+        )
+        self.shipping_stage = Stage.objects.create(
+            name="Shipping",
+            order=2,
+        )
+        self.delivery_stage = Stage.objects.create(
+            name="Delivered to Customer",
+            order=3,
+        )
+        StageTransition.objects.create(
+            from_stage=self.sale_confirmed_stage,
+            to_stage=self.shipping_stage,
+            estimated_duration_days=3,
+        )
+        StageTransition.objects.create(
+            from_stage=self.shipping_stage,
+            to_stage=self.delivery_stage,
+            estimated_duration_days=5,
+        )
+
+        user_model = get_user_model()
+        self.employee = user_model.objects.create_user(
+            username="tracking-status-employee",
+            password="test-password",
+            is_staff=True,
+        )
+        self.employee.groups.add(
+            ensure_default_role_groups()[RoleGroup.CLEARANCE_EMPLOYEE],
+        )
+        profile, _ = StaffProfile.objects.get_or_create(user=self.employee)
+        profile.assigned_stages.add(
+            self.shipping_stage,
+            self.delivery_stage,
+        )
+
+        self.car = Car.objects.create(
+            title="Status Sync Vehicle",
+            brand="Toyota",
+            model="Camry",
+            status=Car.Status.SOLD,
+            tracking_code="OAL-status-sync",
+        )
+        start_tracking_for_sold_car(
+            car=self.car,
+            actor=self.employee,
+        )
+
+    def test_sale_stays_sold_until_the_first_operational_stage_is_entered(self):
+        self.car.refresh_from_db()
+
+        self.assertEqual(self.car.status, Car.Status.SOLD)
+
+        confirm_stage(
+            car=self.car,
+            stage=self.shipping_stage,
+            staff=self.employee,
+        )
+        self.car.refresh_from_db()
+
+        self.assertEqual(self.car.status, Car.Status.IN_TRANSIT)
+
+
+    def test_completing_the_final_stage_marks_the_car_as_delivered(self):
+        confirm_stage(
+            car=self.car,
+            stage=self.shipping_stage,
+            staff=self.employee,
+        )
+        complete_stage(
+            car=self.car,
+            stage=self.shipping_stage,
+            staff=self.employee,
+        )
+        confirm_stage(
+            car=self.car,
+            stage=self.delivery_stage,
+            staff=self.employee,
+        )
+        complete_stage(
+            car=self.car,
+            stage=self.delivery_stage,
+            staff=self.employee,
+        )
+        self.car.refresh_from_db()
+
+        self.assertEqual(self.car.status, Car.Status.DELIVERED)
+
+    def test_correction_from_a_delivered_car_returns_it_to_pending_delivery(self):
+        correction_permission = Permission.objects.get(
+            content_type__app_label="tracking",
+            codename="correct_tracking_stage",
+        )
+        self.employee.user_permissions.add(correction_permission)
+
+        confirm_stage(
+            car=self.car,
+            stage=self.shipping_stage,
+            staff=self.employee,
+        )
+        complete_stage(
+            car=self.car,
+            stage=self.shipping_stage,
+            staff=self.employee,
+        )
+        confirm_stage(
+            car=self.car,
+            stage=self.delivery_stage,
+            staff=self.employee,
+        )
+        complete_stage(
+            car=self.car,
+            stage=self.delivery_stage,
+            staff=self.employee,
+        )
+
+        correct_tracking_stage(
+            car=self.car,
+            stage=self.shipping_stage,
+            actor=self.employee,
+            note="Delivery record needed a correction.",
+        )
+        self.car.refresh_from_db()
+
+        self.assertEqual(self.car.status, Car.Status.IN_TRANSIT)
+
+
+class LinearStageTransitionRepairTests(TestCase):
+    def setUp(self):
+        self.purchase_stage = Stage.objects.create(
+            name="Purchase confirmed",
+            order=1,
+        )
+        self.customs_stage = Stage.objects.create(
+            name="Customs clearance",
+            order=2,
+        )
+        self.shipping_stage = Stage.objects.create(
+            name="Shipping to Iran",
+            order=3,
+        )
+        self.delivery_stage = Stage.objects.create(
+            name="Delivered to customer",
+            order=4,
+        )
+        self.system_administrator = get_user_model().objects.create_superuser(
+            username="route-repair-administrator",
+            password="strong-admin-password-123",
+        )
+
+    def transition_durations(self):
+        return {
+            (self.purchase_stage.pk, self.customs_stage.pk): 7,
+            (self.customs_stage.pk, self.shipping_stage.pk): 5,
+            (self.shipping_stage.pk, self.delivery_stage.pk): 4,
+        }
+
+    def test_repair_creates_the_exact_missing_linear_transitions(self):
+        integrity = get_linear_stage_route_integrity()
+        self.assertFalse(integrity["is_valid"])
+        self.assertEqual(len(integrity["missing_pairs"]), 3)
+
+        result = repair_linear_stage_transitions(
+            actor=self.system_administrator,
+            transition_durations=self.transition_durations(),
+        )
+
+        self.assertEqual(result["created_count"], 3)
+        self.assertEqual(result["deactivated_count"], 0)
+        self.assertTrue(get_linear_stage_route_integrity()["is_valid"])
+        self.assertEqual(
+            list(
+                StageTransition.objects.filter(is_active=True)
+                .order_by("from_stage__order")
+                .values_list(
+                    "from_stage_id",
+                    "to_stage_id",
+                    "estimated_duration_days",
+                )
+            ),
+            [
+                (self.purchase_stage.pk, self.customs_stage.pk, 7),
+                (self.customs_stage.pk, self.shipping_stage.pk, 5),
+                (self.shipping_stage.pk, self.delivery_stage.pk, 4),
+            ],
+        )
+
+        self.customs_stage.refresh_from_db()
+        self.assertEqual(self.customs_stage.default_duration_days, 7)
+
+    def test_repair_reactivates_consecutive_transition_and_soft_disables_branch(self):
+        inactive_transition = StageTransition.objects.create(
+            from_stage=self.purchase_stage,
+            to_stage=self.customs_stage,
+            estimated_duration_days=1,
+            is_active=False,
+        )
+        branch_transition = StageTransition.objects.create(
+            from_stage=self.purchase_stage,
+            to_stage=self.shipping_stage,
+            estimated_duration_days=1,
+        )
+
+        result = repair_linear_stage_transitions(
+            actor=self.system_administrator,
+            transition_durations=self.transition_durations(),
+        )
+
+        inactive_transition.refresh_from_db()
+        branch_transition.refresh_from_db()
+        self.assertTrue(inactive_transition.is_active)
+        self.assertEqual(inactive_transition.estimated_duration_days, 7)
+        self.assertFalse(branch_transition.is_active)
+        self.assertEqual(result["reactivated_count"], 1)
+        self.assertEqual(result["deactivated_count"], 1)
+        self.assertTrue(get_linear_stage_route_integrity()["is_valid"])
+
+    def test_non_system_administrator_cannot_repair_the_route(self):
+        ordinary_staff = get_user_model().objects.create_user(
+            username="route-repair-ordinary-staff",
+            password="test-password",
+            is_staff=True,
+        )
+
+        with self.assertRaises(ValidationError):
+            repair_linear_stage_transitions(
+                actor=ordinary_staff,
+                transition_durations=self.transition_durations(),
+            )
+
+        self.assertFalse(StageTransition.objects.exists())

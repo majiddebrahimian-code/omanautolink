@@ -1,0 +1,233 @@
+{% extends "backoffice/base.html" %}
+{% load backoffice_ui %}
+
+{% block title %}ماشین‌ها | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+
+{% block page_title %}ماشین‌ها{% endblock %}
+
+{% block page_description %}
+    <p>
+        فهرست تمام ماشین‌های فعال سیستم. ماشین‌های بایگانی‌شده در این فهرست نمایش داده نمی‌شوند.
+    </p>
+{% endblock %}
+
+{% block page_actions %}
+    <span class="backoffice-result-count">
+        {{ result_count }} ماشین
+    </span>
+
+    {% if perms.cars.add_car %}
+        <a
+            href="{% url 'backoffice:machine_create' %}"
+            class="backoffice-button backoffice-button--primary backoffice-icon-button"
+            aria-label="افزودن ماشین"
+            data-tooltip="افزودن ماشین"
+            title="افزودن ماشین"
+        >
+            <i class="fa fa-plus" aria-hidden="true"></i>
+        </a>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    <section class="backoffice-search-card">
+        <form method="get" class="backoffice-search-form">
+            <div>
+                <label for="machine-search" class="backoffice-search-label">
+                    جست‌وجوی ماشین
+                </label>
+
+                <input
+                    id="machine-search"
+                    type="search"
+                    name="q"
+                    value="{{ query }}"
+                    class="backoffice-input"
+                    placeholder="نام ماشین، برند، مدل، نام خریدار یا کد رهگیری"
+                >
+            </div>
+
+            <div class="backoffice-search-actions">
+                <button type="submit" class="backoffice-button backoffice-button--primary">
+                    <i class="fa fa-search" aria-hidden="true"></i>
+                    جست‌وجو
+                </button>
+
+                {% if query %}
+                    <a href="{% url 'backoffice:machine_list' %}" class="backoffice-button backoffice-button--secondary">
+                        پاک‌کردن
+                    </a>
+                {% endif %}
+            </div>
+        </form>
+    </section>
+
+    <section class="backoffice-table-card">
+        <div class="backoffice-table-scroll">
+            <table class="backoffice-table">
+                <thead>
+                    <tr>
+                        <th>ماشین</th>
+                        <th>وضعیت</th>
+                        <th>خریدار</th>
+                        <th>کد رهگیری</th>
+                        <th>مرحلهٔ فعلی</th>
+                        <th>آخرین تغییر</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for machine in page_obj %}
+                        <tr>
+                            <td>
+                                <div class="backoffice-machine-name">
+                                    <span class="backoffice-machine-name__icon">
+                                        <i class="fa fa-car" aria-hidden="true"></i>
+                                    </span>
+
+                                    <div>
+                                        <strong>{{ machine.title }}</strong>
+                                        <small>
+                                            {{ machine.brand }} {{ machine.model }}
+                                            {% if machine.year %}— {{ machine.year }}{% endif %}
+                                        </small>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td>
+                                <span class="backoffice-status backoffice-status--{{ machine.status|car_status_tone }}">
+                                    {{ machine.status|car_status_label }}
+                                </span>
+                            </td>
+
+                            <td>{{ machine.customer.full_name|default:"—" }}</td>
+
+                            <td>
+                                {% if machine.tracking_code %}
+                                    <code class="backoffice-tracking-code">
+                                        {{ machine.tracking_code }}
+                                    </code>
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+
+                            <td>{{ machine.current_stage.name|default:"—" }}</td>
+
+                            <td>{{ machine.updated_at|date:"Y/m/d H:i" }}</td>
+
+                            <td>
+                                <div class="backoffice-row-actions">
+                                    {% if perms.cars.view_carphoto %}
+                                        <a
+                                            href="{% url 'backoffice:machine_photo_manage' machine.pk %}"
+                                            class="backoffice-button backoffice-button--small backoffice-button--outline backoffice-icon-button"
+                                            aria-label="مدیریت تصاویر ماشین"
+                                            data-tooltip="مدیریت تصاویر ({{ machine.photo_count }})"
+                                            title="مدیریت تصاویر ماشین"
+                                        >
+                                            <i class="fa fa-picture-o" aria-hidden="true"></i>
+                                        </a>
+                                    {% endif %}
+
+                                    {% if perms.cars.change_car and machine.inventory_fields_editable %}
+                                        <a
+                                            href="{% url 'backoffice:machine_edit' machine.pk %}"
+                                            class="backoffice-button backoffice-button--small backoffice-button--secondary backoffice-icon-button"
+                                            aria-label="ویرایش ماشین"
+                                            data-tooltip="ویرایش ماشین"
+                                            title="ویرایش ماشین"
+                                        >
+                                            <i class="fa fa-pencil" aria-hidden="true"></i>
+                                        </a>
+                                    {% endif %}
+
+                                    {% if perms.cars.publish_vehicle and machine.status == "draft" %}
+                                        <form method="post" action="{% url 'backoffice:machine_publish' machine.pk %}">
+                                            {% csrf_token %}
+                                            <button
+                                                type="submit"
+                                                class="backoffice-button backoffice-button--small backoffice-button--outline backoffice-icon-button"
+                                                aria-label="انتشار برای فروش"
+                                                data-tooltip="انتشار برای فروش"
+                                                title="انتشار برای فروش"
+                                            >
+                                                <i class="fa fa-globe" aria-hidden="true"></i>
+                                            </button>
+                                        </form>
+                                    {% endif %}
+
+                                    {% if perms.cars.hold_vehicle and machine.status == "for_sale" %}
+                                        <a
+                                            href="{% url 'backoffice:machine_hold_create' machine.pk %}"
+                                            class="backoffice-button backoffice-button--small backoffice-button--warning backoffice-icon-button"
+                                            aria-label="ثبت رزرو موقت"
+                                            data-tooltip="ثبت رزرو موقت"
+                                            title="ثبت رزرو موقت"
+                                        >
+                                            <i class="fa fa-clock-o" aria-hidden="true"></i>
+                                        </a>
+                                    {% endif %}
+
+                                    {% if perms.cars.archive_vehicle and machine.inventory_fields_editable and not machine.has_active_hold %}
+                                        <a
+                                            href="{% url 'backoffice:machine_archive' machine.pk %}"
+                                            class="backoffice-button backoffice-button--small backoffice-button--danger backoffice-icon-button"
+                                            aria-label="بایگانی ماشین"
+                                            data-tooltip="بایگانی ماشین"
+                                            title="بایگانی ماشین"
+                                        >
+                                            <i class="fa fa-archive" aria-hidden="true"></i>
+                                        </a>
+                                    {% elif perms.cars.archive_vehicle and machine.inventory_fields_editable %}
+                                        <span class="backoffice-action-hint" title="ابتدا رزرو موقت فعال این ماشین را آزاد کنید.">
+                                            بایگانی در دسترس نیست
+                                        </span>
+                                    {% endif %}
+
+                                    {% if not machine.inventory_fields_editable and machine.status != "on_hold" %}
+                                        <span class="backoffice-action-hint">
+                                            عملیات موجودی برای این وضعیت قفل است
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="backoffice-table-empty">
+                                {% if query %}
+                                    هیچ ماشینی با عبارت «{{ query }}» پیدا نشد.
+                                {% else %}
+                                    هنوز ماشینی در سیستم ثبت نشده است.
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="backoffice-pagination" aria-label="صفحه‌بندی ماشین‌ها">
+                {% if page_obj.has_previous %}
+                    <a href="?{% if query %}q={{ query|urlencode }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">
+                        قبلی
+                    </a>
+                {% endif %}
+
+                <span>
+                    صفحهٔ {{ page_obj.number }} از {{ page_obj.paginator.num_pages }}
+                </span>
+
+                {% if page_obj.has_next %}
+                    <a href="?{% if query %}q={{ query|urlencode }}&amp;{% endif %}page={{ page_obj.next_page_number }}">
+                        بعدی
+                    </a>
+                {% endif %}
+            </nav>
+        {% endif %}
+    </section>
+{% endblock %}
