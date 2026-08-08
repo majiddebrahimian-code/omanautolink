@@ -1,0 +1,25 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}تأیید عملیات ترخیص{% endblock %}
+{% block page_title %}بازبینی قبل از ثبت{% endblock %}
+{% block page_description %}<p>داده‌ها از سرویس رهگیری خوانده شده‌اند. ثبت نهایی دوباره همهٔ قواعد را کنترل می‌کند تا هم‌زمانی یا تغییر وضعیت باعث خطا نشود.</p>{% endblock %}
+{% block page_actions %}<a href="{% url 'backoffice:clearance_operation' %}" class="backoffice-button backoffice-button--secondary"><i class="fa fa-arrow-right"></i> عملیات جدید</a>{% endblock %}
+
+{% block content %}
+    {% if preview %}
+        <section class="backoffice-clearance-preview">
+            <header><span><i class="fa {% if operation == 'complete' %}fa-flag-checkered{% else %}fa-map-marker{% endif %}"></i></span><div><h2>{% if operation == 'complete' %}تکمیل مرحله{% else %}ثبت ورود به مرحله{% endif %}</h2><p>اطلاعات مرحله توسط سیستم تعیین شده است.</p></div></header>
+            <div class="backoffice-clearance-preview__facts"><div><small>ماشین</small><strong>{{ preview.car.title }}</strong><span>{{ preview.car.brand }} {{ preview.car.model }}</span></div><div><small>کد رهگیری</small><strong dir="ltr">{{ preview.car.tracking_code }}</strong></div><div><small>مرحله</small><strong>{{ preview.stage.name }}</strong><span>ترتیب {{ preview.stage.order }}</span></div></div>
+        </section>
+    {% else %}
+        <section class="backoffice-form-errors">شرایط عملیات تغییر کرده است. لطفاً دوباره از صفحهٔ عملیات، کد را بررسی کنید.</section>
+    {% endif %}
+
+    <form method="post" class="backoffice-clearance-confirm-form" novalidate>
+        {% csrf_token %}{{ form.tracking_code }}{{ form.operation }}
+        {% if form.non_field_errors %}<div class="backoffice-form-errors">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="backoffice-confirm-checkbox">{{ form.confirm_operation }}{{ form.confirm_operation.label_tag }}{{ form.confirm_operation.errors }}</div>
+        <footer><a href="{% url 'backoffice:clearance_operation' %}" class="backoffice-button backoffice-button--secondary">انصراف</a><button class="backoffice-button backoffice-button--primary" type="submit"><i class="fa fa-check"></i> ثبت نهایی عملیات</button></footer>
+    </form>
+    {% include "backoffice/clearance/recent_events.html" %}
+{% endblock %}

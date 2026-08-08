@@ -1,48 +1,47 @@
 {% extends "backoffice/base.html" %}
 
 {% block title %}داشبورد | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
-
-{% block page_title %}داشبورد{% endblock %}
-
-{% block page_description %}
-    <p>
-        مدیریت ماشین‌ها، وبلاگ و تنظیمات سایت از این پنل انجام می‌شود.
-    </p>
+{% block page_title %}داشبورد مدیریتی{% endblock %}
+{% block page_description %}<p>نمای لحظه‌ای عملیات فروش، تحویل و رویدادهای ثبت‌شدهٔ سیستم.</p>{% endblock %}
+{% block page_actions %}
+    {% if request.user.is_superuser %}<a href="{% url 'backoffice:audit_log' %}" class="backoffice-button backoffice-button--secondary"><i class="fa fa-history"></i> گزارش رویدادها</a>{% endif %}
 {% endblock %}
 
 {% block content %}
-    <section class="backoffice-welcome-card">
-        <div>
-            <span class="backoffice-welcome-card__icon">
-                <i class="fa fa-tachometer" aria-hidden="true"></i>
-            </span>
+{% if management_snapshot %}
+    <section class="backoffice-metric-grid" aria-label="شاخص‌های کلیدی">
+        <article class="backoffice-metric-card backoffice-metric-card--blue"><span><i class="fa fa-car"></i></span><div><small>ماشین‌های قابل فروش</small><strong>{{ management_snapshot.counts.for_sale }}</strong><a href="{% url 'backoffice:machine_list' %}">مشاهدهٔ ماشین‌ها</a></div></article>
+        <article class="backoffice-metric-card backoffice-metric-card--amber"><span><i class="fa fa-clock-o"></i></span><div><small>رزروهای موقت</small><strong>{{ management_snapshot.counts.on_hold }}</strong><a href="{% url 'backoffice:vehicle_hold_list' %}">بررسی رزروها</a></div></article>
+        <article class="backoffice-metric-card backoffice-metric-card--green"><span><i class="fa fa-truck"></i></span><div><small>در انتظار تحویل</small><strong>{{ management_snapshot.counts.pending_delivery }}</strong><a href="{% url 'backoffice:pending_delivery_list' %}">پرونده‌های تحویل</a></div></article>
+        <article class="backoffice-metric-card backoffice-metric-card--purple"><span><i class="fa fa-paper-plane-o"></i></span><div><small>درخواست سفارشی جدید</small><strong>{{ management_snapshot.counts.new_requests }}</strong><a href="{% url 'backoffice:custom_vehicle_request_list' %}">بررسی درخواست‌ها</a></div></article>
+    </section>
 
-            <h2>پنل اختصاصی آماده است</h2>
+    <section class="backoffice-report-grid">
+        <article class="backoffice-report-card">
+            <header class="backoffice-card-heading"><div><h2>توزیع ماشین‌ها در مراحل تحویل</h2><p>فقط ماشین‌های فروخته‌شده یا در مسیر تحویل شمرده می‌شوند.</p></div><a href="{% url 'backoffice:pending_delivery_list' %}" class="backoffice-card-link">پرونده‌ها <i class="fa fa-arrow-left"></i></a></header>
+            <div class="backoffice-stage-report">
+                {% for stage in management_snapshot.stage_rows %}
+                    <div class="backoffice-stage-report__row"><div><strong>{{ stage.order }}. {{ stage.name }}</strong><span>{{ stage.vehicle_count }} ماشین</span></div><div class="backoffice-stage-report__bar"><i style="--stage-ratio: {{ stage.display_ratio }}%"></i></div></div>
+                {% empty %}
+                    <p class="backoffice-empty-report">هنوز مرحلهٔ فعال یا ماشین در حال تحویلی وجود ندارد.</p>
+                {% endfor %}
+            </div>
+        </article>
+        <article class="backoffice-report-card backoffice-report-card--summary">
+            <header class="backoffice-card-heading"><div><h2>خلاصهٔ ناوگان</h2><p>ماشین‌های بایگانی‌شده در این آمار محاسبه نشده‌اند.</p></div></header>
+            <dl class="backoffice-dashboard-summary"><div><dt>کل ماشین‌های فعال</dt><dd>{{ management_snapshot.counts.total }}</dd></div><div><dt>تحویل‌داده‌شده</dt><dd>{{ management_snapshot.counts.delivered }}</dd></div><div><dt>ماشین‌های درگیر عملیات</dt><dd>{{ management_snapshot.counts.pending_delivery|add:management_snapshot.counts.on_hold }}</dd></div></dl>
+        </article>
+    </section>
 
-            <p>
-                در این مرحله ساختار اصلی منوها ایجاد شده است.
-                در مراحل بعدی، آمار واقعی، لیست ماشین‌ها، جست‌وجو و فرم‌ها را اضافه می‌کنیم.
-            </p>
+    <section class="backoffice-report-card backoffice-audit-preview">
+        <header class="backoffice-card-heading"><div><h2>آخرین رویدادهای حسابرسی</h2><p>این رویدادها از ثبت‌های تغییرناپذیر سرویس‌های سیستم خوانده می‌شوند.</p></div><a href="{% url 'backoffice:audit_log' %}" class="backoffice-card-link">مشاهدهٔ همه <i class="fa fa-arrow-left"></i></a></header>
+        <div class="backoffice-audit-preview__list">
+            {% for event in management_snapshot.recent_entries %}
+                <article class="backoffice-audit-preview__item"><span class="backoffice-audit-icon backoffice-audit-icon--{{ event.tone }}"><i class="fa {{ event.icon }}"></i></span><div><strong>{{ event.title }}</strong><p>{{ event.subject }} · توسط {{ event.actor }}</p></div><time>{{ event.created_at|date:"Y/m/d H:i" }}</time></article>
+            {% empty %}<p class="backoffice-empty-report">هنوز رویداد حسابرسی ثبت نشده است.</p>{% endfor %}
         </div>
     </section>
-
-    <section class="backoffice-quick-grid">
-        <article class="backoffice-quick-card">
-            <i class="fa fa-car" aria-hidden="true"></i>
-            <h3>مدیریت ماشین</h3>
-            <p>ماشین‌ها، رزروهای موقت و وضعیت تحویل.</p>
-        </article>
-
-        <article class="backoffice-quick-card">
-            <i class="fa fa-newspaper-o" aria-hidden="true"></i>
-            <h3>وبلاگ</h3>
-            <p>افزودن مقاله و مدیریت فهرست مقالات.</p>
-        </article>
-
-        <article class="backoffice-quick-card">
-            <i class="fa fa-sliders" aria-hidden="true"></i>
-            <h3>تنظیمات</h3>
-            <p>تنظیمات سایت و مراحل تحویل ماشین.</p>
-        </article>
-    </section>
+{% else %}
+    <section class="backoffice-welcome-card"><div><span class="backoffice-welcome-card__icon"><i class="fa fa-user"></i></span><h2>خوش آمدید</h2><p>این صفحه برای نقش شما فقط مسیرهای عملیاتی مجاز را نمایش می‌دهد. گزارش‌های مدیریتی و حسابرسی فقط در اختیار مدیر اصلی سیستم هستند.</p></div></section>
+{% endif %}
 {% endblock %}

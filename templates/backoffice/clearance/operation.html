@@ -1,0 +1,24 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}عملیات ترخیص{% endblock %}
+{% block page_title %}عملیات مرحله‌ای ترخیص{% endblock %}
+{% block page_description %}<p>کد رهگیری را وارد کنید. سیستم مرحلهٔ مجاز، مسئولیت شما و وضعیت واقعی خودرو را پیش از ثبت بررسی می‌کند.</p>{% endblock %}
+
+{% block content %}
+    <section class="backoffice-clearance-layout">
+        <form method="post" class="backoffice-clearance-card" novalidate>
+            {% csrf_token %}
+            <header><span><i class="fa fa-qrcode"></i></span><div><h2>جست‌وجوی امن خودرو</h2><p>مرحله را دستی انتخاب نکنید؛ برای جلوگیری از ثبت اشتباه، سرویس رهگیری مرحلهٔ صحیح را تعیین می‌کند.</p></div></header>
+            {% if form.non_field_errors %}<div class="backoffice-form-errors">{{ form.non_field_errors }}</div>{% endif %}
+            <div class="backoffice-form-grid"><div class="backoffice-field">{{ form.tracking_code.label_tag }}{{ form.tracking_code }}{{ form.tracking_code.errors }}</div><div class="backoffice-field">{{ form.operation.label_tag }}{{ form.operation }}{{ form.operation.errors }}</div></div>
+            <footer><button class="backoffice-button backoffice-button--primary" type="submit"><i class="fa fa-search"></i> بررسی و ادامه</button></footer>
+        </form>
+
+        <aside class="backoffice-clearance-guide">
+            <h2><i class="fa fa-shield"></i> کنترل‌های عملیاتی</h2>
+            <ol><li>اعتبار کد رهگیری و فعال‌بودن خودرو بررسی می‌شود.</li><li>فقط مرحلهٔ مورد انتظار یا مرحلهٔ واردشده قابل انتخاب است.</li><li>مجوز و تخصیص مرحلهٔ کارمند کنترل می‌شود.</li><li>پیش از ثبت نهایی، یک تأیید صریح گرفته می‌شود.</li></ol>
+        </aside>
+    </section>
+
+    {% include "backoffice/clearance/recent_events.html" %}
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}{{ page_title }} | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+{% block page_title %}{{ page_title }}{% endblock %}
+{% block page_description %}<p>{{ page_description }}</p>{% endblock %}
+{% block page_actions %}<span class="backoffice-result-count">{{ result_count }} درخواست</span>{% endblock %}
+
+{% block content %}
+    <section class="backoffice-search-card">
+        <form method="get" class="backoffice-search-form">
+            <div>
+                <label for="request-search" class="backoffice-search-label">جست‌وجوی درخواست</label>
+                <input id="request-search" type="search" name="q" value="{{ query }}" class="backoffice-input" placeholder="نام، تلفن، تلگرام، برند، مدل یا توضیح خودرو">
+            </div>
+            <div class="backoffice-search-actions">
+                <button type="submit" class="backoffice-button backoffice-button--primary"><i class="fa fa-search"></i> جست‌وجو</button>
+                {% if query %}<a href="{% url 'backoffice:custom_vehicle_request_list' %}" class="backoffice-button backoffice-button--secondary">پاک‌کردن</a>{% endif %}
+            </div>
+        </form>
+    </section>
+
+    <section class="backoffice-table-card">
+        <div class="backoffice-table-scroll">
+            <table class="backoffice-table">
+                <thead><tr><th>مشتری</th><th>خودروی موردنظر</th><th>بودجه</th><th>منبع</th><th>وضعیت</th><th>مشاهده توسط</th><th>ثبت درخواست</th><th></th></tr></thead>
+                <tbody>
+                    {% for item in page_obj %}
+                        <tr>
+                            <td><strong>{{ item.full_name }}</strong><small dir="ltr">{{ item.phone }}</small></td>
+                            <td><strong>{{ item.preferred_brand|default:"خودروی سفارشی" }} {{ item.preferred_model }}</strong><small>{{ item.desired_vehicle_description|truncatechars:80 }}</small></td>
+                            <td>{{ item.budget_amount|floatformat:0 }} تومان</td>
+                            <td>{{ item.get_source_display }}</td>
+                            <td><span class="backoffice-status {% if item.status == 'sold' %}backoffice-status--success{% else %}backoffice-status--warning{% endif %}">{{ item.get_status_display }}</span></td>
+                            <td>{{ item.read_receipt_count }} کارمند</td>
+                            <td>{{ item.created_at|date:"Y/m/d H:i" }}</td>
+                            <td><a href="{% url 'backoffice:custom_vehicle_request_detail' item.pk %}" class="backoffice-button backoffice-button--small backoffice-button--outline backoffice-icon-button" title="مشاهدهٔ پرونده" data-tooltip="مشاهدهٔ پرونده"><i class="fa fa-folder-open-o"></i></a></td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="8" class="backoffice-table-empty">{% if query %}درخواستی برای «{{ query }}» پیدا نشد.{% else %}هنوز درخواست خودروی سفارشی ثبت نشده است.{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="backoffice-pagination" aria-label="صفحه‌بندی درخواست‌ها">
+                {% if page_obj.has_previous %}<a href="?{% if query %}q={{ query|urlencode }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">قبلی</a>{% endif %}
+                <span>صفحهٔ {{ page_obj.number }} از {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}<a href="?{% if query %}q={{ query|urlencode }}&amp;{% endif %}page={{ page_obj.next_page_number }}">بعدی</a>{% endif %}
+            </nav>
+        {% endif %}
+    </section>
+{% endblock %}

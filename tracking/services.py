@@ -139,6 +139,49 @@ def get_stage_confirmation_preview(*, tracking_code, staff):
     }
 
 
+@transaction.atomic
+def get_stage_completion_preview(*, tracking_code, staff):
+    """Resolve the entered current stage that may safely be completed.
+
+    This is the completion counterpart of ``get_stage_confirmation_preview``.
+    It deliberately contains no write so website, Telegram, and import
+    adapters can preview one authoritative rule before invoking
+    ``complete_stage``.
+    """
+
+    normalized_code = str(tracking_code or "").strip()
+    if not normalized_code:
+        raise ValidationError("کد رهگیری را وارد کنید.")
+
+    from cars.models import Car
+
+    try:
+        # ``current_stage`` is nullable. Lock only the car row here: joining a
+        # nullable relation under FOR UPDATE is unsupported by PostgreSQL.
+        car = Car.objects.select_for_update().get(
+            tracking_code=normalized_code,
+            is_deleted=False,
+        )
+    except Car.DoesNotExist:
+        raise ValidationError("خودرویی با این کد رهگیری پیدا نشد.")
+
+    if car.current_stage is None:
+        raise ValidationError("رهگیری این خودرو هنوز شروع نشده است.")
+
+    stage = car.current_stage
+    _ensure_stage_confirmation_permission(actor=staff, stage=stage)
+    progress = CarStageProgress.objects.select_for_update().get(car=car, stage=stage)
+
+    if progress.actual_arrival is None:
+        raise ValidationError("خودرو هنوز وارد مرحلهٔ فعلی نشده است.")
+    if progress.completed_at is not None:
+        raise ValidationError("مرحلهٔ فعلی قبلاً تکمیل شده است.")
+    if progress.skipped_at is not None:
+        raise ValidationError("مرحلهٔ ردشده قابل تکمیل نیست.")
+
+    return {"car": car, "stage": stage, "progress": progress}
+
+
 def _get_transition_map(stages):
     transitions = StageTransition.objects.filter(
         is_active=True,
@@ -1452,7 +1495,18 @@ def get_public_tracking_data(*, tracking_code):
     and staff details are intentionally excluded.
     """
 
-    normalized_code = tracking_code.strip()
+    # A public code is often copied from Telegram or an internal dashboard.
+    # Ignore harmless whitespace and invisible RTL copy/paste characters, and
+    # match case-insensitively so a customer cannot lose access because of a
+    # typographical presentation difference.
+    normalized_code = (
+        str(tracking_code or "")
+        .replace("\u200c", "")
+        .replace("\u200e", "")
+        .replace("\u200f", "")
+        .replace(" ", "")
+        .strip()
+    )
 
     if not normalized_code:
         raise ValidationError("A tracking code is required.")
@@ -1462,7 +1516,10 @@ def get_public_tracking_data(*, tracking_code):
             "car",
             "stage",
         )
-        .filter(car__tracking_code=normalized_code)
+        .filter(
+            car__tracking_code__iexact=normalized_code,
+            car__is_deleted=False,
+        )
         .order_by("stage__order")
     )
 

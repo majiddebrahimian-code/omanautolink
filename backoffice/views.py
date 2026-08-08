@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db.models import (
     BooleanField,
@@ -79,19 +79,31 @@ from cars.services import (
     update_inventory_car,
     upload_car_photos,
 )
+from customers.forms import AdminCustomVehicleRequestConversionForm
+from customers.models import Customer, CustomVehicleRequest, CustomVehicleRequestReadReceipt
+from customers.services import (
+    convert_custom_vehicle_request_to_sold,
+    record_custom_vehicle_request_view,
+)
 from integrations.models import TelegramStaffLink, TelegramStaffLinkToken
 from tracking.forms import (
+    ClearanceConfirmationForm,
+    ClearanceTrackingCodeForm,
     StageArchiveForm,
     StageDefinitionForm,
     TransitionRepairForm,
 )
-from tracking.models import Stage, StageTransition, TrackingEvent
+from tracking.models import CarStageProgress, Stage, StageTransition, TrackingEvent
 from tracking.services import (
     archive_stage,
+    complete_stage,
+    confirm_stage,
     create_linear_stage,
     get_delivery_machine_snapshot,
     get_linear_stage_route_integrity,
     get_stage_archive_impact,
+    get_stage_completion_preview,
+    get_stage_confirmation_preview,
     repair_linear_stage_transitions,
     update_linear_stage,
 )
@@ -100,6 +112,8 @@ from .access import (
     panel_permissions_required,
     system_administrator_required,
 )
+from .forms import AuditLogFilterForm
+from .reporting import format_audit_entry, get_audit_entries, get_dashboard_snapshot
 
 
 def _render_placeholder(request, *, title, description):
@@ -186,7 +200,42 @@ def _get_machine_list_context(request, *, queryset):
 
 @staff_member_required
 def dashboard(request):
-    return render(request, "backoffice/dashboard.html")
+    context = {"management_snapshot": None}
+    if request.user.is_superuser:
+        context["management_snapshot"] = get_dashboard_snapshot()
+    return render(request, "backoffice/dashboard.html", context)
+
+
+@system_administrator_required
+def audit_log(request):
+    """Read-only audit timeline with validated, database-side filters."""
+
+    form = AuditLogFilterForm(request.GET or None)
+    if form.is_valid():
+        entries = get_audit_entries(
+            source=form.cleaned_data["source"],
+            query=form.cleaned_data["q"],
+            date_from=form.cleaned_data["date_from"],
+            date_to=form.cleaned_data["date_to"],
+        )
+    else:
+        entries = get_audit_entries()
+
+    paginator = Paginator(entries, 25)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    page_obj.object_list = [
+        format_audit_entry(entry) for entry in page_obj.object_list
+    ]
+
+    return render(
+        request,
+        "backoffice/reports/audit_log.html",
+        {
+            "form": form,
+            "page_obj": page_obj,
+            "result_count": paginator.count,
+        },
+    )
 
 
 @panel_permissions_required("cars.view_car")
@@ -751,6 +800,252 @@ def delivery_machine_detail(request, pk):
             ),
             "list_url_name": list_url_name,
         },
+    )
+
+
+def _can_convert_custom_request(user):
+    """Keep the panel's gate aligned with the shared conversion service."""
+
+    return user.is_superuser or (
+        user.has_perm("customers.convert_custom_vehicle_request_to_sale")
+        and user.has_perm("cars.sell_vehicle")
+    )
+
+
+@panel_permissions_required("customers.view_customvehiclerequest")
+def custom_vehicle_request_list(request):
+    """List leads without inventing a parallel request lifecycle in the UI."""
+
+    queryset = (
+        CustomVehicleRequest.objects.select_related("sold_car", "sold_by")
+        .annotate(read_receipt_count=Count("read_receipts", distinct=True))
+        .order_by("-created_at")
+    )
+    context = _get_paginated_context(
+        request=request,
+        queryset=queryset,
+        search_fields=(
+            "full_name",
+            "phone",
+            "telegram_id",
+            "preferred_brand",
+            "preferred_model",
+            "desired_vehicle_description",
+        ),
+    )
+    context.update(
+        {
+            "page_title": "درخواست‌های خودروی سفارشی",
+            "page_description": (
+                "درخواست‌های مشتریانی که خودرو را در موجودی پیدا نکرده‌اند. "
+                "بازکردن هر پرونده در تاریخچهٔ مشاهدهٔ کارکنان ثبت می‌شود."
+            ),
+        }
+    )
+    return render(request, "backoffice/custom_requests/list.html", context)
+
+
+@panel_permissions_required("customers.view_customvehiclerequest")
+def custom_vehicle_request_detail(request, pk):
+    vehicle_request = get_object_or_404(
+        CustomVehicleRequest.objects.select_related("sold_car", "sold_car__customer", "sold_by"),
+        pk=pk,
+    )
+
+    # This is deliberately a service call: admin, panel, and future bot agents
+    # get the same audit semantics rather than each writing a receipt directly.
+    record_custom_vehicle_request_view(
+        vehicle_request_id=vehicle_request.id,
+        employee=request.user,
+    )
+    read_receipts = CustomVehicleRequestReadReceipt.objects.filter(
+        vehicle_request=vehicle_request
+    ).select_related("employee").order_by("first_seen_at")
+
+    return render(
+        request,
+        "backoffice/custom_requests/detail.html",
+        {
+            "vehicle_request": vehicle_request,
+            "read_receipts": read_receipts,
+            "can_convert": vehicle_request.status == CustomVehicleRequest.Status.NEW
+            and _can_convert_custom_request(request.user),
+        },
+    )
+
+
+@panel_permissions_required("customers.view_customvehiclerequest")
+def custom_vehicle_request_convert(request, pk):
+    """Convert a lead through the existing sale service, never by model writes."""
+
+    if not _can_convert_custom_request(request.user):
+        raise PermissionDenied
+
+    vehicle_request = get_object_or_404(CustomVehicleRequest, pk=pk)
+    record_custom_vehicle_request_view(
+        vehicle_request_id=vehicle_request.id,
+        employee=request.user,
+    )
+
+    if vehicle_request.status != CustomVehicleRequest.Status.NEW:
+        messages.info(request, "این درخواست قبلاً به فروش تبدیل شده است.")
+        return redirect("backoffice:custom_vehicle_request_detail", pk=vehicle_request.pk)
+
+    if request.method == "POST":
+        form = AdminCustomVehicleRequestConversionForm(request.POST)
+        if form.is_valid():
+            try:
+                sold_car = convert_custom_vehicle_request_to_sold(
+                    vehicle_request_id=vehicle_request.id,
+                    car_id=form.cleaned_data["car"].id,
+                    actor=request.user,
+                    telegram_id=form.cleaned_data["telegram_id"],
+                )
+            except ValidationError as error:
+                _add_service_errors(form, error)
+            else:
+                messages.success(
+                    request,
+                    f"فروش ثبت شد؛ کد رهگیری خودرو: {sold_car.tracking_code}",
+                )
+                return redirect("backoffice:delivery_machine_detail", pk=sold_car.pk)
+    else:
+        form = AdminCustomVehicleRequestConversionForm(
+            initial={"telegram_id": vehicle_request.telegram_id}
+        )
+
+    return render(
+        request,
+        "backoffice/custom_requests/convert.html",
+        {"vehicle_request": vehicle_request, "form": form},
+    )
+
+
+@panel_permissions_required("customers.view_customer")
+def customer_list(request):
+    queryset = Customer.objects.annotate(car_count=Count("cars", distinct=True)).order_by(
+        "full_name", "pk"
+    )
+    context = _get_paginated_context(
+        request=request,
+        queryset=queryset,
+        search_fields=("full_name", "phone", "telegram_id", "cars__tracking_code"),
+    )
+    context.update(
+        {
+            "page_title": "مشتریان",
+            "page_description": (
+                "پرونده‌های مشتریانِ فروش‌نهایی‌شده؛ جست‌وجو با نام، تلفن، شناسهٔ تلگرام یا کد رهگیری."
+            ),
+        }
+    )
+    return render(request, "backoffice/customers/list.html", context)
+
+
+@panel_permissions_required("customers.view_customer")
+def customer_detail(request, pk):
+    customer = get_object_or_404(Customer, pk=pk)
+    sold_cars = customer.cars.select_related("current_stage").order_by("-updated_at")
+    return render(
+        request,
+        "backoffice/customers/detail.html",
+        {"customer": customer, "sold_cars": sold_cars},
+    )
+
+
+@panel_permissions_required("tracking.confirm_tracking_stage")
+def clearance_operation(request):
+    """Two-step, code-based stage operation for staff and System Administrators."""
+
+    recent_events = (
+        TrackingEvent.objects.filter(performed_by=request.user)
+        .select_related("car", "new_stage")
+        .order_by("-created_at")[:8]
+    )
+
+    if request.method == "POST" and "confirm_operation" in request.POST:
+        confirmation_form = ClearanceConfirmationForm(request.POST)
+        if confirmation_form.is_valid():
+            tracking_code = confirmation_form.cleaned_data["tracking_code"]
+            operation = confirmation_form.cleaned_data["operation"]
+            try:
+                if operation == ClearanceTrackingCodeForm.Operation.ENTER:
+                    preview = get_stage_confirmation_preview(
+                        tracking_code=tracking_code,
+                        staff=request.user,
+                    )
+                    confirm_stage(
+                        car=preview["car"],
+                        stage=preview["stage"],
+                        staff=request.user,
+                    )
+                    success_message = f"ورود «{preview['car'].title}» به مرحلهٔ «{preview['stage'].name}» ثبت شد."
+                else:
+                    preview = get_stage_completion_preview(
+                        tracking_code=tracking_code,
+                        staff=request.user,
+                    )
+                    complete_stage(
+                        car=preview["car"],
+                        stage=preview["stage"],
+                        staff=request.user,
+                    )
+                    success_message = f"مرحلهٔ «{preview['stage'].name}» برای «{preview['car'].title}» تکمیل شد."
+            except ValidationError as error:
+                _add_service_errors(confirmation_form, error)
+            else:
+                messages.success(request, success_message)
+                return redirect("backoffice:clearance_operation")
+
+            return render(
+                request,
+                "backoffice/clearance/confirm.html",
+                {
+                    "form": confirmation_form,
+                    "preview": preview if "preview" in locals() else None,
+                    "recent_events": recent_events,
+                },
+            )
+    elif request.method == "POST":
+        lookup_form = ClearanceTrackingCodeForm(request.POST)
+        if lookup_form.is_valid():
+            tracking_code = lookup_form.cleaned_data["tracking_code"]
+            operation = lookup_form.cleaned_data["operation"]
+            try:
+                preview = (
+                    get_stage_confirmation_preview(
+                        tracking_code=tracking_code,
+                        staff=request.user,
+                    )
+                    if operation == ClearanceTrackingCodeForm.Operation.ENTER
+                    else get_stage_completion_preview(
+                        tracking_code=tracking_code,
+                        staff=request.user,
+                    )
+                )
+            except ValidationError as error:
+                _add_service_errors(lookup_form, error)
+            else:
+                confirmation_form = ClearanceConfirmationForm(
+                    initial={"tracking_code": tracking_code, "operation": operation}
+                )
+                return render(
+                    request,
+                    "backoffice/clearance/confirm.html",
+                    {
+                        "form": confirmation_form,
+                        "preview": preview,
+                        "operation": operation,
+                        "recent_events": recent_events,
+                    },
+                )
+    else:
+        lookup_form = ClearanceTrackingCodeForm()
+
+    return render(
+        request,
+        "backoffice/clearance/operation.html",
+        {"form": lookup_form, "recent_events": recent_events},
     )
 
 

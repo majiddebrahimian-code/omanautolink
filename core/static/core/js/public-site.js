@@ -250,4 +250,49 @@
     };
 
     document.querySelectorAll("[data-vehicle-gallery]").forEach(setupVehicleGallery);
+
+    const setupTrackingJourney = (journey) => {
+        const inspector = journey.querySelector("[data-tracking-stage-inspector]");
+        const stages = Array.from(journey.querySelectorAll("[data-tracking-stage]"));
+
+        if (!inspector || !stages.length) {
+            return;
+        }
+
+        const fields = {
+            order: inspector.querySelector("[data-tracking-stage-order]"),
+            name: inspector.querySelector("[data-tracking-stage-name]"),
+            state: inspector.querySelector("[data-tracking-stage-state]"),
+            planned: inspector.querySelector("[data-tracking-stage-planned]"),
+            arrival: inspector.querySelector("[data-tracking-stage-arrival]"),
+            completed: inspector.querySelector("[data-tracking-stage-completed]"),
+            skipped: inspector.querySelector("[data-tracking-stage-skipped]"),
+        };
+
+        const selectStage = (stage) => {
+            stages.forEach((item) => {
+                const selected = item === stage;
+                item.closest(".tracking-route__item").classList.toggle("is-active", selected);
+                item.setAttribute("aria-pressed", String(selected));
+            });
+
+            fields.order.textContent = stage.dataset.stageOrder || "—";
+            fields.name.textContent = stage.dataset.stageName || "—";
+            fields.state.textContent = stage.dataset.stageState || "—";
+            fields.planned.textContent = stage.dataset.stagePlanned || "—";
+            fields.arrival.textContent = stage.dataset.stageArrival || "—";
+            fields.completed.textContent = stage.dataset.stageCompleted || "—";
+            fields.skipped.textContent = stage.dataset.stageSkipped || "—";
+        };
+
+        stages.forEach((stage) => {
+            stage.addEventListener("pointerenter", () => selectStage(stage));
+            stage.addEventListener("focus", () => selectStage(stage));
+            stage.addEventListener("click", () => selectStage(stage));
+        });
+
+        selectStage(stages.find((stage) => stage.getAttribute("aria-pressed") === "true") || stages[0]);
+    };
+
+    document.querySelectorAll("[data-tracking-journey]").forEach(setupTrackingJourney);
 })();

@@ -6,6 +6,7 @@ app_name = "backoffice"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("reports/audit-log/", views.audit_log, name="audit_log"),
     path("machines/", views.machine_list, name="machine_list"),
     path("machines/new/", views.machine_create, name="machine_create"),
     path("machines/<int:pk>/edit/", views.machine_edit, name="machine_edit"),
@@ -74,6 +75,28 @@ urlpatterns = [
         "machines/sold/<int:pk>/",
         views.delivery_machine_detail,
         name="delivery_machine_detail",
+    ),
+    path(
+        "customer-requests/",
+        views.custom_vehicle_request_list,
+        name="custom_vehicle_request_list",
+    ),
+    path(
+        "customer-requests/<int:pk>/",
+        views.custom_vehicle_request_detail,
+        name="custom_vehicle_request_detail",
+    ),
+    path(
+        "customer-requests/<int:pk>/convert/",
+        views.custom_vehicle_request_convert,
+        name="custom_vehicle_request_convert",
+    ),
+    path("customers/", views.customer_list, name="customer_list"),
+    path("customers/<int:pk>/", views.customer_detail, name="customer_detail"),
+    path(
+        "clearance/operations/",
+        views.clearance_operation,
+        name="clearance_operation",
     ),
     path("staff/", views.staff_list, name="staff_list"),
     path("staff/new/", views.staff_create, name="staff_create"),

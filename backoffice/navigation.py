@@ -84,7 +84,66 @@ def build_panel_navigation(user):
             }
         )
 
+    customer_items = []
+    if _may_access(user, "customers.view_customvehiclerequest"):
+        customer_items.append(
+            _link(
+                label="درخواست‌های خودروی سفارشی",
+                icon="fa-paper-plane-o",
+                url_name="backoffice:custom_vehicle_request_list",
+            )
+        )
+    if _may_access(user, "customers.view_customer"):
+        customer_items.append(
+            _link(
+                label="مشتریان",
+                icon="fa-address-book-o",
+                url_name="backoffice:customer_list",
+            )
+        )
+    if customer_items:
+        navigation.append(
+            {
+                "label": "مشتریان و درخواست‌ها",
+                "icon": "fa-users",
+                "items": customer_items,
+            }
+        )
+
+    if _may_access(user, "tracking.confirm_tracking_stage"):
+        navigation.append(
+            {
+                "label": "عملیات ترخیص",
+                "icon": "fa-check-square-o",
+                "items": [
+                    _link(
+                        label="ثبت و تکمیل مرحله",
+                        icon="fa-qrcode",
+                        url_name="backoffice:clearance_operation",
+                    ),
+                ],
+            }
+        )
+
     if user.is_authenticated and user.is_active and user.is_superuser:
+        navigation.append(
+            {
+                "label": "گزارش‌ها و حسابرسی",
+                "icon": "fa-line-chart",
+                "items": [
+                    _link(
+                        label="داشبورد مدیریتی",
+                        icon="fa-dashboard",
+                        url_name="backoffice:dashboard",
+                    ),
+                    _link(
+                        label="گزارش رویدادها",
+                        icon="fa-history",
+                        url_name="backoffice:audit_log",
+                    ),
+                ],
+            }
+        )
         navigation.append(
             {
                 "label": "مدیریت کارکنان",

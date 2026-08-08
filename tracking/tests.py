@@ -1260,12 +1260,29 @@ class PublicTrackingLookupViewTests(TestCase):
 
         self.assertContains(response, self.car.title)
         self.assertContains(response, self.sale_confirmed_stage.name)
+        self.assertContains(response, 'data-tracking-journey', html=False)
+        self.assertContains(response, 'data-tracking-stage', html=False)
+        self.assertContains(response, "جزئیات مرحلهٔ انتخاب‌شده")
 
         # Public tracking must not expose private customer or financial data.
         self.assertNotContains(response, self.customer.full_name)
         self.assertNotContains(response, self.customer.phone)
         self.assertNotContains(response, self.customer.telegram_id)
         self.assertNotContains(response, "3,000,000,000")
+
+    def test_lookup_accepts_case_and_copy_paste_whitespace(self):
+        response = self.client.post(
+            reverse("tracking:public_lookup"),
+            data={
+                "tracking_code": f"  {self.car.tracking_code.lower()}\u200f  ",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["tracking_data"]["tracking_code"],
+            self.car.tracking_code,
+        )
 
     def test_unknown_tracking_code_shows_a_generic_error(self):
         response = self.client.post(

@@ -1,4 +1,5 @@
 from django import forms
+from django.db import models
 from django.db.models import Q
 
 from accounts.models import StaffProfile
@@ -49,6 +50,51 @@ class PublicTrackingLookupForm(forms.Form):
                 "dir": "ltr",
             }
         ),
+    )
+
+
+class ClearanceTrackingCodeForm(forms.Form):
+    """Adapter form for an internal stage operation.
+
+    The form does not decide which stage may change. The service layer owns
+    workflow validation and employee authorization.
+    """
+
+    class Operation(models.TextChoices):
+        ENTER = "enter", "ثبت ورود به مرحله"
+        COMPLETE = "complete", "تکمیل مرحلهٔ فعلی"
+
+    tracking_code = forms.CharField(
+        label="کد رهگیری",
+        max_length=40,
+        widget=forms.TextInput(
+            attrs={
+                "class": "backoffice-input",
+                "placeholder": "مثال: OAL-...",
+                "autocomplete": "off",
+                "dir": "ltr",
+            }
+        ),
+    )
+    operation = forms.ChoiceField(
+        label="عملیات",
+        choices=Operation.choices,
+        widget=forms.Select(attrs={"class": "backoffice-select"}),
+    )
+
+
+class ClearanceConfirmationForm(forms.Form):
+    """Requires a second, explicit confirmation before a tracking write."""
+
+    tracking_code = forms.CharField(widget=forms.HiddenInput())
+    operation = forms.ChoiceField(
+        choices=ClearanceTrackingCodeForm.Operation.choices,
+        widget=forms.HiddenInput(),
+    )
+    confirm_operation = forms.BooleanField(
+        label="اطلاعات خودرو و مرحله را بررسی کرده‌ام و این عملیات را تأیید می‌کنم.",
+        required=True,
+        widget=forms.CheckboxInput(attrs={"class": "backoffice-checkbox"}),
     )
 
 

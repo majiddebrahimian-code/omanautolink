@@ -1,0 +1,29 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}گزارش رویدادها | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+{% block page_title %}گزارش رویدادها و حسابرسی{% endblock %}
+{% block page_description %}<p>نمای فقط‌خواندنی از رویدادهای تغییرناپذیر موجودی، رهگیری، بایگانی خودرو و مدیریت کارکنان.</p>{% endblock %}
+{% block page_actions %}<span class="backoffice-result-count">{{ result_count }} رویداد</span>{% endblock %}
+
+{% block content %}
+    <section class="backoffice-search-card">
+        <form method="get" class="backoffice-audit-filter-form" novalidate>
+            <div class="backoffice-field">{{ form.q.label_tag }}{{ form.q }}{{ form.q.errors }}</div>
+            <div class="backoffice-field">{{ form.source.label_tag }}{{ form.source }}{{ form.source.errors }}</div>
+            <div class="backoffice-field">{{ form.date_from.label_tag }}{{ form.date_from }}{{ form.date_from.errors }}</div>
+            <div class="backoffice-field">{{ form.date_to.label_tag }}{{ form.date_to }}{{ form.date_to.errors }}</div>
+            <div class="backoffice-audit-filter-form__actions"><button class="backoffice-button backoffice-button--primary" type="submit"><i class="fa fa-filter"></i> اعمال فیلتر</button><a href="{% url 'backoffice:audit_log' %}" class="backoffice-button backoffice-button--secondary">پاک‌کردن</a></div>
+        </form>
+    </section>
+
+    <section class="backoffice-audit-safety-note"><i class="fa fa-lock"></i><p>این صفحه فقط امکان مشاهده و فیلتر دارد؛ رویدادهای موجود در آن از پنل قابل ویرایش یا حذف نیستند.</p></section>
+
+    <section class="backoffice-table-card">
+        <div class="backoffice-table-scroll"><table class="backoffice-table backoffice-audit-table"><thead><tr><th>زمان</th><th>حوزه</th><th>رویداد</th><th>موضوع</th><th>انجام‌دهنده</th><th>منبع</th><th>یادداشت</th></tr></thead><tbody>
+            {% for event in page_obj %}
+                <tr><td><time>{{ event.created_at|date:"Y/m/d H:i" }}</time></td><td><span class="backoffice-audit-type backoffice-audit-type--{{ event.tone }}"><i class="fa {{ event.icon }}"></i>{{ event.label }}</span></td><td><strong>{{ event.title }}</strong></td><td>{{ event.subject }}</td><td>{{ event.actor }}</td><td><span class="backoffice-audit-source">{{ event.source_label }}</span></td><td class="backoffice-audit-note">{{ event.detail|default:"—" }}</td></tr>
+            {% empty %}<tr><td colspan="7" class="backoffice-table-empty">رویدادی با این فیلتر پیدا نشد.</td></tr>{% endfor %}
+        </tbody></table></div>
+        {% if page_obj.paginator.num_pages > 1 %}<nav class="backoffice-pagination" aria-label="صفحه‌بندی رویدادها">{% if page_obj.has_previous %}<a href="?{{ request.GET.urlencode }}&amp;page={{ page_obj.previous_page_number }}">قبلی</a>{% endif %}<span>صفحهٔ {{ page_obj.number }} از {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a href="?{{ request.GET.urlencode }}&amp;page={{ page_obj.next_page_number }}">بعدی</a>{% endif %}</nav>{% endif %}
+    </section>
+{% endblock %}

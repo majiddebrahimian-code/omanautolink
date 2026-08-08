@@ -1,0 +1,14 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}تبدیل درخواست به فروش{% endblock %}
+{% block page_title %}تبدیل درخواست به فروش{% endblock %}
+{% block page_description %}<p>فقط یک ماشین رزرو‌شده انتخاب می‌شود؛ ثبت مشتری، کد رهگیری و شروع رهگیری همگی توسط سرویس فروش مشترک انجام می‌شوند.</p>{% endblock %}
+{% block page_actions %}<a href="{% url 'backoffice:custom_vehicle_request_detail' vehicle_request.pk %}" class="backoffice-button backoffice-button--secondary"><i class="fa fa-arrow-right"></i> بازگشت به پرونده</a>{% endblock %}
+{% block content %}
+    <section class="backoffice-form-notice backoffice-form-notice--staff"><i class="fa fa-info-circle"></i><p>مشتری: <strong>{{ vehicle_request.full_name }}</strong> · فقط ماشین‌هایی که رزرو موقت فعال دارند در فهرست زیر دیده می‌شوند.</p></section>
+    <form method="post" class="backoffice-staff-form" novalidate>{% csrf_token %}
+        {% if form.non_field_errors %}<div class="backoffice-form-errors">{{ form.non_field_errors }}</div>{% endif %}
+        <section class="backoffice-form-section"><header><span><i class="fa fa-handshake-o"></i></span><div><h2>تأیید فروش</h2><p>شناسهٔ تلگرام برای اتصال امن مشتری به اعلان‌های رهگیری الزامی است.</p></div></header><div class="backoffice-form-grid"><div class="backoffice-field">{{ form.car.label_tag }}{{ form.car }}{{ form.car.errors }}</div><div class="backoffice-field">{{ form.telegram_id.label_tag }}{{ form.telegram_id }}{{ form.telegram_id.errors }}</div></div></section>
+        <footer class="backoffice-form-actions"><a href="{% url 'backoffice:custom_vehicle_request_detail' vehicle_request.pk %}" class="backoffice-button backoffice-button--secondary">انصراف</a><button class="backoffice-button backoffice-button--primary" type="submit"><i class="fa fa-check"></i> ثبت فروش و ایجاد رهگیری</button></footer>
+    </form>
+{% endblock %}

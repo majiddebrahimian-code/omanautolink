@@ -1,7 +1,7 @@
 {% extends "public/base.html" %}
 
 {% block content %}
-<section class="lobby"{% if home_config.hero_background_image or home_config.hero_mobile_background_image %} style="{% if home_config.hero_background_image %}--lobby-background: url('{{ home_config.hero_background_image.url }}');{% endif %}{% if home_config.hero_mobile_background_image %}--lobby-mobile-background: url('{{ home_config.hero_mobile_background_image.url }}');{% endif %}"{% endif %} aria-labelledby="home-title">
+<section class="lobby"{% if home_config.hero_background_image or home_config.hero_mobile_background_image %} style="{% if home_config.hero_background_image %}--lobby-background: url('{{ home_config.hero_background_image.url }}?v=showroom-media-2');{% endif %}{% if home_config.hero_mobile_background_image %}--lobby-mobile-background: url('{{ home_config.hero_mobile_background_image.url }}?v=showroom-media-2');{% endif %}"{% endif %} aria-labelledby="home-title">
     <div class="lobby__ambient" aria-hidden="true"></div>
 
     <div class="container lobby-layout">
@@ -19,17 +19,17 @@
                 {% if hero_spin %}
                     {% if home_config.hero_background_image %}
                         <picture class="lobby-showroom__spin-background" aria-hidden="true">
-                            {% if home_config.hero_mobile_background_image %}<source media="(max-width: 760px)" srcset="{{ home_config.hero_mobile_background_image.url }}">{% endif %}
-                            <img src="{{ home_config.hero_background_image.url }}" alt="" width="1672" height="941" fetchpriority="high">
+                            {% if home_config.hero_mobile_background_image %}<source media="(max-width: 760px)" srcset="{{ home_config.hero_mobile_background_image.url }}?v=showroom-media-2">{% endif %}
+                            <img src="{{ home_config.hero_background_image.url }}?v=showroom-media-2" alt="" width="1672" height="941" fetchpriority="high" loading="eager" decoding="sync">
                         </picture>
                     {% else %}
                         <div class="lobby-showroom__empty" aria-hidden="true"></div>
                     {% endif %}
-                    <img class="lobby-showroom__spin-car" data-spin-image src="{{ hero_spin.frame_urls.0 }}" alt="نمای ۳۶۰ درجهٔ {{ hero_car.title }}" width="1280" height="800" fetchpriority="high">
+                    <img class="lobby-showroom__spin-car" data-spin-image src="{{ hero_spin.frame_urls.0 }}?v=showroom-media-2" alt="نمای ۳۶۰ درجهٔ {{ hero_car.title }}" width="1280" height="800" fetchpriority="high" loading="eager" decoding="sync">
                 {% elif home_config.hero_background_image %}
                     <picture>
-                        {% if home_config.hero_mobile_background_image %}<source media="(max-width: 760px)" srcset="{{ home_config.hero_mobile_background_image.url }}">{% endif %}
-                        <img src="{{ home_config.hero_background_image.url }}" alt="{{ home_config.hero_image_alt|default:home_config.hero_title }}" width="1672" height="941" fetchpriority="high">
+                        {% if home_config.hero_mobile_background_image %}<source media="(max-width: 760px)" srcset="{{ home_config.hero_mobile_background_image.url }}?v=showroom-media-2">{% endif %}
+                        <img src="{{ home_config.hero_background_image.url }}?v=showroom-media-2" alt="{{ home_config.hero_image_alt|default:home_config.hero_title }}" width="1672" height="941" fetchpriority="high" loading="eager" decoding="sync">
                     </picture>
                 {% else %}
                     <div class="lobby-showroom__empty" aria-hidden="true"></div>
@@ -76,9 +76,9 @@
                     <span class="lobby-panel__status"><i></i> فعال</span>
                 </div>
 
-                <div class="lobby-route__map">
+                <div class="lobby-route__map"{% if home_config.route_panel_image %} style="--lobby-route-background: url('{{ home_config.route_panel_image.url }}?v=showroom-media-2');"{% endif %}>
                     {% if home_config.route_panel_image %}
-                        <img src="{{ home_config.route_panel_image.url }}" alt="مسیر {{ home_config.route_origin_label }} تا {{ home_config.route_destination_label }}" width="720" height="420">
+                        <img src="{{ home_config.route_panel_image.url }}?v=showroom-media-2" alt="مسیر {{ home_config.route_origin_label }} تا {{ home_config.route_destination_label }}" width="720" height="420" loading="eager" decoding="sync">
                     {% else %}
                         <div class="lobby-route__map-empty" aria-hidden="true"></div>
                     {% endif %}

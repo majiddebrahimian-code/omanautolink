@@ -21,9 +21,10 @@ from cars.models import (
     VehicleInventoryEvent,
 )
 from cars.services import create_inventory_car
-from customers.models import Customer
-from accounts.models import StaffProfile
-from tracking.models import CarStageProgress, Stage, StageTransition
+from customers.models import Customer, CustomVehicleRequest, CustomVehicleRequestReadReceipt
+from customers.services import create_custom_vehicle_request
+from accounts.models import StaffManagementEvent, StaffProfile
+from tracking.models import CarStageProgress, Stage, StageTransition, TrackingEvent
 from tracking.services import complete_stage, confirm_stage, start_tracking_for_sold_car
 
 
@@ -874,4 +875,221 @@ class BackofficeStaffManagementTests(TestCase):
         self.assertContains(
             response,
             reverse("backoffice:staff_telegram_link_issue", args=[self.employee.pk]),
+        )
+
+
+class BackofficeCustomerAndClearanceWorkflowTests(TestCase):
+    """Panel adapters must use the pre-existing customer/tracking services."""
+
+    def setUp(self):
+        role_groups = ensure_default_role_groups()
+        user_model = get_user_model()
+
+        self.employee = user_model.objects.create_user(
+            username="customer-panel-employee",
+            password="test-password",
+            is_staff=True,
+        )
+        self.employee.groups.add(role_groups[RoleGroup.EMPLOYEE])
+
+        self.clearance_employee = user_model.objects.create_user(
+            username="clearance-panel-employee",
+            password="test-password",
+            is_staff=True,
+        )
+        self.clearance_employee.groups.add(role_groups[RoleGroup.CLEARANCE_EMPLOYEE])
+        self.clearance_profile = StaffProfile.objects.create(user=self.clearance_employee)
+
+        self.first_stage = Stage.objects.create(name="ثبت فروش", order=1)
+        self.second_stage = Stage.objects.create(name="ترخیص", order=2)
+        StageTransition.objects.create(
+            from_stage=self.first_stage,
+            to_stage=self.second_stage,
+            estimated_duration_days=3,
+        )
+        self.clearance_profile.assigned_stages.add(self.second_stage)
+
+        self.customer = Customer.objects.create(
+            full_name="مشتری پنل",
+            phone="09124444444",
+            telegram_id="customer-panel-id",
+        )
+        self.machine = Car.objects.create(
+            title="ماشین عملیات ترخیص",
+            brand="Toyota",
+            model="Camry",
+            status=Car.Status.SOLD,
+            tracking_code="OAL-PANEL-CLEARANCE",
+            customer=self.customer,
+        )
+        self.administrator = user_model.objects.create_superuser(
+            username="customer-panel-admin",
+            password="test-password",
+            email="admin@example.com",
+        )
+        start_tracking_for_sold_car(car=self.machine, actor=self.administrator)
+
+        self.vehicle_request = create_custom_vehicle_request(
+            full_name="متقاضی خودرو",
+            phone="09125555555",
+            telegram_id="lead-telegram",
+            desired_vehicle_description="شاسی‌بلند سفید با سقف پانوراما",
+            preferred_brand="Kia",
+            preferred_model="Sportage",
+            budget_amount="2500000000",
+            source=CustomVehicleRequest.Source.WEBSITE,
+        )
+
+    def test_employee_can_search_and_open_custom_request_with_audit_receipt(self):
+        self.client.force_login(self.employee)
+        list_response = self.client.get(
+            reverse("backoffice:custom_vehicle_request_list"), {"q": "Sportage"}
+        )
+        self.assertContains(list_response, self.vehicle_request.full_name)
+
+        detail_response = self.client.get(
+            reverse("backoffice:custom_vehicle_request_detail", args=[self.vehicle_request.pk])
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertTrue(
+            CustomVehicleRequestReadReceipt.objects.filter(
+                vehicle_request=self.vehicle_request,
+                employee=self.employee,
+            ).exists()
+        )
+
+    def test_employee_can_find_customer_by_tracking_code(self):
+        self.client.force_login(self.employee)
+        response = self.client.get(
+            reverse("backoffice:customer_list"), {"q": self.machine.tracking_code}
+        )
+        self.assertContains(response, self.customer.full_name)
+        self.assertContains(
+            response,
+            reverse("backoffice:customer_detail", args=[self.customer.pk]),
+        )
+
+    def test_clearance_employee_confirms_and_completes_from_two_step_screen(self):
+        self.client.force_login(self.clearance_employee)
+        operation_url = reverse("backoffice:clearance_operation")
+
+        preview_response = self.client.post(
+            operation_url,
+            {"tracking_code": self.machine.tracking_code, "operation": "enter"},
+        )
+        self.assertContains(preview_response, self.second_stage.name)
+        self.assertContains(preview_response, "ثبت نهایی عملیات")
+
+        confirm_response = self.client.post(
+            operation_url,
+            {
+                "tracking_code": self.machine.tracking_code,
+                "operation": "enter",
+                "confirm_operation": "on",
+            },
+        )
+        self.assertRedirects(confirm_response, operation_url)
+        entered_progress = CarStageProgress.objects.get(
+            car=self.machine,
+            stage=self.second_stage,
+        )
+        self.assertIsNotNone(entered_progress.actual_arrival)
+        self.assertEqual(entered_progress.confirmed_by, self.clearance_employee)
+
+        complete_preview_response = self.client.post(
+            operation_url,
+            {"tracking_code": self.machine.tracking_code, "operation": "complete"},
+        )
+        self.assertContains(complete_preview_response, "تکمیل مرحله")
+
+        complete_response = self.client.post(
+            operation_url,
+            {
+                "tracking_code": self.machine.tracking_code,
+                "operation": "complete",
+                "confirm_operation": "on",
+            },
+        )
+        self.assertRedirects(complete_response, operation_url)
+        entered_progress.refresh_from_db()
+        self.assertIsNotNone(entered_progress.completed_at)
+        self.assertEqual(entered_progress.completed_by, self.clearance_employee)
+
+    def test_general_employee_cannot_open_clearance_operation(self):
+        self.client.force_login(self.employee)
+        self.assertEqual(
+            self.client.get(reverse("backoffice:clearance_operation")).status_code,
+            403,
+        )
+
+
+class BackofficeReportingAndAuditTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.administrator = user_model.objects.create_superuser(
+            username="reporting-admin",
+            password="test-password",
+            email="reporting@example.com",
+        )
+        self.employee = user_model.objects.create_user(
+            username="reporting-employee",
+            password="test-password",
+            is_staff=True,
+        )
+        self.car = Car.objects.create(
+            title="ماشین گزارش‌گیری",
+            brand="Toyota",
+            model="RAV4",
+            tracking_code="OAL-REPORT-001",
+            status=Car.Status.FOR_SALE,
+        )
+        self.stage = Stage.objects.create(name="مرحلهٔ گزارش", order=1)
+
+        VehicleInventoryEvent.objects.create(
+            car=self.car,
+            action=VehicleInventoryEvent.Action.CREATED,
+            performed_by=self.administrator,
+            source=VehicleInventoryEvent.Source.BACKOFFICE,
+        )
+        TrackingEvent.objects.create(
+            car=self.car,
+            event_type=TrackingEvent.EventType.TRACKING_STARTED,
+            new_stage=self.stage,
+            performed_by=self.administrator,
+            source=TrackingEvent.Source.ADMIN_DASHBOARD,
+            note="شروع آزمایشی رهگیری",
+        )
+        StaffManagementEvent.objects.create(
+            staff_user=self.employee,
+            performed_by=self.administrator,
+            action=StaffManagementEvent.Action.CREATED,
+            source=StaffManagementEvent.Source.BACKOFFICE,
+        )
+
+    def test_system_administrator_sees_real_dashboard_counts(self):
+        self.client.force_login(self.administrator)
+        response = self.client.get(reverse("backoffice:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["management_snapshot"]["counts"]["for_sale"], 1)
+        self.assertContains(response, "ماشین‌های قابل فروش")
+        self.assertContains(response, "آخرین رویدادهای حسابرسی")
+
+    def test_audit_log_unifies_and_filters_immutable_event_sources(self):
+        self.client.force_login(self.administrator)
+        response = self.client.get(
+            reverse("backoffice:audit_log"),
+            {"source": "tracking", "q": self.car.tracking_code},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "شروع رهگیری ماشین")
+        self.assertContains(response, self.car.title)
+        self.assertNotContains(response, "ایجاد حساب کارمند")
+
+    def test_non_administrator_cannot_open_audit_log(self):
+        self.client.force_login(self.employee)
+        self.assertEqual(
+            self.client.get(reverse("backoffice:audit_log")).status_code,
+            403,
         )

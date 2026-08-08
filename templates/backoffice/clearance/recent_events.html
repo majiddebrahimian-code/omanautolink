@@ -1,0 +1,4 @@
+<section class="backoffice-table-card backoffice-clearance-history">
+    <header class="backoffice-card-heading"><div><h2>آخرین عملیات ثبت‌شدهٔ شما</h2><p>رویدادها تغییرناپذیرند و برای حسابرسی، وب‌سایت، ربات و فایل‌های ورود مشترک‌اند.</p></div></header>
+    <div class="backoffice-table-scroll"><table class="backoffice-table"><thead><tr><th>زمان</th><th>ماشین</th><th>مرحله</th><th>عملیات</th></tr></thead><tbody>{% for event in recent_events %}<tr><td>{{ event.created_at|date:"Y/m/d H:i" }}</td><td>{{ event.car.title }}<small dir="ltr">{{ event.car.tracking_code }}</small></td><td>{{ event.new_stage.name|default:"—" }}</td><td>{{ event.get_event_type_display }}</td></tr>{% empty %}<tr><td colspan="4" class="backoffice-table-empty">هنوز عملیاتی توسط شما ثبت نشده است.</td></tr>{% endfor %}</tbody></table></div>
+</section>
