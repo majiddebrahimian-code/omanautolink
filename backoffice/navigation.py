@@ -110,18 +110,36 @@ def build_panel_navigation(user):
             }
         )
 
+    clearance_items = []
     if _may_access(user, "tracking.confirm_tracking_stage"):
+        clearance_items.append(
+            _link(
+                label="ماشین‌های مرحلهٔ من",
+                icon="fa-tasks",
+                url_name="backoffice:clearance_queue",
+            )
+        )
+        clearance_items.append(
+            _link(
+                label="ثبت با کد رهگیری",
+                icon="fa-qrcode",
+                url_name="backoffice:clearance_operation",
+            )
+        )
+    if _may_access(user, "tracking.import_tracking_stage_updates"):
+        clearance_items.append(
+            _link(
+                label="ورود گروهی Excel",
+                icon="fa-file-excel-o",
+                url_name="backoffice:tracking_import_list",
+            )
+        )
+    if clearance_items:
         navigation.append(
             {
                 "label": "عملیات ترخیص",
                 "icon": "fa-check-square-o",
-                "items": [
-                    _link(
-                        label="ثبت و تکمیل مرحله",
-                        icon="fa-qrcode",
-                        url_name="backoffice:clearance_operation",
-                    ),
-                ],
+                "items": clearance_items,
             }
         )
 

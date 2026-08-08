@@ -39,7 +39,7 @@
                 </div>
                 <p dir="ltr">@{{ staff_user.username }}{% if staff_user.email %} · {{ staff_user.email }}{% endif %}</p>
                 <span class="backoffice-role-chip backoffice-role-chip--{{ staff_user.business_role_tone }}">
-                    <i class="fa {% if staff_user.business_role == 'clearance_employee' %}fa-truck{% elif staff_user.business_role == 'system_administrator' %}fa-shield{% else %}fa-briefcase{% endif %}" aria-hidden="true"></i>
+                    <i class="fa {% if staff_user.business_role == 'employee_and_clearance' %}fa-random{% elif staff_user.business_role == 'clearance_employee' %}fa-truck{% elif staff_user.business_role == 'system_administrator' %}fa-shield{% else %}fa-briefcase{% endif %}" aria-hidden="true"></i>
                     {{ staff_user.business_role_label }}
                 </span>
             </div>
@@ -102,6 +102,9 @@
                 {% elif staff_user.business_role == 'clearance_employee' %}
                     <strong>عملیات تحویل و ترخیص</strong>
                     <p>تأیید مرحله فقط در مرحله‌هایی مجاز است که پایین‌تر به این کارمند تخصیص داده شده‌اند.</p>
+                {% elif staff_user.business_role == 'employee_and_clearance' %}
+                    <strong>مدیریت موجودی و عملیات ترخیص</strong>
+                    <p>این حساب هم قابلیت‌های کارمند عادی را دارد و هم فقط در مرحله‌های تخصیص‌یافته می‌تواند خودرو را تحویل بگیرد یا ترخیص کند.</p>
                 {% else %}
                     <strong>عملیات موجودی، محتوا و وب‌سایت</strong>
                     <p>دسترسی‌های پایهٔ کارمند برای ماشین‌ها، وبلاگ، محتوای سایت و مشاهدهٔ درخواست‌ها فعال است.</p>

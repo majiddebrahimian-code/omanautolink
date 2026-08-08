@@ -73,7 +73,7 @@
     if (linkPath === activePath) {
       link.classList.add("active");
       var ownerGroup = link.closest("[data-admin-nav-group]");
-      if (ownerGroup) {
+      if (ownerGroup && !ownerGroup.classList.contains("panel-nav-group")) {
         ownerGroup.classList.add("menu-open");
         var ownerLink = ownerGroup.querySelector("[data-admin-nav-group-link]");
         if (ownerLink) ownerLink.classList.add("active");

@@ -73,10 +73,13 @@ class StaffAccountForm(forms.Form):
         ),
     )
     role = forms.ChoiceField(
-        label="نقش عملیاتی",
+        label="سطح دسترسی عملیاتی",
         choices=StaffBusinessRole.MANAGEABLE_CHOICES,
         widget=forms.Select(attrs={"class": "backoffice-select"}),
-        help_text="هر کارمند دقیقاً یک نقش پایه دریافت می‌کند.",
+        help_text=(
+            "«کارمند ترخیص» فقط صف مراحل تخصیص‌یافتهٔ خود را می‌بیند و به مدیریت "
+            "موجودی دسترسی ندارد. گزینهٔ ترکیبی، هر دو مجموعه دسترسی را فعال می‌کند."
+        ),
     )
     assigned_stages = forms.ModelMultipleChoiceField(
         label="مرحله‌های تحویل مسئول",
@@ -89,8 +92,8 @@ class StaffAccountForm(forms.Form):
             }
         ),
         help_text=(
-            "برای کارمند ترخیص فعال است. برای کارمند عادی، ابتدا دسترسی ویژهٔ "
-            "«تأیید مرحلهٔ تحویل» را انتخاب کنید."
+            "فقط برای «کارمند ترخیص» یا «کارمند + کارمند ترخیص» فعال است. "
+            "انتخاب مرحله به‌تنهایی مجوز ترخیص ایجاد نمی‌کند."
         ),
     )
     exceptional_permissions = ExceptionalPermissionMultipleChoiceField(
@@ -215,9 +218,10 @@ class StaffAccountForm(forms.Form):
                     codename="confirm_tracking_stage",
                 ).exists()
             )
-            has_inherited_confirmation_permission = (
-                role == StaffBusinessRole.CLEARANCE_EMPLOYEE
-            )
+            has_inherited_confirmation_permission = role in {
+                StaffBusinessRole.CLEARANCE_EMPLOYEE,
+                StaffBusinessRole.EMPLOYEE_AND_CLEARANCE,
+            }
 
             if not (
                 has_direct_confirmation_permission

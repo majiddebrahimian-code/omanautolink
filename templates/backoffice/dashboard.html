@@ -41,6 +41,11 @@
             {% empty %}<p class="backoffice-empty-report">هنوز رویداد حسابرسی ثبت نشده است.</p>{% endfor %}
         </div>
     </section>
+{% elif clearance_queue is not None %}
+    <section class="backoffice-clearance-dashboard card card-outline card-primary">
+        <header class="card-header"><h2 class="card-title"><i class="fa fa-tasks"></i> صف عملیات مرحله‌ای شما</h2><a class="btn btn-primary btn-sm float-left" href="{% url 'backoffice:clearance_queue' %}">مشاهدهٔ همه <i class="fa fa-arrow-left"></i></a></header>
+        <div class="card-body"><p class="text-muted">خودروهای زیر دقیقاً در مرحله‌های تخصیص‌یافته به شما قرار دارند. برای تحویل یا ترخیص، صف عملیات را باز کنید.</p><div class="row">{% for item in clearance_queue|slice:':6' %}<div class="col-md-6 col-xl-4"><article class="backoffice-clearance-dashboard__item"><span class="backoffice-clearance-dashboard__action backoffice-clearance-dashboard__action--{{ item.action }}"><i class="fa {% if item.action == 'receive' %}fa-inbox{% else %}fa-check{% endif %}"></i></span><div><strong>{{ item.car.title }}</strong><small><code>{{ item.car.tracking_code }}</code> · {{ item.stage.name }}</small><em>{% if item.action == 'receive' %}آمادهٔ تحویل{% else %}آمادهٔ ترخیص{% endif %}</em></div></article></div>{% empty %}<div class="col-12"><div class="backoffice-clearance-dashboard__empty"><i class="fa fa-check-circle-o"></i> در حال حاضر خودرویی در صف عملیاتی شما نیست.</div></div>{% endfor %}</div></div>
+    </section>
 {% else %}
     <section class="backoffice-welcome-card"><div><span class="backoffice-welcome-card__icon"><i class="fa fa-user"></i></span><h2>خوش آمدید</h2><p>این صفحه برای نقش شما فقط مسیرهای عملیاتی مجاز را نمایش می‌دهد. گزارش‌های مدیریتی و حسابرسی فقط در اختیار مدیر اصلی سیستم هستند.</p></div></section>
 {% endif %}

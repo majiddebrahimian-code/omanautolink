@@ -1,10 +1,12 @@
 from urllib import response
+from unittest.mock import patch
 
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 from django.test import RequestFactory, TestCase, override_settings
 
@@ -13,6 +15,8 @@ from tracking.models import (
     Stage,
     StageTransition,
     TrackingEvent,
+    TrackingImportJob,
+    TrackingImportRow,
 )
 
 from cars.models import Car
@@ -30,6 +34,8 @@ from tracking.services import (
     get_linear_stage_route_integrity,
     get_public_tracking_data,
     get_stage_archive_impact,
+    get_completed_clearance_history,
+    get_clearance_work_queue,
     repair_linear_stage_transitions,
     skip_stage,
     start_tracking_for_sold_car,
@@ -38,6 +44,123 @@ from tracking.services import (
 from django.urls import reverse
 
 from customers.models import Customer, SearchLog
+from tracking.imports import process_tracking_import_job
+
+
+class TrackingImportWorkflowTests(TestCase):
+    """The background import must isolate row failures from valid updates."""
+
+    def setUp(self):
+        self.sale_stage = Stage.objects.create(name="Sale confirmed", order=1)
+        self.clearance_stage = Stage.objects.create(name="Customs", order=2)
+        StageTransition.objects.create(
+            from_stage=self.sale_stage,
+            to_stage=self.clearance_stage,
+            estimated_duration_days=3,
+        )
+        self.staff = get_user_model().objects.create_user(
+            username="excel-clearance", password="test-password", is_staff=True,
+        )
+        self.staff.groups.add(
+            ensure_default_role_groups()[RoleGroup.CLEARANCE_EMPLOYEE],
+        )
+        profile, _ = StaffProfile.objects.get_or_create(user=self.staff)
+        profile.assigned_stages.add(self.clearance_stage)
+        self.car = Car.objects.create(
+            title="Excel import car", brand="Test", model="X",
+            status=Car.Status.SOLD, tracking_code="EXCEL-VALID-01",
+        )
+        start_tracking_for_sold_car(car=self.car, actor=self.staff)
+        self.job = TrackingImportJob.objects.create(
+            upload=SimpleUploadedFile("stages.xlsx", b"not-read-in-this-test"),
+            original_filename="stages.xlsx", requested_by=self.staff,
+        )
+
+    @patch("tracking.imports._read_worksheet_rows")
+    def test_valid_rows_commit_when_another_row_is_invalid(self, mock_read_rows):
+        mock_read_rows.return_value = [
+            (2, self.car.tracking_code, self.clearance_stage.name),
+            (3, "UNKNOWN-CODE", self.clearance_stage.name),
+        ]
+
+        result = process_tracking_import_job(job_id=self.job.pk)
+
+        self.job.refresh_from_db()
+        self.car.refresh_from_db()
+        self.assertEqual(result["outcome"], TrackingImportJob.Status.COMPLETED_WITH_ERRORS)
+        self.assertEqual(self.job.success_count, 1)
+        self.assertEqual(self.job.error_count, 1)
+        self.assertEqual(self.car.current_stage, self.clearance_stage)
+        self.assertEqual(
+            TrackingImportRow.objects.filter(
+                job=self.job, outcome=TrackingImportRow.Outcome.SUCCESS,
+            ).count(),
+            1,
+        )
+        self.assertTrue(
+            TrackingEvent.objects.filter(
+                car=self.car,
+                source=TrackingEvent.Source.EXCEL_IMPORT,
+                event_type=TrackingEvent.EventType.STAGE_CONFIRMED,
+            ).exists(),
+        )
+
+
+class ClearanceWorkQueueTests(TestCase):
+    def setUp(self):
+        self.sale_stage = Stage.objects.create(name="Sale", order=1)
+        self.clearance_stage = Stage.objects.create(name="Transport to Iran", order=2)
+        StageTransition.objects.create(
+            from_stage=self.sale_stage,
+            to_stage=self.clearance_stage,
+            estimated_duration_days=4,
+        )
+        self.employee = get_user_model().objects.create_user(
+            username="queue-clearance", password="test-password", is_staff=True,
+        )
+        self.employee.groups.add(
+            ensure_default_role_groups()[RoleGroup.CLEARANCE_EMPLOYEE],
+        )
+        profile, _ = StaffProfile.objects.get_or_create(user=self.employee)
+        profile.assigned_stages.add(self.clearance_stage)
+        self.car = Car.objects.create(
+            title="Queue vehicle", brand="Test", model="Queue",
+            status=Car.Status.SOLD, tracking_code="QUEUE-001",
+        )
+        start_tracking_for_sold_car(car=self.car, actor=self.employee)
+
+    def test_staff_sees_only_their_next_stage_then_can_complete_it(self):
+        initial_queue = get_clearance_work_queue(staff=self.employee)
+        self.assertEqual(len(initial_queue), 1)
+        self.assertEqual(initial_queue[0]["car"], self.car)
+        self.assertEqual(initial_queue[0]["stage"], self.clearance_stage)
+        self.assertEqual(initial_queue[0]["action"], "receive")
+
+        confirm_stage(
+            car=self.car,
+            stage=self.clearance_stage,
+            staff=self.employee,
+        )
+        completion_queue = get_clearance_work_queue(staff=self.employee)
+        self.assertEqual(len(completion_queue), 1)
+        self.assertEqual(completion_queue[0]["action"], "complete")
+
+        complete_stage(
+            car=self.car,
+            stage=self.clearance_stage,
+            staff=self.employee,
+        )
+        self.assertEqual(get_clearance_work_queue(staff=self.employee), [])
+
+        completed_history = get_completed_clearance_history(staff=self.employee)
+        completed_progress = completed_history.get(
+            car=self.car,
+            stage=self.clearance_stage,
+        )
+        self.assertEqual(completed_progress.car, self.car)
+        self.assertEqual(completed_progress.stage, self.clearance_stage)
+        self.assertEqual(completed_progress.completed_by, self.employee)
+        self.assertIsNotNone(completed_progress.completed_at)
 
 
 class StageTransitionTests(TestCase):

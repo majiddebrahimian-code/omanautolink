@@ -10,6 +10,7 @@ from accounts.services import (
     StaffBusinessRole,
     create_staff_member,
     ensure_default_role_groups,
+    get_staff_business_role,
     reset_staff_password,
     set_staff_active_state,
     update_staff_member,
@@ -68,6 +69,12 @@ class DefaultRoleGroupTests(TestCase):
             clearance_group.permissions.filter(
                 content_type__app_label="cars",
                 codename="sell_vehicle",
+            ).exists()
+        )
+        self.assertFalse(
+            clearance_group.permissions.filter(
+                content_type__app_label="cars",
+                codename="view_car",
             ).exists()
         )
 
@@ -347,6 +354,26 @@ class StaffAccountLifecycleServiceTests(TestCase):
         self.assertEqual(event.action, StaffManagementEvent.Action.CREATED)
         self.assertEqual(event.performed_by, self.administrator)
         self.assertEqual(event.changes["after"]["role"], StaffBusinessRole.CLEARANCE_EMPLOYEE)
+
+    def test_combined_employee_and_clearance_role_grants_both_capability_sets(self):
+        staff_user = self.create_staff(
+            username="combined-staff-member",
+            email="combined@example.com",
+            role=StaffBusinessRole.EMPLOYEE_AND_CLEARANCE,
+        )
+        profile = StaffProfile.objects.get(user=staff_user)
+
+        self.assertTrue(staff_user.groups.filter(name=RoleGroup.EMPLOYEE).exists())
+        self.assertTrue(
+            staff_user.groups.filter(name=RoleGroup.CLEARANCE_EMPLOYEE).exists()
+        )
+        self.assertTrue(staff_user.has_perm("cars.change_car"))
+        self.assertTrue(staff_user.has_perm("tracking.confirm_tracking_stage"))
+        self.assertEqual(list(profile.assigned_stages.all()), [self.clearance_stage])
+        self.assertEqual(
+            get_staff_business_role(staff_user),
+            StaffBusinessRole.EMPLOYEE_AND_CLEARANCE,
+        )
 
     def test_general_employee_can_receive_explicit_stage_confirmation_capability(self):
         confirmation_permission = Permission.objects.get(

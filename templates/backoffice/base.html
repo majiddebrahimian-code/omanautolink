@@ -4,93 +4,52 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-
     <title>{% block title %}پنل مدیریت{% endblock %}</title>
-
+    {% if site_config.favicon %}<link rel="icon" href="{{ site_config.favicon.url }}">{% endif %}
     <link rel="stylesheet" href="{% static 'core/vendor/persian-adminlte/font-awesome/css/font-awesome.min.css' %}">
-    <link rel="stylesheet" href="{% static 'backoffice/panel.css' %}?v=reports-audit-1">
+    <link rel="stylesheet" href="{% static 'backoffice/panel.css' %}?v=staff-role-combination-1">
 </head>
-
 <body class="backoffice-body">
     <div class="backoffice-shell">
         {% include "backoffice/partials/sidebar.html" %}
-
         <div class="backoffice-main">
             <header class="backoffice-topbar">
                 <div class="backoffice-topbar__right">
-                    <button
-                        type="button"
-                        class="backoffice-menu-toggle"
-                        data-panel-sidebar-toggle
-                        aria-label="باز و بسته‌کردن منو"
-                        aria-controls="backoffice-sidebar"
-                        aria-expanded="false"
-                    >
-                        <i class="fa fa-bars" aria-hidden="true"></i>
-                    </button>
-
-                    <a href="{% url 'backoffice:dashboard' %}" class="backoffice-home-link">
-                        <i class="fa fa-home" aria-hidden="true"></i>
-                        داشبورد
-                    </a>
+                    <button type="button" class="backoffice-menu-toggle" data-panel-sidebar-toggle aria-label="باز و بسته‌کردن منو" aria-controls="backoffice-sidebar" aria-expanded="false"><i class="fa fa-bars"></i></button>
+                    <a href="{% url 'backoffice:dashboard' %}" class="backoffice-home-link"><i class="fa fa-home"></i> داشبورد</a>
                 </div>
-
                 <div class="backoffice-topbar__left">
-                    <a href="/" target="_blank" rel="noopener noreferrer" class="backoffice-public-link">
-                        <i class="fa fa-external-link" aria-hidden="true"></i>
-                        مشاهدهٔ سایت
-                    </a>
-
-                    <div class="backoffice-user">
-                        <span class="backoffice-user__avatar">
-                            {{ request.user.get_username|first|upper }}
-                        </span>
-
-                        <span>
-                            {{ request.user.get_full_name|default:request.user.get_username }}
-                        </span>
+                    <a href="/" target="_blank" rel="noopener noreferrer" class="backoffice-public-link"><i class="fa fa-external-link"></i> مشاهدهٔ سایت</a>
+                    <div class="backoffice-user-menu" data-user-menu>
+                        <button type="button" class="backoffice-user backoffice-user-menu__trigger" data-user-menu-trigger aria-label="منوی حساب کاربری" aria-haspopup="true" aria-expanded="false">
+                            <span class="backoffice-user__avatar">{{ request.user.get_username|first|upper }}</span>
+                            <span>{{ request.user.get_full_name|default:request.user.get_username }}</span>
+                            <i class="fa fa-angle-down"></i>
+                        </button>
+                        <div class="backoffice-user-menu__dropdown" data-user-menu-dropdown hidden>
+                            <p><i class="fa fa-user-o"></i> {{ request.user.get_username }}</p>
+                            <form method="post" action="{% url 'backoffice:logout' %}">{% csrf_token %}<button type="submit"><i class="fa fa-sign-out"></i> خروج از حساب</button></form>
+                        </div>
                     </div>
                 </div>
             </header>
-
             <main class="backoffice-content">
                 <section class="backoffice-page-heading">
                     <div>
-                        <p class="backoffice-eyebrow">
-                            {% block eyebrow %}پنل مدیریت{% endblock %}
-                        </p>
-
+                        <p class="backoffice-eyebrow">{% block eyebrow %}پنل مدیریت{% endblock %}</p>
                         <h1>{% block page_title %}داشبورد{% endblock %}</h1>
-
                         {% block page_description %}{% endblock %}
                     </div>
-
-                    <div class="backoffice-page-actions">
-                        {% block page_actions %}{% endblock %}
-                    </div>
+                    <div class="backoffice-page-actions">{% block page_actions %}{% endblock %}</div>
                 </section>
-
-                {% if messages %}
-                    <section class="backoffice-messages" aria-live="polite">
-                        {% for message in messages %}
-                            <div class="backoffice-alert backoffice-alert--{{ message.tags|default:'info' }}">
-                                {{ message }}
-                            </div>
-                        {% endfor %}
-                    </section>
-                {% endif %}
-
+                {% if messages %}<section class="backoffice-messages" aria-live="polite">{% for message in messages %}<div class="backoffice-alert backoffice-alert--{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}</section>{% endif %}
                 {% block content %}{% endblock %}
             </main>
-
-            <footer class="backoffice-footer">
-                پنل مدیریت {{ site_config.site_name|default:"سایت" }}
-            </footer>
+            <footer class="backoffice-footer">پنل مدیریت {{ site_config.site_name|default:"سایت" }}</footer>
         </div>
     </div>
-
     <div class="backoffice-backdrop" data-panel-sidebar-backdrop></div>
-
-    <script src="{% static 'backoffice/panel.js' %}?v=staff-permissions-2" defer></script>
+    <script src="{% static 'backoffice/panel.js' %}?v=user-menu-2" defer></script>
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

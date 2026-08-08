@@ -5,6 +5,7 @@ from . import views
 app_name = "backoffice"
 
 urlpatterns = [
+    path("logout/", views.panel_logout, name="logout"),
     path("", views.dashboard, name="dashboard"),
     path("reports/audit-log/", views.audit_log, name="audit_log"),
     path("machines/", views.machine_list, name="machine_list"),
@@ -98,6 +99,20 @@ urlpatterns = [
         views.clearance_operation,
         name="clearance_operation",
     ),
+    path("clearance/queue/", views.clearance_queue, name="clearance_queue"),
+    path(
+        "clearance/queue/<int:pk>/receive/",
+        views.clearance_queue_receive,
+        name="clearance_queue_receive",
+    ),
+    path(
+        "clearance/queue/<int:pk>/complete/",
+        views.clearance_queue_complete,
+        name="clearance_queue_complete",
+    ),
+    path("clearance/imports/", views.tracking_import_list, name="tracking_import_list"),
+    path("clearance/imports/new/", views.tracking_import_create, name="tracking_import_create"),
+    path("clearance/imports/<int:pk>/", views.tracking_import_detail, name="tracking_import_detail"),
     path("staff/", views.staff_list, name="staff_list"),
     path("staff/new/", views.staff_create, name="staff_create"),
     path("staff/roles/", views.staff_role_guide, name="staff_role_guide"),
@@ -134,6 +149,36 @@ urlpatterns = [
     ),
     path("blog/<int:pk>/delete/", views.blog_post_delete, name="blog_post_delete"),
     path("settings/site/", views.site_settings, name="site_settings"),
+    path(
+        "settings/site/identity/",
+        views.site_identity_settings,
+        name="site_identity_settings",
+    ),
+    path(
+        "settings/site/homepage/",
+        views.site_homepage_settings,
+        name="site_homepage_settings",
+    ),
+    path(
+        "settings/site/<slug:collection>/",
+        views.site_collection_list,
+        name="site_collection_list",
+    ),
+    path(
+        "settings/site/<slug:collection>/new/",
+        views.site_collection_create,
+        name="site_collection_create",
+    ),
+    path(
+        "settings/site/<slug:collection>/<int:pk>/edit/",
+        views.site_collection_edit,
+        name="site_collection_edit",
+    ),
+    path(
+        "settings/site/<slug:collection>/<int:pk>/delete/",
+        views.site_collection_delete,
+        name="site_collection_delete",
+    ),
     path(
         "settings/delivery-stages/",
         views.stage_configuration,

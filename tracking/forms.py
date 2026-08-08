@@ -1,5 +1,6 @@
 from django import forms
 from django.db import models
+from django.core.validators import FileExtensionValidator
 from django.db.models import Q
 
 from accounts.models import StaffProfile
@@ -91,6 +92,28 @@ class ClearanceConfirmationForm(forms.Form):
         choices=ClearanceTrackingCodeForm.Operation.choices,
         widget=forms.HiddenInput(),
     )
+
+
+class TrackingImportUploadForm(forms.Form):
+    """Upload only the agreed spreadsheet format; parsing happens in Celery."""
+
+    spreadsheet = forms.FileField(
+        label="فایل Excel مراحل تحویل",
+        validators=[FileExtensionValidator(["xlsx"])],
+        widget=forms.ClearableFileInput(
+            attrs={"class": "backoffice-file-input", "accept": ".xlsx"}
+        ),
+        help_text=(
+            "ستون‌های الزامی: tracking_code و stage. ستون اختیاری row نادیده گرفته می‌شود. "
+            "هر ردیف فقط ورود خودرو به مرحلهٔ اعلام‌شده را ثبت می‌کند."
+        ),
+    )
+
+    def clean_spreadsheet(self):
+        spreadsheet = self.cleaned_data["spreadsheet"]
+        if spreadsheet.size > 5 * 1024 * 1024:
+            raise forms.ValidationError("حجم فایل Excel نمی‌تواند بیش از ۵ مگابایت باشد.")
+        return spreadsheet
     confirm_operation = forms.BooleanField(
         label="اطلاعات خودرو و مرحله را بررسی کرده‌ام و این عملیات را تأیید می‌کنم.",
         required=True,

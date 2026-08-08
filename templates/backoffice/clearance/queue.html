@@ -1,0 +1,37 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}ماشین‌های مرحلهٔ من | {{ site_config.site_name }}{% endblock %}
+{% block page_title %}ماشین‌های مرحلهٔ من{% endblock %}
+{% block page_description %}<p>فقط خودروهایی نمایش داده می‌شوند که اکنون در مرحلهٔ تخصیص‌یافته به شما قابل تحویل یا ترخیص هستند.</p>{% endblock %}
+{% block breadcrumb %}صف عملیات ترخیص{% endblock %}
+
+{% block content %}
+<section class="clearance-queue-page">
+  <div class="clearance-queue-toolbar card card-outline card-primary">
+    <div class="card-body">
+      <div class="clearance-queue-toolbar__copy"><span class="clearance-queue-toolbar__icon"><i class="fa fa-tasks"></i></span><div><strong>{{ result_count }} خودرو در صف شماست</strong><p>عملیات فقط پس از کنترل دوبارهٔ مرحله، دسترسی و وضعیت واقعی خودرو ثبت می‌شود.</p></div></div>
+      <form method="get" class="clearance-queue-search">
+        <div class="input-group"><input name="q" value="{{ query }}" class="form-control" placeholder="نام ماشین، مشتری، کد رهگیری یا مرحله"><div class="input-group-append"><button class="btn btn-primary" type="submit" title="جست‌وجو"><i class="fa fa-search"></i></button></div></div>
+        <input type="hidden" name="action" value="{{ action_filter }}">
+        {% if action_filter == 'completed' %}<div class="clearance-history-dates"><label>از تاریخ <input type="date" name="date_from" value="{{ date_from }}"></label><label>تا تاریخ <input type="date" name="date_to" value="{{ date_to }}"></label><button class="btn btn-outline" type="submit"><i class="fa fa-filter"></i> اعمال تاریخ</button></div>{% endif %}
+        <div class="clearance-queue-filters"><a class="{% if action_filter == 'all' %}is-active{% endif %}" href="?q={{ query|urlencode }}">همه</a><a class="{% if action_filter == 'receive' %}is-active{% endif %}" href="?q={{ query|urlencode }}&action=receive">منتظر تحویل</a><a class="{% if action_filter == 'complete' %}is-active{% endif %}" href="?q={{ query|urlencode }}&action=complete">منتظر ترخیص</a><a class="{% if action_filter == 'completed' %}is-active{% endif %}" href="?q={{ query|urlencode }}&action=completed">ترخیص‌شده</a></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card clearance-queue-card"><div class="card-body p-0"><div class="table-responsive"><table class="table table-hover clearance-queue-table"><thead><tr><th>خودرو</th><th>مشتری</th><th>کد رهگیری</th><th>مرحلهٔ مسئولیت شما</th><th>وضعیت عملیاتی</th>{% if action_filter == 'completed' %}<th>تاریخ ترخیص</th>{% else %}<th class="text-left">اقدام</th>{% endif %}</tr></thead><tbody>
+    {% for item in page_obj %}
+      <tr>
+        <td><strong>{{ item.car.title }}</strong><small>{{ item.car.brand }} · {{ item.car.model }}{% if item.car.year %} · {{ item.car.year }}{% endif %}</small></td>
+        <td>{% if item.car.customer %}<strong>{{ item.car.customer.full_name }}</strong><small dir="ltr">{{ item.car.customer.phone }}</small>{% else %}—{% endif %}</td>
+        <td><code>{{ item.car.tracking_code }}</code></td>
+        <td><span class="clearance-stage-chip"><i class="fa fa-map-marker"></i>{{ item.stage.name }}</span></td>
+        <td>{% if item.action == 'receive' %}<span class="clearance-state clearance-state--receive"><i class="fa fa-inbox"></i> آمادهٔ تحویل</span>{% elif item.action == 'completed' %}<span class="clearance-state clearance-state--completed"><i class="fa fa-check"></i> ترخیص‌شده</span>{% else %}<span class="clearance-state clearance-state--complete"><i class="fa fa-check-circle"></i> آمادهٔ ترخیص</span>{% endif %}</td>
+        {% if action_filter == 'completed' %}<td>{{ item.progress.completed_at|date:"Y/m/d - H:i" }}</td>{% else %}<td class="text-left">{% if item.action == 'receive' %}<form method="post" action="{% url 'backoffice:clearance_queue_receive' item.car.pk %}">{% csrf_token %}<button class="btn btn-primary btn-sm" type="submit"><i class="fa fa-hand-paper-o"></i> تحویل گرفتن</button></form>{% else %}<form method="post" action="{% url 'backoffice:clearance_queue_complete' item.car.pk %}">{% csrf_token %}<button class="btn btn-success btn-sm" type="submit"><i class="fa fa-check"></i> ترخیص</button></form>{% endif %}</td>{% endif %}
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="clearance-queue-empty"><i class="fa fa-check-circle-o"></i><strong>{% if action_filter == 'completed' %}ترخیصی در این بازهٔ تاریخ پیدا نشد.{% else %}در حال حاضر خودروی عملیاتی در صف شما نیست.{% endif %}</strong><p>هنگامی که خودرو به مرحلهٔ تخصیص‌یافته به شما برسد، اینجا نمایش داده می‌شود.</p></td></tr>
+    {% endfor %}
+  </tbody></table></div></div></div>
+</section>
+{% endblock %}

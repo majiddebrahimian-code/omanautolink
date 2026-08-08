@@ -26,17 +26,20 @@ class StaffBusinessRole:
     SYSTEM_ADMINISTRATOR = "system_administrator"
     EMPLOYEE = "employee"
     CLEARANCE_EMPLOYEE = "clearance_employee"
+    EMPLOYEE_AND_CLEARANCE = "employee_and_clearance"
     UNASSIGNED = "unassigned"
 
     MANAGEABLE_CHOICES = (
         (EMPLOYEE, "کارمند"),
         (CLEARANCE_EMPLOYEE, "کارمند ترخیص"),
+        (EMPLOYEE_AND_CLEARANCE, "کارمند + کارمند ترخیص"),
     )
 
     LABELS = {
         SYSTEM_ADMINISTRATOR: "مدیر اصلی سیستم",
         EMPLOYEE: "کارمند",
         CLEARANCE_EMPLOYEE: "کارمند ترخیص",
+        EMPLOYEE_AND_CLEARANCE: "کارمند + کارمند ترخیص",
         UNASSIGNED: "بدون نقش عملیاتی",
     }
 
@@ -84,9 +87,8 @@ ROLE_PERMISSION_SPECS = {
         ("tracking", "view_trackingevent"),
     ],
     RoleGroup.CLEARANCE_EMPLOYEE: [
-        # Minimum information required for stage operations
-        ("cars", "view_car"),
-        ("cars", "view_carphoto"),
+        # Stage queues provide a scoped vehicle snapshot.  A clearance role
+        # deliberately receives no inventory or media-management permission.
         ("tracking", "view_stage"),
         ("tracking", "view_stagetransition"),
         ("tracking", "view_carstageprogress"),
@@ -180,16 +182,21 @@ def ensure_default_role_groups():
 
 
 def get_staff_business_role(staff_user):
-    """Return the only business role shown by the custom staff panel."""
+    """Return the effective, business-facing combination of staff roles."""
 
     if staff_user.is_superuser:
         return StaffBusinessRole.SYSTEM_ADMINISTRATOR
 
     group_names = {group.name for group in staff_user.groups.all()}
 
-    if RoleGroup.CLEARANCE_EMPLOYEE in group_names:
+    has_employee_role = RoleGroup.EMPLOYEE in group_names
+    has_clearance_role = RoleGroup.CLEARANCE_EMPLOYEE in group_names
+
+    if has_employee_role and has_clearance_role:
+        return StaffBusinessRole.EMPLOYEE_AND_CLEARANCE
+    if has_clearance_role:
         return StaffBusinessRole.CLEARANCE_EMPLOYEE
-    if RoleGroup.EMPLOYEE in group_names:
+    if has_employee_role:
         return StaffBusinessRole.EMPLOYEE
 
     return StaffBusinessRole.UNASSIGNED
@@ -248,6 +255,7 @@ def _validate_role(role):
     valid_roles = {
         StaffBusinessRole.EMPLOYEE,
         StaffBusinessRole.CLEARANCE_EMPLOYEE,
+        StaffBusinessRole.EMPLOYEE_AND_CLEARANCE,
     }
 
     if role not in valid_roles:
@@ -313,10 +321,16 @@ def _get_curated_exception_permissions(permission_values):
     return [allowed_by_id[permission_id] for permission_id in permission_ids]
 
 
-def _role_group_name(role):
+def _role_group_names(role):
+    """Map one panel choice to its intentionally composable Django groups."""
+
     return {
-        StaffBusinessRole.EMPLOYEE: RoleGroup.EMPLOYEE,
-        StaffBusinessRole.CLEARANCE_EMPLOYEE: RoleGroup.CLEARANCE_EMPLOYEE,
+        StaffBusinessRole.EMPLOYEE: [RoleGroup.EMPLOYEE],
+        StaffBusinessRole.CLEARANCE_EMPLOYEE: [RoleGroup.CLEARANCE_EMPLOYEE],
+        StaffBusinessRole.EMPLOYEE_AND_CLEARANCE: [
+            RoleGroup.EMPLOYEE,
+            RoleGroup.CLEARANCE_EMPLOYEE,
+        ],
     }[role]
 
 
@@ -405,7 +419,9 @@ def _set_staff_role_permissions_and_stages(
     """Apply controlled role/permission changes and preserve unrelated grants."""
 
     role_groups = ensure_default_role_groups()
-    staff_user.groups.set([role_groups[_role_group_name(role)]])
+    staff_user.groups.set(
+        [role_groups[group_name] for group_name in _role_group_names(role)]
+    )
 
     allowed_permissions = list(get_assignable_exception_permissions())
     previous_curated_permissions = list(

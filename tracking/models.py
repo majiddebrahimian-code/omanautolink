@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 
 class Stage(models.Model):
@@ -252,3 +253,84 @@ class CarStageProgress(models.Model):
 
     def __str__(self):
         return f"{self.car.tracking_code} @ {self.stage.name}"
+
+
+def tracking_import_upload_to(instance, filename):
+    uploaded_at = instance.created_at or timezone.now()
+    return f"tracking/imports/{uploaded_at:%Y/%m}/{filename}"
+
+
+class TrackingImportJob(models.Model):
+    """Durable background-job record for one uploaded tracking spreadsheet."""
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "در صف پردازش"
+        PROCESSING = "processing", "در حال پردازش"
+        COMPLETED = "completed", "تکمیل‌شده"
+        COMPLETED_WITH_ERRORS = "completed_with_errors", "تکمیل‌شده با خطا"
+        FAILED = "failed", "ناموفق"
+
+    upload = models.FileField(upload_to=tracking_import_upload_to)
+    original_filename = models.CharField(max_length=255)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="tracking_import_jobs",
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=Status.choices,
+        default=Status.QUEUED,
+    )
+    total_rows = models.PositiveIntegerField(default=0)
+    success_count = models.PositiveIntegerField(default=0)
+    error_count = models.PositiveIntegerField(default=0)
+    failure_reason = models.TextField(blank=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    finished_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        indexes = [
+            models.Index(fields=["status", "created_at"], name="track_import_status_ts_idx"),
+        ]
+        permissions = [
+            (
+                "view_tracking_import_job",
+                "Can view tracking spreadsheet imports",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Import #{self.pk}: {self.original_filename}"
+
+
+class TrackingImportRow(models.Model):
+    class Outcome(models.TextChoices):
+        SUCCESS = "success", "ثبت شد"
+        ERROR = "error", "خطا"
+
+    job = models.ForeignKey(
+        TrackingImportJob,
+        on_delete=models.CASCADE,
+        related_name="rows",
+    )
+    row_number = models.PositiveIntegerField()
+    tracking_code = models.CharField(max_length=40, blank=True)
+    stage_name = models.CharField(max_length=120, blank=True)
+    outcome = models.CharField(max_length=10, choices=Outcome.choices)
+    message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["row_number", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["job", "row_number"],
+                name="unique_tracking_import_job_row",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Import #{self.job_id}, row {self.row_number}: {self.outcome}"

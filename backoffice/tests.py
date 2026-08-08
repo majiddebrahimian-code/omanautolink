@@ -26,6 +26,7 @@ from customers.services import create_custom_vehicle_request
 from accounts.models import StaffManagementEvent, StaffProfile
 from tracking.models import CarStageProgress, Stage, StageTransition, TrackingEvent
 from tracking.services import complete_stage, confirm_stage, start_tracking_for_sold_car
+from core.models import HeaderNavigationItem, SiteConfiguration
 
 
 class BackofficeMachineWorkflowTests(TestCase):
@@ -215,12 +216,7 @@ class BackofficeMachineWorkflowTests(TestCase):
         self.client.force_login(self.clearance_employee)
         response = self.client.get(reverse("backoffice:machine_list"))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "افزودن ماشین")
-        self.assertNotContains(
-            response,
-            reverse("backoffice:machine_edit", args=[machine.pk]),
-        )
+        self.assertEqual(response.status_code, 403)
 
     def test_publish_action_moves_a_draft_to_for_sale(self):
         machine = self.create_machine(status=Car.Status.DRAFT)
@@ -604,7 +600,7 @@ class BackofficeMachinePhotoWorkflowTests(TestCase):
         self.assertTrue(first_photo.is_cover)
         self.assertFalse(CarPhoto.objects.filter(pk=second_photo.pk).exists())
 
-    def test_clearance_employee_can_view_but_cannot_upload_machine_photos(self):
+    def test_clearance_employee_cannot_open_global_machine_media_management(self):
         self.client.force_login(self.clearance_employee)
         gallery_url = reverse(
             "backoffice:machine_photo_manage",
@@ -615,7 +611,7 @@ class BackofficeMachinePhotoWorkflowTests(TestCase):
             args=[self.machine.pk],
         )
 
-        self.assertEqual(self.client.get(gallery_url).status_code, 200)
+        self.assertEqual(self.client.get(gallery_url).status_code, 403)
         self.assertEqual(
             self.client.post(
                 upload_url,
@@ -863,6 +859,37 @@ class BackofficeStaffManagementTests(TestCase):
             ).exists()
         )
 
+    def test_administrator_can_create_a_combined_employee_and_clearance_account(self):
+        self.client.force_login(self.administrator)
+        create_url = reverse("backoffice:staff_create")
+        self.assertContains(self.client.get(create_url), "کارمند + کارمند ترخیص")
+
+        response = self.client.post(
+            create_url,
+            data={
+                "username": "panel-combined-employee",
+                "first_name": "Sara",
+                "last_name": "Operations",
+                "email": "sara@example.com",
+                "phone": "09124444444",
+                "role": "employee_and_clearance",
+                "assigned_stages": [str(self.stage.pk)],
+                "exceptional_permissions": [],
+                "password1": "Secure-panel-password-123!",
+                "password2": "Secure-panel-password-123!",
+            },
+        )
+
+        created_user = get_user_model().objects.get(
+            username="panel-combined-employee"
+        )
+        self.assertRedirects(
+            response,
+            reverse("backoffice:staff_detail", args=[created_user.pk]),
+        )
+        self.assertTrue(created_user.has_perm("cars.change_car"))
+        self.assertTrue(created_user.has_perm("tracking.confirm_tracking_stage"))
+
     def test_staff_profile_displays_controlled_telegram_actions(self):
         self.client.force_login(self.administrator)
 
@@ -1093,3 +1120,58 @@ class BackofficeReportingAndAuditTests(TestCase):
             self.client.get(reverse("backoffice:audit_log")).status_code,
             403,
         )
+
+
+class BackofficeSiteSettingsTests(TestCase):
+    def setUp(self):
+        self.administrator = get_user_model().objects.create_superuser(
+            username="site-settings-admin",
+            email="settings@example.com",
+            password="test-password",
+        )
+
+    def test_superuser_can_open_typed_site_settings_and_header_collection(self):
+        self.client.force_login(self.administrator)
+        HeaderNavigationItem.objects.create(
+            label="خدمات", destination="/services/", sort_order=1,
+        )
+
+        dashboard = self.client.get(reverse("backoffice:site_settings"))
+        identity = self.client.get(reverse("backoffice:site_identity_settings"))
+        header = self.client.get(
+            reverse("backoffice:site_collection_list", kwargs={"collection": "header"}),
+        )
+
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(identity.status_code, 200)
+        self.assertEqual(header.status_code, 200)
+        self.assertContains(dashboard, "مرکز کنترل وب‌سایت")
+        self.assertContains(header, "خدمات")
+        self.assertEqual(SiteConfiguration.objects.count(), 1)
+
+    def test_panel_logout_ends_the_authenticated_session(self):
+        self.client.force_login(self.administrator)
+
+        response = self.client.post(reverse("backoffice:logout"))
+
+        self.assertRedirects(response, reverse("admin:login"))
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_staff_entering_admin_root_is_routed_to_the_shared_panel(self):
+        employee = get_user_model().objects.create_user(
+            username="panel-only-staff",
+            password="test-password",
+            is_staff=True,
+        )
+        self.client.force_login(employee)
+
+        response = self.client.get("/admin/")
+
+        self.assertRedirects(response, reverse("backoffice:dashboard"))
+
+    def test_system_administrator_entering_admin_root_is_also_routed_to_panel(self):
+        self.client.force_login(self.administrator)
+
+        response = self.client.get("/admin/")
+
+        self.assertRedirects(response, reverse("backoffice:dashboard"))

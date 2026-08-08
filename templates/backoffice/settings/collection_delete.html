@@ -1,0 +1,7 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}حذف آیتم | {{ block.super }}{% endblock %}
+
+{% block content %}
+<section class="panel-page"><div class="panel-page__header"><div><a class="back-link" href="{% url 'backoffice:site_collection_list' collection %}"><i class="fa fa-arrow-right"></i> بازگشت</a><h1>حذف آیتم</h1><p>این عملیات از فوتر، منو یا محتوای عمومی سایت حذف می‌کند.</p></div></div><form method="post" class="panel-card delete-confirm-card">{% csrf_token %}<i class="fa fa-exclamation-triangle"></i><h2>«{{ object }}» حذف شود؟</h2><p>این عمل قابل بازگشت نیست. ابتدا مطمئن شوید لینک یا محتوای دیگری به آن وابسته نیست.</p><div><button class="btn btn-danger" type="submit">حذف آیتم</button><a class="btn btn-outline" href="{% url 'backoffice:site_collection_list' collection %}">انصراف</a></div></form></section>
+{% endblock %}

@@ -276,8 +276,10 @@ body.adminlte-login { min-height: 100vh; background: #f4f6f9; }
 .adminlte-login .login-logo { margin-bottom: 18px; font-size: 25px; line-height: 1.3; }
 .adminlte-login .login-logo a { color: #495057; }
 .adminlte-login .login-card-body { padding: 25px; }
-.adminlte-login #login-form input { width: 100%; height: calc(2.25rem + 2px); padding: .375rem .75rem; color: #495057; background: #fff; border: 1px solid #ced4da; border-radius: .25rem; }
-.adminlte-login .input-group-append .input-group-text { min-width: 42px; justify-content: center; color: #6c757d; }
+.adminlte-login #login-form .input-group { display: flex; flex-wrap: nowrap; width: 100%; direction: rtl; }
+.adminlte-login #login-form .input-group input { width: 1%; flex: 1 1 auto; min-width: 0; height: calc(2.25rem + 2px); padding: .375rem .75rem; color: #495057; background: #fff; border: 1px solid #ced4da; border-radius: .25rem 0 0 .25rem; }
+.adminlte-login #login-form .input-group-append { display: flex; flex: 0 0 auto; margin-right: -1px; margin-left: 0; }
+.adminlte-login .input-group-append .input-group-text { display: flex; min-width: 42px; align-items: center; justify-content: center; color: #6c757d; border-radius: .25rem 0 0 .25rem; }
 .adminlte-login .login-error { padding: .55rem .7rem; color: #721c24; font-size: 11px; background: #f8d7da; border-radius: .2rem; }
 .adminlte-login ul.errorlist { margin-top: -10px; margin-bottom: 10px; }
 .adminlte-login .adminlte-login-logo { max-width: 230px; max-height: 62px; object-fit: contain; }

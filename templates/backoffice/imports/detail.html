@@ -1,0 +1,26 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}نتیجهٔ ورود #{{ job.pk }} | {{ block.super }}{% endblock %}
+
+{% block content %}
+<section class="panel-page imports-page">
+  <div class="panel-page__header">
+    <div>
+      <a class="back-link" href="{% url 'backoffice:tracking_import_list' %}"><i class="fa fa-arrow-right"></i> همهٔ ورودهای Excel</a>
+      <h1>نتیجهٔ ورود #{{ job.pk }}</h1>
+      <p><i class="fa fa-file-excel-o"></i> {{ job.original_filename }} · ثبت‌شده توسط {{ job.requested_by.get_full_name|default:job.requested_by.username }}</p>
+    </div>
+    {% if job.status == 'queued' or job.status == 'processing' %}<span class="auto-refresh"><i class="fa fa-refresh fa-spin"></i> در حال به‌روزرسانی خودکار</span>{% endif %}
+  </div>
+  <div class="import-summary-grid">
+    <article><span>وضعیت Job</span><strong class="status-badge status-badge--{{ job.status }}">{{ job.get_status_display }}</strong></article>
+    <article><span>تعداد ردیف‌ها</span><strong>{{ job.total_rows }}</strong></article>
+    <article class="is-success"><span>ثبت موفق</span><strong>{{ job.success_count }}</strong></article>
+    <article class="is-error"><span>خطا</span><strong>{{ job.error_count }}</strong></article>
+  </div>
+  {% if job.failure_reason %}<div class="panel-alert panel-alert--danger"><i class="fa fa-exclamation-triangle"></i><div><strong>Job قابل پردازش نبود</strong><p>{{ job.failure_reason }}</p></div></div>{% endif %}
+  <div class="panel-toolbar imports-toolbar"><form method="get" class="panel-search-form"><input name="q" value="{{ search_query }}" placeholder="کد، مرحله یا متن خطا..."><button class="icon-button" type="submit" title="جست‌وجو"><i class="fa fa-search"></i></button></form><span class="table-count">نتیجهٔ هر ردیف در پایین ثبت شده است.</span></div>
+  <div class="panel-card table-card"><div class="table-responsive"><table class="panel-table import-rows-table"><thead><tr><th>ردیف فایل</th><th>کد رهگیری</th><th>مرحله</th><th>نتیجه</th><th>پیام</th></tr></thead><tbody>{% for row in page_obj %}<tr><td>{{ row.row_number }}</td><td><code>{{ row.tracking_code|default:"—" }}</code></td><td>{{ row.stage_name|default:"—" }}</td><td><span class="row-outcome row-outcome--{{ row.outcome }}">{{ row.get_outcome_display }}</span></td><td class="row-message">{{ row.message|default:"—" }}</td></tr>{% empty %}<tr><td colspan="5" class="empty-table">{% if job.status == 'queued' or job.status == 'processing' %}پردازش هنوز آغاز نشده یا در حال انجام است.{% else %}برای این Job ردیفی ثبت نشده است.{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% include "backoffice/partials/pagination.html" %}</div>
+</section>
+{% endblock %}
+{% block extra_js %}{{ block.super }}{% if job.status == 'queued' or job.status == 'processing' %}<script>window.setTimeout(function(){ window.location.reload(); }, 8000);</script>{% endif %}{% endblock %}

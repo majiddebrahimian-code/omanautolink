@@ -44,6 +44,13 @@
                 <strong>{{ clearance_staff_count }}</strong>
             </div>
         </article>
+        <article class="backoffice-staff-metric backoffice-staff-metric--combined">
+            <span><i class="fa fa-random" aria-hidden="true"></i></span>
+            <div>
+                <small>کارمند + ترخیص</small>
+                <strong>{{ combined_staff_count }}</strong>
+            </div>
+        </article>
         <article class="backoffice-staff-metric backoffice-staff-metric--inactive">
             <span><i class="fa fa-user-times" aria-hidden="true"></i></span>
             <div>
@@ -74,6 +81,7 @@
                     <option value="system_administrator" {% if selected_role == "system_administrator" %}selected{% endif %}>مدیر اصلی سیستم</option>
                     <option value="employee" {% if selected_role == "employee" %}selected{% endif %}>کارمند</option>
                     <option value="clearance_employee" {% if selected_role == "clearance_employee" %}selected{% endif %}>کارمند ترخیص</option>
+                    <option value="employee_and_clearance" {% if selected_role == "employee_and_clearance" %}selected{% endif %}>کارمند + کارمند ترخیص</option>
                 </select>
             </div>
 
@@ -139,7 +147,7 @@
                             </td>
                             <td>
                                 <span class="backoffice-role-chip backoffice-role-chip--{{ staff_user.business_role_tone }}">
-                                    <i class="fa {% if staff_user.business_role == 'clearance_employee' %}fa-truck{% elif staff_user.business_role == 'system_administrator' %}fa-shield{% else %}fa-briefcase{% endif %}" aria-hidden="true"></i>
+                                    <i class="fa {% if staff_user.business_role == 'employee_and_clearance' %}fa-random{% elif staff_user.business_role == 'clearance_employee' %}fa-truck{% elif staff_user.business_role == 'system_administrator' %}fa-shield{% else %}fa-briefcase{% endif %}" aria-hidden="true"></i>
                                     {{ staff_user.business_role_label }}
                                 </span>
                                 {% if staff_user.exceptional_capabilities %}

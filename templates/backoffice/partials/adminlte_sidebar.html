@@ -1,0 +1,46 @@
+{% load static %}
+<a href="{% url 'backoffice:dashboard' %}" class="brand-link" aria-label="بازگشت به داشبورد">
+  {% if site_config.logo_dark %}<img src="{{ site_config.logo_dark.url }}" alt="{{ site_config.site_name }}" class="brand-image adminlte-brand-image">
+  {% elif site_config.logo_light %}<img src="{{ site_config.logo_light.url }}" alt="{{ site_config.site_name }}" class="brand-image adminlte-brand-image">
+  {% else %}<span class="brand-image img-circle elevation-3 adminlte-brand-fallback"><i class="fa fa-car"></i></span>{% endif %}
+  <span class="brand-text font-weight-light">{{ site_config.site_name|default:"پنل مدیریت" }}</span>
+</a>
+
+<div class="sidebar">
+  <div class="user-panel mt-3 pb-3 mb-3 d-flex">
+    <div class="image"><span class="img-circle elevation-2 adminlte-sidebar-avatar">{{ request.user.get_username|first|upper }}</span></div>
+    <div class="info"><a href="#" class="d-block" aria-label="کاربر واردشده">{{ request.user.get_full_name|default:request.user.get_username }}</a></div>
+  </div>
+
+  <nav class="mt-2" aria-label="بخش‌های مجاز پنل">
+    <ul class="nav nav-pills nav-sidebar flex-column" role="menu" data-accordion="false">
+      <li class="nav-item">
+        <a href="{% url 'backoffice:dashboard' %}" class="nav-link panel-dashboard-link" data-admin-nav-item>
+          <i class="nav-icon fa fa-dashboard"></i><p>داشبورد</p>
+        </a>
+      </li>
+      {% for section in panel_navigation %}
+        <li class="nav-item has-treeview panel-nav-group" data-admin-nav-group>
+          <a href="#" class="nav-link" data-admin-nav-group-link data-admin-tree-toggle>
+            <i class="nav-icon fa {{ section.icon }}"></i><p>{{ section.label }}<i class="right fa fa-angle-left" aria-hidden="true"></i></p>
+          </a>
+          <ul class="nav nav-treeview">
+            {% for item in section.items %}
+              {% if item.children %}
+                <li class="nav-header panel-nested-nav-label"><i class="fa {{ item.icon }}"></i> {{ item.label }}</li>
+                {% for child in item.children %}
+                  <li class="nav-item" data-admin-nav-item><a href="{{ child.url }}" class="nav-link panel-nav-link--nested"><i class="fa fa-circle-o nav-icon"></i><p>{{ child.label }}</p></a></li>
+                {% endfor %}
+              {% else %}
+                <li class="nav-item" data-admin-nav-item><a href="{{ item.url }}" class="nav-link"><i class="fa {{ item.icon }} nav-icon"></i><p>{{ item.label }}</p></a></li>
+              {% endif %}
+            {% endfor %}
+          </ul>
+        </li>
+      {% empty %}
+        <li class="nav-header">هیچ بخش مجازی برای این حساب وجود ندارد.</li>
+      {% endfor %}
+    </ul>
+  </nav>
+  <div class="adminlte-sidebar-note"><i class="fa fa-shield"></i> فقط امکاناتی که مدیر سیستم برای این حساب تعیین کرده نمایش داده می‌شوند.</div>
+</div>

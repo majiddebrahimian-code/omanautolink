@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, logout
+from datetime import date
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db.models import (
@@ -79,6 +80,37 @@ from cars.services import (
     update_inventory_car,
     upload_car_photos,
 )
+from core.forms import (
+    FooterLinkForm,
+    FooterSectionForm,
+    HeaderNavigationItemForm,
+    HomeFeatureCardForm,
+    HomePageConfigurationForm,
+    HomeQuickActionForm,
+    SeoConfigurationForm,
+    SiteIdentityForm,
+    SocialLinkForm,
+    StaticPageForm,
+)
+from core.models import (
+    FooterLink,
+    FooterSection,
+    HeaderNavigationItem,
+    HomeFeatureCard,
+    HomePageConfiguration,
+    HomeQuickAction,
+    SeoConfiguration,
+    SiteConfiguration,
+    SocialLink,
+    StaticPage,
+)
+from core.site_services import (
+    create_site_collection_item,
+    delete_site_collection_item,
+    update_home_page_configuration,
+    update_site_collection_item,
+    update_site_identity_and_seo,
+)
 from customers.forms import AdminCustomVehicleRequestConversionForm
 from customers.models import Customer, CustomVehicleRequest, CustomVehicleRequestReadReceipt
 from customers.services import (
@@ -91,9 +123,18 @@ from tracking.forms import (
     ClearanceTrackingCodeForm,
     StageArchiveForm,
     StageDefinitionForm,
+    TrackingImportUploadForm,
     TransitionRepairForm,
 )
-from tracking.models import CarStageProgress, Stage, StageTransition, TrackingEvent
+from tracking.models import (
+    CarStageProgress,
+    Stage,
+    StageTransition,
+    TrackingEvent,
+    TrackingImportJob,
+    TrackingImportRow,
+)
+from tracking.imports import create_tracking_import_job
 from tracking.services import (
     archive_stage,
     complete_stage,
@@ -104,6 +145,8 @@ from tracking.services import (
     get_stage_archive_impact,
     get_stage_completion_preview,
     get_stage_confirmation_preview,
+    get_clearance_work_queue,
+    get_completed_clearance_history,
     repair_linear_stage_transitions,
     update_linear_stage,
 )
@@ -114,6 +157,15 @@ from .access import (
 )
 from .forms import AuditLogFilterForm
 from .reporting import format_audit_entry, get_audit_entries, get_dashboard_snapshot
+
+
+@require_POST
+def panel_logout(request):
+    """End a panel session through a CSRF-protected, fixed redirect flow."""
+
+    logout(request)
+    messages.info(request, "از پنل مدیریت خارج شدید.")
+    return redirect("admin:login")
 
 
 def _render_placeholder(request, *, title, description):
@@ -200,9 +252,11 @@ def _get_machine_list_context(request, *, queryset):
 
 @staff_member_required
 def dashboard(request):
-    context = {"management_snapshot": None}
+    context = {"management_snapshot": None, "clearance_queue": None}
     if request.user.is_superuser:
         context["management_snapshot"] = get_dashboard_snapshot()
+    elif request.user.has_perm("tracking.confirm_tracking_stage"):
+        context["clearance_queue"] = get_clearance_work_queue(staff=request.user)
     return render(request, "backoffice/dashboard.html", context)
 
 
@@ -1049,6 +1103,202 @@ def clearance_operation(request):
     )
 
 
+@panel_permissions_required("tracking.confirm_tracking_stage")
+def clearance_queue(request):
+    """Permission-scoped operational queue for the logged-in clearance user."""
+
+    queue = get_clearance_work_queue(staff=request.user)
+    query = (request.GET.get("q") or "").strip().casefold()
+    action_filter = request.GET.get("action", "all")
+    if action_filter not in {"all", "receive", "complete", "completed"}:
+        action_filter = "all"
+
+    date_from = request.GET.get("date_from", "").strip()
+    date_to = request.GET.get("date_to", "").strip()
+
+    if action_filter == "completed":
+        history = get_completed_clearance_history(staff=request.user)
+        try:
+            if date_from:
+                history = history.filter(completed_at__date__gte=date.fromisoformat(date_from))
+            if date_to:
+                history = history.filter(completed_at__date__lte=date.fromisoformat(date_to))
+        except ValueError:
+            messages.error(request, "فرمت تاریخ برای جست‌وجو معتبر نیست.")
+
+        queue = [
+            {
+                "car": progress.car,
+                "stage": progress.stage,
+                "action": "completed",
+                "progress": progress,
+            }
+            for progress in history
+        ]
+
+    if query:
+        queue = [
+            item for item in queue
+            if query in " ".join(
+                filter(
+                    None,
+                    (
+                        item["car"].title,
+                        item["car"].tracking_code,
+                        item["car"].customer.full_name if item["car"].customer else "",
+                        item["stage"].name,
+                    ),
+                ),
+            ).casefold()
+        ]
+    if action_filter not in {"all", "completed"}:
+        queue = [item for item in queue if item["action"] == action_filter]
+
+    paginator = Paginator(queue, 20)
+    return render(
+        request,
+        "backoffice/clearance/queue.html",
+        {
+            "page_obj": paginator.get_page(request.GET.get("page")),
+            "query": request.GET.get("q", "").strip(),
+            "result_count": paginator.count,
+            "action_filter": action_filter,
+            "date_from": date_from,
+            "date_to": date_to,
+        },
+    )
+
+
+def _get_queue_item_or_error(*, staff, car_pk, action):
+    for item in get_clearance_work_queue(staff=staff):
+        if item["car"].pk == car_pk and item["action"] == action:
+            return item
+    raise ValidationError("این خودرو دیگر در صف عملیاتی مجاز شما قرار ندارد.")
+
+
+@require_POST
+@panel_permissions_required("tracking.confirm_tracking_stage")
+def clearance_queue_receive(request, pk):
+    try:
+        item = _get_queue_item_or_error(
+            staff=request.user, car_pk=pk, action="receive",
+        )
+        preview = get_stage_confirmation_preview(
+            tracking_code=item["car"].tracking_code,
+            staff=request.user,
+        )
+        confirm_stage(
+            car=preview["car"],
+            stage=preview["stage"],
+            staff=request.user,
+            source=TrackingEvent.Source.ADMIN_DASHBOARD,
+        )
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        messages.success(
+            request,
+            f"خودرو «{item['car'].title}» در مرحلهٔ «{item['stage'].name}» تحویل گرفته شد.",
+        )
+    return redirect("backoffice:clearance_queue")
+
+
+@require_POST
+@panel_permissions_required("tracking.confirm_tracking_stage")
+def clearance_queue_complete(request, pk):
+    try:
+        item = _get_queue_item_or_error(
+            staff=request.user, car_pk=pk, action="complete",
+        )
+        preview = get_stage_completion_preview(
+            tracking_code=item["car"].tracking_code,
+            staff=request.user,
+        )
+        complete_stage(
+            car=preview["car"],
+            stage=preview["stage"],
+            staff=request.user,
+            source=TrackingEvent.Source.ADMIN_DASHBOARD,
+        )
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        messages.success(
+            request,
+            f"ترخیص مرحلهٔ «{item['stage'].name}» برای خودرو «{item['car'].title}» ثبت شد.",
+        )
+    return redirect("backoffice:clearance_queue")
+
+
+def _tracking_import_queryset_for(request):
+    queryset = TrackingImportJob.objects.select_related("requested_by")
+    return queryset if request.user.is_superuser else queryset.filter(requested_by=request.user)
+
+
+@panel_permissions_required("tracking.import_tracking_stage_updates")
+def tracking_import_list(request):
+    queryset = _tracking_import_queryset_for(request)
+    status_filter = request.GET.get("status", "all")
+    if status_filter in TrackingImportJob.Status.values:
+        queryset = queryset.filter(status=status_filter)
+    else:
+        status_filter = "all"
+
+    context = _get_paginated_context(
+        request=request,
+        queryset=queryset.order_by("-created_at", "-pk"),
+        search_fields=("original_filename", "requested_by__username"),
+    )
+    context.update(
+        {
+            "status_filter": status_filter,
+            "status_choices": TrackingImportJob.Status.choices,
+        }
+    )
+    return render(request, "backoffice/imports/list.html", context)
+
+
+@panel_permissions_required("tracking.import_tracking_stage_updates")
+def tracking_import_create(request):
+    if request.method == "POST":
+        form = TrackingImportUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                job = create_tracking_import_job(
+                    spreadsheet=form.cleaned_data["spreadsheet"],
+                    actor=request.user,
+                )
+            except ValidationError as error:
+                _add_service_errors(form, error)
+            else:
+                messages.success(
+                    request,
+                    "فایل دریافت شد و برای پردازش پس‌زمینه در صف قرار گرفت.",
+                )
+                return redirect("backoffice:tracking_import_detail", pk=job.pk)
+    else:
+        form = TrackingImportUploadForm()
+
+    return render(request, "backoffice/imports/create.html", {"form": form})
+
+
+@panel_permissions_required("tracking.import_tracking_stage_updates")
+def tracking_import_detail(request, pk):
+    job = get_object_or_404(_tracking_import_queryset_for(request), pk=pk)
+    row_queryset = job.rows.order_by("row_number", "pk")
+    row_context = _get_paginated_context(
+        request=request,
+        queryset=row_queryset,
+        search_fields=("tracking_code", "stage_name", "message"),
+        per_page=50,
+    )
+    return render(
+        request,
+        "backoffice/imports/detail.html",
+        {"job": job, **row_context},
+    )
+
+
 @panel_permissions_required("blog.add_post")
 def blog_post_create(request):
     if request.method == "POST":
@@ -1208,11 +1458,279 @@ def blog_post_delete(request, pk):
     "core.manage_static_pages",
 )
 def site_settings(request):
-    return _render_placeholder(
-        request,
-        title="تنظیمات وب‌سایت",
-        description="هویت برند، SEO، محتوا، Header و Footer از این بخش مدیریت می‌شود.",
+    site_config = SiteConfiguration.get_solo()
+    seo_config, _ = SeoConfiguration.objects.get_or_create(
+        site_configuration=site_config,
     )
+    home_config, _ = HomePageConfiguration.objects.get_or_create(
+        site_configuration=site_config,
+    )
+    user = request.user
+    cards = (
+        {
+            "title": "هویت برند و SEO",
+            "description": "نام، لوگو، رنگ‌ها، راه‌های ارتباطی و تنظیمات موتورهای جست‌وجو.",
+            "icon": "fa-diamond",
+            "url_name": "backoffice:site_identity_settings",
+            "permission": "core.manage_site_identity",
+            "secondary_permission": "core.manage_site_seo",
+            "count": "تنظیمات اصلی",
+        },
+        {
+            "title": "محتوای صفحهٔ اصلی",
+            "description": "Hero، تصویرها، خودرو ویژه، CTA، مسیر واردات و بخش رهگیری.",
+            "icon": "fa-home",
+            "url_name": "backoffice:site_homepage_settings",
+            "permission": "core.manage_site_content",
+            "count": "صفحهٔ اول",
+        },
+        {
+            "title": "منوی Header",
+            "description": "پیوندهای ناوبری بالای سایت، ترتیب و وضعیت نمایش آن‌ها.",
+            "icon": "fa-bars",
+            "url_name": "backoffice:site_collection_list",
+            "url_kwargs": {"collection": "header"},
+            "permission": "core.manage_site_navigation",
+            "count": HeaderNavigationItem.objects.count(),
+        },
+        {
+            "title": "Footer و لینک‌ها",
+            "description": "ستون‌های فوتر، پیوندهای هر ستون و ترتیب نمایش در سایت.",
+            "icon": "fa-columns",
+            "url_name": "backoffice:site_collection_list",
+            "url_kwargs": {"collection": "footer_sections"},
+            "permission": "core.manage_site_footer",
+            "count": FooterSection.objects.count(),
+        },
+        {
+            "title": "شبکه‌های اجتماعی",
+            "description": "Telegram، Instagram، WhatsApp و سایر لینک‌های رسمی برند.",
+            "icon": "fa-share-alt",
+            "url_name": "backoffice:site_collection_list",
+            "url_kwargs": {"collection": "social"},
+            "permission": "core.manage_site_social_links",
+            "count": SocialLink.objects.count(),
+        },
+        {
+            "title": "کارت‌ها و دسترسی‌های سریع",
+            "description": "کارت‌های معرفی و کلیدهای کنترل‌شدهٔ صفحهٔ اول.",
+            "icon": "fa-th-large",
+            "url_name": "backoffice:site_collection_list",
+            "url_kwargs": {"collection": "home_cards"},
+            "permission": "core.manage_site_content",
+            "count": HomeFeatureCard.objects.filter(home_page=home_config).count(),
+        },
+        {
+            "title": "صفحات ثابت",
+            "description": "صفحات قابل انتشار با عنوان، متن، URL و SEO مستقل.",
+            "icon": "fa-file-text-o",
+            "url_name": "backoffice:site_collection_list",
+            "url_kwargs": {"collection": "pages"},
+            "permission": "core.manage_static_pages",
+            "count": StaticPage.objects.count(),
+        },
+    )
+    for card in cards:
+        card["allowed"] = user.is_superuser or user.has_perm(card["permission"])
+        if card.get("secondary_permission"):
+            card["allowed"] = card["allowed"] and (
+                user.is_superuser or user.has_perm(card["secondary_permission"])
+            )
+    return render(
+        request,
+        "backoffice/settings/dashboard.html",
+        {"cards": cards, "site_config": site_config},
+    )
+
+
+def _require_site_permission(request, permission):
+    if not (request.user.is_superuser or request.user.has_perm(permission)):
+        raise PermissionDenied
+
+
+@staff_member_required
+def site_identity_settings(request):
+    _require_site_permission(request, "core.manage_site_identity")
+    _require_site_permission(request, "core.manage_site_seo")
+    configuration = SiteConfiguration.get_solo()
+    seo_configuration, _ = SeoConfiguration.objects.get_or_create(
+        site_configuration=configuration,
+    )
+    if request.method == "POST":
+        identity_form = SiteIdentityForm(
+            request.POST, request.FILES, instance=configuration,
+        )
+        seo_form = SeoConfigurationForm(
+            request.POST, request.FILES, instance=seo_configuration,
+        )
+        if identity_form.is_valid() and seo_form.is_valid():
+            try:
+                update_site_identity_and_seo(
+                    identity_form=identity_form,
+                    seo_form=seo_form,
+                    actor=request.user,
+                )
+            except ValidationError as error:
+                identity_form.add_error(None, error)
+            else:
+                messages.success(request, "هویت برند و تنظیمات SEO با موفقیت ذخیره شد.")
+                return redirect("backoffice:site_identity_settings")
+    else:
+        identity_form = SiteIdentityForm(instance=configuration)
+        seo_form = SeoConfigurationForm(instance=seo_configuration)
+    return render(
+        request,
+        "backoffice/settings/identity.html",
+        {"identity_form": identity_form, "seo_form": seo_form},
+    )
+
+
+@staff_member_required
+def site_homepage_settings(request):
+    _require_site_permission(request, "core.manage_site_content")
+    configuration = SiteConfiguration.get_solo()
+    home_configuration, _ = HomePageConfiguration.objects.get_or_create(
+        site_configuration=configuration,
+    )
+    if request.method == "POST":
+        form = HomePageConfigurationForm(
+            request.POST, request.FILES, instance=home_configuration,
+        )
+        if form.is_valid():
+            try:
+                update_home_page_configuration(form=form, actor=request.user)
+            except ValidationError as error:
+                form.add_error(None, error)
+            else:
+                messages.success(request, "محتوای صفحهٔ اصلی ذخیره شد.")
+                return redirect("backoffice:site_homepage_settings")
+    else:
+        form = HomePageConfigurationForm(instance=home_configuration)
+    return render(request, "backoffice/settings/homepage.html", {"form": form})
+
+
+SITE_COLLECTIONS = {
+    "header": {
+        "model": HeaderNavigationItem, "form": HeaderNavigationItemForm,
+        "permission": "core.manage_site_navigation", "title": "منوی Header",
+        "description": "پیوندهای بالای سایت را با ترتیب و دسترسی‌پذیری کنترل کنید.",
+    },
+    "footer_sections": {
+        "model": FooterSection, "form": FooterSectionForm,
+        "permission": "core.manage_site_footer", "title": "ستون‌های Footer",
+        "description": "ابتدا ستون‌ها را تعریف کنید؛ سپس لینک‌های هر ستون را بسازید.",
+    },
+    "footer_links": {
+        "model": FooterLink, "form": FooterLinkForm,
+        "permission": "core.manage_site_footer", "title": "لینک‌های Footer",
+        "description": "هر لینک را به ستون موردنظر، مسیر امن و ترتیب نمایش وصل کنید.",
+    },
+    "social": {
+        "model": SocialLink, "form": SocialLinkForm,
+        "permission": "core.manage_site_social_links", "title": "شبکه‌های اجتماعی",
+        "description": "فقط لینک‌های رسمی و تأییدشدهٔ برند را منتشر کنید.",
+    },
+    "home_cards": {
+        "model": HomeFeatureCard, "form": HomeFeatureCardForm,
+        "permission": "core.manage_site_content", "title": "کارت‌های صفحهٔ اصلی",
+        "description": "پیام‌های اعتمادساز و فراخوان‌های صفحهٔ اصلی.", "home_page_owned": True,
+    },
+    "quick_actions": {
+        "model": HomeQuickAction, "form": HomeQuickActionForm,
+        "permission": "core.manage_site_content", "title": "دسترسی‌های سریع صفحهٔ اصلی",
+        "description": "دکمه‌های کنترل‌شدهٔ Hero؛ نوع هر دکمه یکتا است.", "home_page_owned": True,
+    },
+    "pages": {
+        "model": StaticPage, "form": StaticPageForm,
+        "permission": "core.manage_static_pages", "title": "صفحات ثابت",
+        "description": "صفحهٔ قابل انتشار با URL و تنظیمات SEO مستقل.",
+    },
+}
+
+
+def _get_site_collection_or_404(collection):
+    try:
+        return SITE_COLLECTIONS[collection]
+    except KeyError as error:
+        raise Http404("Unknown settings collection") from error
+
+
+@staff_member_required
+def site_collection_list(request, collection):
+    config = _get_site_collection_or_404(collection)
+    _require_site_permission(request, config["permission"])
+    queryset = config["model"].objects.all()
+    if config.get("home_page_owned"):
+        queryset = queryset.select_related("home_page")
+    return render(
+        request,
+        "backoffice/settings/collection_list.html",
+        {"collection": collection, "config": config, "items": queryset},
+    )
+
+
+@staff_member_required
+def site_collection_create(request, collection):
+    config = _get_site_collection_or_404(collection)
+    _require_site_permission(request, config["permission"])
+    form_class = config["form"]
+    if request.method == "POST":
+        form = form_class(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                create_site_collection_item(
+                    form=form, actor=request.user, permission=config["permission"],
+                    home_page_owned=config.get("home_page_owned", False),
+                )
+            except ValidationError as error:
+                form.add_error(None, error)
+            else:
+                messages.success(request, "آیتم جدید با موفقیت ایجاد شد.")
+                return redirect("backoffice:site_collection_list", collection=collection)
+    else:
+        form = form_class()
+    return render(request, "backoffice/settings/collection_form.html", {"collection": collection, "config": config, "form": form, "object": None})
+
+
+@staff_member_required
+def site_collection_edit(request, collection, pk):
+    config = _get_site_collection_or_404(collection)
+    _require_site_permission(request, config["permission"])
+    instance = get_object_or_404(config["model"], pk=pk)
+    form_class = config["form"]
+    if request.method == "POST":
+        form = form_class(request.POST, request.FILES, instance=instance)
+        if form.is_valid():
+            try:
+                update_site_collection_item(
+                    form=form, actor=request.user, permission=config["permission"],
+                )
+            except ValidationError as error:
+                form.add_error(None, error)
+            else:
+                messages.success(request, "تغییرات آیتم ذخیره شد.")
+                return redirect("backoffice:site_collection_list", collection=collection)
+    else:
+        form = form_class(instance=instance)
+    return render(request, "backoffice/settings/collection_form.html", {"collection": collection, "config": config, "form": form, "object": instance})
+
+
+@staff_member_required
+def site_collection_delete(request, collection, pk):
+    config = _get_site_collection_or_404(collection)
+    _require_site_permission(request, config["permission"])
+    instance = get_object_or_404(config["model"], pk=pk)
+    if request.method == "POST":
+        try:
+            delete_site_collection_item(
+                instance=instance, actor=request.user, permission=config["permission"],
+            )
+        except ValidationError as error:
+            messages.error(request, " ".join(error.messages))
+        else:
+            messages.success(request, "آیتم حذف شد.")
+            return redirect("backoffice:site_collection_list", collection=collection)
+    return render(request, "backoffice/settings/collection_delete.html", {"collection": collection, "config": config, "object": instance})
 
 
 @system_administrator_required
@@ -1660,6 +2178,7 @@ def _decorate_staff_records(staff_users):
         StaffBusinessRole.SYSTEM_ADMINISTRATOR: "administrator",
         StaffBusinessRole.EMPLOYEE: "employee",
         StaffBusinessRole.CLEARANCE_EMPLOYEE: "clearance",
+        StaffBusinessRole.EMPLOYEE_AND_CLEARANCE: "combined",
         StaffBusinessRole.UNASSIGNED: "unassigned",
     }
 
@@ -1721,19 +2240,23 @@ def _get_staff_list_context(request):
             | Q(staff_profile__phone__icontains=query)
         )
 
-    role_filters = {
-        StaffBusinessRole.SYSTEM_ADMINISTRATOR: Q(is_superuser=True),
-        StaffBusinessRole.EMPLOYEE: Q(
+    if selected_role == StaffBusinessRole.SYSTEM_ADMINISTRATOR:
+        queryset = queryset.filter(is_superuser=True)
+    elif selected_role == StaffBusinessRole.EMPLOYEE:
+        queryset = queryset.filter(
             is_superuser=False,
             groups__name=RoleGroup.EMPLOYEE,
-        ),
-        StaffBusinessRole.CLEARANCE_EMPLOYEE: Q(
+        ).exclude(groups__name=RoleGroup.CLEARANCE_EMPLOYEE)
+    elif selected_role == StaffBusinessRole.CLEARANCE_EMPLOYEE:
+        queryset = queryset.filter(
             is_superuser=False,
             groups__name=RoleGroup.CLEARANCE_EMPLOYEE,
-        ),
-    }
-    if selected_role in role_filters:
-        queryset = queryset.filter(role_filters[selected_role]).distinct()
+        ).exclude(groups__name=RoleGroup.EMPLOYEE)
+    elif selected_role == StaffBusinessRole.EMPLOYEE_AND_CLEARANCE:
+        queryset = queryset.filter(
+            is_superuser=False,
+            groups__name=RoleGroup.EMPLOYEE,
+        ).filter(groups__name=RoleGroup.CLEARANCE_EMPLOYEE)
 
     if selected_status == "active":
         queryset = queryset.filter(is_active=True)
@@ -1775,6 +2298,12 @@ def _get_staff_list_context(request):
         ).distinct().count(),
         "clearance_staff_count": directory_queryset.filter(
             is_superuser=False,
+            groups__name=RoleGroup.CLEARANCE_EMPLOYEE,
+        ).distinct().count(),
+        "combined_staff_count": directory_queryset.filter(
+            is_superuser=False,
+            groups__name=RoleGroup.EMPLOYEE,
+        ).filter(
             groups__name=RoleGroup.CLEARANCE_EMPLOYEE,
         ).distinct().count(),
         "inactive_staff_count": directory_queryset.filter(
@@ -2155,13 +2684,26 @@ def staff_role_guide(request):
                     "icon": "fa-truck",
                     "name": "کارمند ترخیص",
                     "description": (
-                        "تأیید مرحله‌های تحویل و پردازش گروهی Excel، مشروط به تخصیص مرحله توسط مدیر اصلی."
+                        "تأیید مرحله‌های تحویل و پردازش گروهی Excel، مشروط به تخصیص مرحله توسط مدیر اصلی؛ بدون دسترسی به مدیریت موجودی و تصاویر ماشین‌ها."
                     ),
                     "capabilities": [
                         "تأیید ورود ماشین به مرحلهٔ اختصاص‌یافته",
                         "مشاهدهٔ مسیر، تاریخچه و وضعیت رهگیری",
                         "بارگذاری Excel برای به‌روزرسانی‌های مرحله‌ای",
                         "استفاده از همان منطق مشترک از پنل و Telegram",
+                    ],
+                },
+                {
+                    "icon": "fa-random",
+                    "name": "کارمند + کارمند ترخیص",
+                    "description": (
+                        "برای کارمندی که باید هم موجودی و محتوای سایت را مدیریت کند و هم در مرحله‌های مشخص عملیات تحویل انجام دهد."
+                    ),
+                    "capabilities": [
+                        "تمام قابلیت‌های نقش کارمند برای مدیریت ماشین، تصاویر و محتوا",
+                        "صف عملیاتی و تأیید مرحله فقط در مرحله‌های تخصیص‌یافته",
+                        "ثبت گروهی Excel با همان کنترل‌های مجوز و مرحله",
+                        "نمایش یک نقش ترکیبی شفاف در پرونده و فهرست کارکنان",
                     ],
                 },
             ],

@@ -1,0 +1,64 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}ورود گروهی Excel | {{ block.super }}{% endblock %}
+
+{% block content %}
+<section class="panel-page imports-page">
+  <div class="panel-page__header">
+    <div>
+      <span class="eyebrow">عملیات ترخیص / Excel</span>
+      <h1>ورود گروهی مراحل تحویل</h1>
+      <p>هر فایل به یک Job قابل‌پیگیری تبدیل می‌شود؛ خطای یک ردیف، پردازش سایر خودروها را متوقف نمی‌کند.</p>
+    </div>
+    <a class="btn btn-primary" href="{% url 'backoffice:tracking_import_create' %}">
+      <i class="fa fa-cloud-upload"></i><span>بارگذاری فایل جدید</span>
+    </a>
+  </div>
+
+  <div class="imports-guide-card">
+    <div class="imports-guide-card__icon"><i class="fa fa-shield"></i></div>
+    <div>
+      <strong>قانون ایمن ورود اطلاعات</strong>
+      <p>هر ردیف باید شامل کد رهگیری و نام دقیق مرحلهٔ فعال باشد. سامانه ترتیب واقعی مراحل و دسترسی کارمند را دوباره کنترل می‌کند.</p>
+    </div>
+    <a href="{% url 'backoffice:tracking_import_create' %}" class="text-link">مشاهدهٔ فرمت فایل <i class="fa fa-arrow-left"></i></a>
+  </div>
+
+  <div class="panel-toolbar imports-toolbar">
+    <form method="get" class="panel-search-form">
+      <input name="q" value="{{ search_query }}" placeholder="جست‌وجوی نام فایل یا کاربر...">
+      <input type="hidden" name="status" value="{{ status_filter }}">
+      <button class="icon-button" type="submit" title="جست‌وجو"><i class="fa fa-search"></i></button>
+    </form>
+    <nav class="status-tabs" aria-label="فیلتر وضعیت ورود Excel">
+      <a class="{% if status_filter == 'all' %}is-active{% endif %}" href="?status=all">همه</a>
+      {% for value, label in status_choices %}
+        <a class="{% if status_filter == value %}is-active{% endif %}" href="?status={{ value }}">{{ label }}</a>
+      {% endfor %}
+    </nav>
+  </div>
+
+  <div class="panel-card table-card">
+    <div class="table-responsive">
+      <table class="panel-table imports-table">
+        <thead><tr><th>فایل و شناسه</th><th>درخواست‌دهنده</th><th>وضعیت</th><th>نتیجه</th><th>زمان ثبت</th><th></th></tr></thead>
+        <tbody>
+        {% for job in page_obj %}
+          <tr>
+            <td><strong>#{{ job.pk }}</strong><span class="table-subtitle"><i class="fa fa-file-excel-o"></i> {{ job.original_filename }}</span></td>
+            <td>{{ job.requested_by.get_full_name|default:job.requested_by.username }}</td>
+            <td><span class="status-badge status-badge--{{ job.status }}">{{ job.get_status_display }}</span></td>
+            <td><span class="import-result success">{{ job.success_count }} موفق</span><span class="import-result error">{{ job.error_count }} خطا</span></td>
+            <td>{{ job.created_at|date:"Y/m/d - H:i" }}</td>
+            <td><a class="icon-button" href="{% url 'backoffice:tracking_import_detail' job.pk %}" title="مشاهدهٔ نتیجه"><i class="fa fa-eye"></i></a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="empty-table"><i class="fa fa-file-excel-o"></i><p>هنوز هیچ فایل Excel ثبت نشده است.</p></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "backoffice/partials/pagination.html" %}
+  </div>
+</section>
+{% endblock %}

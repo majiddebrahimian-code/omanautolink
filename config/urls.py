@@ -18,13 +18,23 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.sitemaps.views import sitemap
+from django.shortcuts import redirect
 from django.urls import include, path
 
 from core import views as core_views
 from core.sitemaps import public_sitemaps
 
+
+@staff_member_required(login_url="admin:login")
+def admin_entry_router(request):
+    """Make the custom backoffice the single operational home for all staff."""
+
+    return redirect("backoffice:dashboard")
+
 urlpatterns = [
+    path("admin/", admin_entry_router),
     path("admin/", admin.site.urls),
     path("robots.txt", core_views.robots_txt, name="robots_txt"),
     path(

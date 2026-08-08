@@ -1,0 +1,9 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}محتوای صفحهٔ اصلی | {{ block.super }}{% endblock %}
+
+{% block content %}
+<section class="panel-page settings-form-page"><div class="panel-page__header"><div><a class="back-link" href="{% url 'backoffice:site_settings' %}"><i class="fa fa-arrow-right"></i> مرکز تنظیمات</a><h1>محتوای صفحهٔ اصلی</h1><p>Hero، تصاویر responsive، خودرو ویژه، مسیر واردات و متن راهنمای رهگیری را مدیریت کنید.</p></div><div class="settings-related-links"><a href="{% url 'backoffice:site_collection_list' 'home_cards' %}"><i class="fa fa-th-large"></i> کارت‌ها</a><a href="{% url 'backoffice:site_collection_list' 'quick_actions' %}"><i class="fa fa-bolt"></i> دسترسی‌های سریع</a></div></div>
+  <form method="post" enctype="multipart/form-data" class="panel-card settings-form-section">{% csrf_token %}<header><span><i class="fa fa-home"></i></span><div><h2>اجزای صفحهٔ اول</h2><p>برای تجربهٔ بهتر موبایل، تصویر پس‌زمینهٔ جداگانهٔ موبایل را نیز بارگذاری کنید.</p></div></header><div class="settings-fields-grid">{% for field in form %}<div class="form-field {% if field.name == 'hero_description' or field.name == 'tracking_section_description' %}form-field--wide{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{% for error in field.errors %}<small class="form-error">{{ error }}</small>{% endfor %}</div>{% endfor %}</div>{% for error in form.non_field_errors %}<p class="form-error">{{ error }}</p>{% endfor %}<div class="settings-form-actions"><button class="btn btn-primary" type="submit"><i class="fa fa-save"></i> ذخیرهٔ صفحهٔ اصلی</button></div></form>
+</section>
+{% endblock %}

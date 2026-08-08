@@ -27,6 +27,43 @@
         });
     }
 
+    const userMenu = document.querySelector("[data-user-menu]");
+    const userMenuTrigger = document.querySelector("[data-user-menu-trigger]");
+    const userMenuDropdown = document.querySelector("[data-user-menu-dropdown]");
+
+    function closeUserMenu() {
+        if (!userMenu || !userMenuTrigger || !userMenuDropdown) {
+            return;
+        }
+        userMenu.classList.remove("is-open");
+        userMenuTrigger.setAttribute("aria-expanded", "false");
+        userMenuDropdown.hidden = true;
+    }
+
+    if (userMenu && userMenuTrigger && userMenuDropdown) {
+        userMenuTrigger.addEventListener("click", () => {
+            const willOpen = !userMenu.classList.contains("is-open");
+            closeUserMenu();
+            if (willOpen) {
+                userMenu.classList.add("is-open");
+                userMenuTrigger.setAttribute("aria-expanded", "true");
+                userMenuDropdown.hidden = false;
+            }
+        });
+
+        document.addEventListener("click", (event) => {
+            if (!userMenu.contains(event.target)) {
+                closeUserMenu();
+            }
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                closeUserMenu();
+            }
+        });
+    }
+
     document.querySelectorAll("[data-copy-text]").forEach((button) => {
         button.addEventListener("click", async () => {
             const text = button.dataset.copyText || "";

@@ -1,0 +1,24 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}تنظیمات وب‌سایت | {{ block.super }}{% endblock %}
+
+{% block content %}
+<section class="panel-page site-settings-page">
+  <div class="panel-page__header">
+    <div><span class="eyebrow">تنظیمات / سایت عمومی</span><h1>مرکز کنترل وب‌سایت</h1><p>هویت برند، محتوای عمومی و SEO بدون وابستگی به کد سایت، از همین بخش مدیریت می‌شوند.</p></div>
+    <a class="btn btn-outline" href="/" target="_blank"><i class="fa fa-external-link"></i> مشاهدهٔ سایت</a>
+  </div>
+  <div class="settings-architecture-note"><i class="fa fa-sitemap"></i><div><strong>یک منبع دادهٔ واحد برای سایت عمومی</strong><p>بعد از هر ذخیره، Cache سایت به‌صورت امن پس از ثبت تراکنش پاک می‌شود؛ Header، Footer، SEO و صفحهٔ اول در بازدید بعدی مقدار جدید را می‌خوانند.</p></div></div>
+  <div class="settings-card-grid">
+    {% for card in cards %}
+      <article class="settings-control-card {% if not card.allowed %}is-locked{% endif %}">
+        <div class="settings-control-card__top"><span class="settings-control-card__icon"><i class="fa {{ card.icon }}"></i></span><span class="settings-count">{{ card.count }}</span></div>
+        <h2>{{ card.title }}</h2><p>{{ card.description }}</p>
+        {% if card.allowed %}
+          {% if card.url_kwargs %}<a href="{% url card.url_name collection=card.url_kwargs.collection %}">مدیریت <i class="fa fa-arrow-left"></i></a>{% else %}<a href="{% url card.url_name %}">مدیریت <i class="fa fa-arrow-left"></i></a>{% endif %}
+        {% else %}<span class="settings-locked"><i class="fa fa-lock"></i> دسترسی لازم را ندارید</span>{% endif %}
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

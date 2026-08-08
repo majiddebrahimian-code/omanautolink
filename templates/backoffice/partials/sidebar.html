@@ -43,7 +43,7 @@
 
             {% for section in panel_navigation %}
                 <li class="backoffice-nav-section">
-                    <details class="backoffice-nav-group" open>
+                    <details class="backoffice-nav-group">
                         <summary>
                             <span>
                                 <i class="fa {{ section.icon }}" aria-hidden="true"></i>
@@ -57,7 +57,7 @@
                             {% for item in section.items %}
                                 {% if item.children %}
                                     <li>
-                                        <details class="backoffice-nav-subgroup" open>
+                                        <details class="backoffice-nav-subgroup">
                                             <summary>
                                                 <span>
                                                     <i class="fa {{ item.icon }}" aria-hidden="true"></i>

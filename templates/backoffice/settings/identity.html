@@ -1,0 +1,14 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}هویت برند و SEO | {{ block.super }}{% endblock %}
+
+{% block content %}
+<section class="panel-page settings-form-page">
+  <div class="panel-page__header"><div><a class="back-link" href="{% url 'backoffice:site_settings' %}"><i class="fa fa-arrow-right"></i> مرکز تنظیمات</a><h1>هویت برند و SEO</h1><p>داده‌های این صفحه منبع اصلی عنوان سایت، لوگو، راه‌های تماس و Meta Tagهای عمومی‌اند.</p></div></div>
+  <form method="post" enctype="multipart/form-data" class="settings-stacked-form">{% csrf_token %}
+    <section class="panel-card settings-form-section"><header><span><i class="fa fa-diamond"></i></span><div><h2>هویت و راه‌های ارتباطی</h2><p>نام برند، تصویرها و اطلاعاتی که در Header و Footer نمایش داده می‌شوند.</p></div></header><div class="settings-fields-grid">{% for field in identity_form %}<div class="form-field {% if field.name == 'address' %}form-field--wide{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{% for error in field.errors %}<small class="form-error">{{ error }}</small>{% endfor %}</div>{% endfor %}</div>{% for error in identity_form.non_field_errors %}<p class="form-error">{{ error }}</p>{% endfor %}</section>
+    <section class="panel-card settings-form-section"><header><span><i class="fa fa-search"></i></span><div><h2>بهینه‌سازی موتور جست‌وجو</h2><p>مقادیر پیش‌فرض SEO؛ هر صفحهٔ ثابت می‌تواند Meta مستقل خودش را داشته باشد.</p></div></header><div class="settings-fields-grid">{% for field in seo_form %}<div class="form-field {% if field.name == 'default_meta_description' or field.name == 'default_meta_keywords' %}form-field--wide{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{% for error in field.errors %}<small class="form-error">{{ error }}</small>{% endfor %}</div>{% endfor %}</div>{% for error in seo_form.non_field_errors %}<p class="form-error">{{ error }}</p>{% endfor %}</section>
+    <div class="settings-form-actions"><button class="btn btn-primary" type="submit"><i class="fa fa-save"></i> ذخیرهٔ همهٔ تغییرات</button></div>
+  </form>
+</section>
+{% endblock %}

@@ -58,7 +58,7 @@ def _ensure_stage_confirmation_permission(*, actor, stage):
     )
 
 
-def _get_next_expected_stage(car):
+def _get_next_expected_stage(car, *, lock_progress=True):
     """
     Returns the stage that should be entered next.
 
@@ -72,7 +72,10 @@ def _get_next_expected_stage(car):
     if car.current_stage is None:
         raise ValidationError("Tracking has not started for this vehicle.")
 
-    current_progress = CarStageProgress.objects.select_for_update().get(
+    progress_queryset = CarStageProgress.objects
+    if lock_progress:
+        progress_queryset = progress_queryset.select_for_update()
+    current_progress = progress_queryset.get(
         car=car,
         stage=car.current_stage,
     )
@@ -98,6 +101,113 @@ def _get_next_expected_stage(car):
         raise ValidationError("This vehicle is already at the final tracking stage.")
 
     return next_stage
+
+
+def get_clearance_work_queue(*, staff):
+    """Return only the actionable vehicles for a clearance employee.
+
+    This is a read-model service, not a second workflow.  It deliberately
+    derives the next receivable stage through ``_get_next_expected_stage`` and
+    all mutations still go through ``confirm_stage`` / ``complete_stage``.
+    The same queue can therefore be consumed by the web panel or Telegram.
+    """
+
+    require_permission(
+        actor=staff,
+        permission="tracking.confirm_tracking_stage",
+        error_message="شما اجازهٔ مشاهدهٔ صف عملیات مراحل را ندارید.",
+    )
+
+    if staff.is_superuser:
+        assigned_stage_ids = set(
+            Stage.objects.filter(is_active=True).values_list("pk", flat=True),
+        )
+    else:
+        from accounts.models import StaffProfile
+
+        assigned_stage_ids = set(
+            StaffProfile.objects.filter(user=staff).values_list(
+                "assigned_stages__pk",
+                flat=True,
+            ),
+        )
+        assigned_stage_ids.discard(None)
+
+    if not assigned_stage_ids:
+        return []
+
+    from cars.models import Car
+
+    cars = (
+        Car.objects.filter(
+            is_deleted=False,
+            tracking_code__isnull=False,
+            current_stage__isnull=False,
+        )
+        .select_related("current_stage", "customer")
+        .prefetch_related("stage_progress__stage")
+        .order_by("current_stage__order", "pk")
+    )
+    queue = []
+
+    for car in cars:
+        progress_by_stage_id = {
+            progress.stage_id: progress for progress in car.stage_progress.all()
+        }
+        current_progress = progress_by_stage_id.get(car.current_stage_id)
+        if current_progress is None:
+            continue
+
+        if current_progress.state == "entered":
+            if car.current_stage_id in assigned_stage_ids:
+                queue.append(
+                    {
+                        "car": car,
+                        "stage": car.current_stage,
+                        "action": "complete",
+                        "progress": current_progress,
+                    }
+                )
+            continue
+
+        try:
+            expected_stage = _get_next_expected_stage(car, lock_progress=False)
+        except ValidationError:
+            continue
+
+        if expected_stage.pk in assigned_stage_ids:
+            queue.append(
+                {
+                    "car": car,
+                    "stage": expected_stage,
+                    "action": "receive",
+                    "progress": progress_by_stage_id.get(expected_stage.pk),
+                }
+            )
+
+    return sorted(
+        queue,
+        key=lambda item: (item["stage"].order, item["car"].pk),
+    )
+
+
+def get_completed_clearance_history(*, staff):
+    """Read-only history of stages completed by the logged-in operator."""
+
+    require_permission(
+        actor=staff,
+        permission="tracking.confirm_tracking_stage",
+        error_message="شما اجازهٔ مشاهدهٔ تاریخچهٔ ترخیص را ندارید.",
+    )
+
+    queryset = CarStageProgress.objects.filter(
+        completed_at__isnull=False,
+        car__is_deleted=False,
+    ).select_related("car__customer", "stage", "completed_by")
+    if not staff.is_superuser:
+        queryset = queryset.filter(completed_by=staff)
+
+    return queryset.order_by("-completed_at", "-pk")
 
 
 @transaction.atomic
