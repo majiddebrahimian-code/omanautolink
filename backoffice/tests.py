@@ -24,9 +24,48 @@ from cars.services import create_inventory_car
 from customers.models import Customer, CustomVehicleRequest, CustomVehicleRequestReadReceipt
 from customers.services import create_custom_vehicle_request
 from accounts.models import StaffManagementEvent, StaffProfile
+from backoffice.navigation import build_panel_navigation
 from tracking.models import CarStageProgress, Stage, StageTransition, TrackingEvent
 from tracking.services import complete_stage, confirm_stage, start_tracking_for_sold_car
 from core.models import HeaderNavigationItem, SiteConfiguration
+from integrations.models import TelegramInboundUpdate, TelegramOutboxMessage
+
+
+class BackofficeSidebarNavigationTests(TestCase):
+    def setUp(self):
+        self.administrator = get_user_model().objects.create_superuser(
+            username="sidebar-administrator",
+            password="test-password",
+        )
+
+    def test_only_the_section_of_the_current_submenu_is_open(self):
+        navigation = build_panel_navigation(
+            self.administrator,
+            current_view_name="backoffice:telegram_settings",
+        )
+
+        open_sections = [section for section in navigation if section["is_open"]]
+        self.assertEqual(len(open_sections), 1)
+
+        active_items = [
+            item
+            for section in navigation
+            for item in section["items"]
+            if item.get("is_active")
+        ]
+        self.assertEqual(len(active_items), 1)
+        self.assertEqual(active_items[0]["url_name"], "backoffice:telegram_settings")
+
+    def test_telegram_settings_use_the_dedicated_rtl_control_layout(self):
+        self.client.force_login(self.administrator)
+
+        response = self.client.get(reverse("backoffice:telegram_settings"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "telegram-settings-layout")
+        self.assertContains(response, "telegram-toggle-card")
+        self.assertContains(response, "علامت‌گذاری پست به‌عنوان فروخته‌شده")
+        self.assertContains(response, "حذف پست از کانال")
 
 
 class BackofficeMachineWorkflowTests(TestCase):
@@ -1175,3 +1214,51 @@ class BackofficeSiteSettingsTests(TestCase):
         response = self.client.get("/admin/")
 
         self.assertRedirects(response, reverse("backoffice:dashboard"))
+
+
+class BackofficeTelegramManagementTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.administrator = user_model.objects.create_superuser(
+            username="telegram-panel-administrator",
+            password="test-password",
+        )
+        self.employee = user_model.objects.create_user(
+            username="telegram-panel-employee",
+            password="test-password",
+            is_staff=True,
+        )
+        self.failed_outbox = TelegramOutboxMessage.objects.create(
+            operation=TelegramOutboxMessage.Operation.SEND_MESSAGE,
+            chat_id=700001,
+            body="پیام آزمایشی",
+            message_type="test_failure",
+            idempotency_key="telegram-panel-failed-outbox",
+            status=TelegramOutboxMessage.Status.FAILED,
+        )
+        TelegramInboundUpdate.objects.create(
+            telegram_update_id=900001,
+            update_type=TelegramInboundUpdate.UpdateType.MESSAGE,
+            status=TelegramInboundUpdate.Status.FAILED,
+        )
+
+    def test_only_administrator_can_open_console_and_requeue_failed_message(self):
+        dashboard_url = reverse("backoffice:telegram_management")
+        self.client.force_login(self.employee)
+        self.assertEqual(self.client.get(dashboard_url).status_code, 403)
+
+        self.client.force_login(self.administrator)
+        response = self.client.get(dashboard_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "مدیریت Telegram")
+        self.assertContains(
+            response,
+            reverse("backoffice:telegram_outbox_retry", args=[self.failed_outbox.pk]),
+        )
+
+        retry_response = self.client.post(
+            reverse("backoffice:telegram_outbox_retry", args=[self.failed_outbox.pk]),
+        )
+        self.assertRedirects(retry_response, dashboard_url)
+        self.failed_outbox.refresh_from_db()
+        self.assertEqual(self.failed_outbox.status, TelegramOutboxMessage.Status.PENDING)

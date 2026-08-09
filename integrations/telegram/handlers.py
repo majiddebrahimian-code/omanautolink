@@ -14,6 +14,7 @@ from integrations.services import (
     create_telegram_stage_confirmation_session,
     get_active_customer_telegram_subscriptions,
     get_customer_bot_tracking_data,
+    get_telegram_integration_settings,
     is_telegram_tracking_lookup_allowed,
     link_staff_telegram_account,
     queue_telegram_callback_ack,
@@ -493,6 +494,15 @@ def handle_telegram_inbound_update(
             return
 
         if command == "/confirm":
+            if not get_telegram_integration_settings().staff_bot_enabled:
+                _queue_reply(
+                    inbound_update=inbound_update,
+                    parsed=parsed,
+                    body="عملیات کارمندان در Bot موقتاً غیرفعال است.",
+                    message_type="staff_bot_disabled",
+                    staff_link=staff_link,
+                )
+                return
             _handle_confirm_command(
                 inbound_update=inbound_update,
                 parsed=parsed,

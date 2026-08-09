@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, logout
@@ -117,7 +118,19 @@ from customers.services import (
     convert_custom_vehicle_request_to_sold,
     record_custom_vehicle_request_view,
 )
-from integrations.models import TelegramStaffLink, TelegramStaffLinkToken
+from integrations.models import (
+    CustomerTelegramSubscription,
+    TelegramInboundUpdate,
+    TelegramOutboxMessage,
+    TelegramStaffLink,
+    TelegramStaffLinkToken,
+)
+from integrations.forms import TelegramChannelForm, TelegramIntegrationSettingsForm
+from integrations.services import (
+    get_telegram_integration_settings,
+    retry_failed_telegram_outbox_message,
+    update_telegram_integration_settings,
+)
 from tracking.forms import (
     ClearanceConfirmationForm,
     ClearanceTrackingCodeForm,
@@ -258,6 +271,195 @@ def dashboard(request):
     elif request.user.has_perm("tracking.confirm_tracking_stage"):
         context["clearance_queue"] = get_clearance_work_queue(staff=request.user)
     return render(request, "backoffice/dashboard.html", context)
+
+
+# ---------------------------------------------------------------------------
+# Telegram operations console
+# ---------------------------------------------------------------------------
+
+
+_TELEGRAM_OUTBOX_STATUS_LABELS = {
+    TelegramOutboxMessage.Status.PENDING: "در صف ارسال",
+    TelegramOutboxMessage.Status.SENDING: "در حال ارسال",
+    TelegramOutboxMessage.Status.SENT: "ارسال‌شده",
+    TelegramOutboxMessage.Status.RETRY: "در انتظار تلاش مجدد",
+    TelegramOutboxMessage.Status.FAILED: "ناموفق",
+}
+_TELEGRAM_INBOUND_STATUS_LABELS = {
+    TelegramInboundUpdate.Status.RECEIVED: "دریافت‌شده",
+    TelegramInboundUpdate.Status.PROCESSED: "پردازش‌شده",
+    TelegramInboundUpdate.Status.FAILED: "ناموفق",
+}
+
+
+@system_administrator_required
+def telegram_management(request):
+    """Operational overview only; Bot secrets remain environment-owned."""
+
+    outbox_messages = list(
+        TelegramOutboxMessage.objects.select_related(
+            "staff_link__user",
+            "customer_subscription__customer",
+            "customer_subscription__car",
+        ).order_by("-created_at", "-pk")[:12]
+    )
+    for message in outbox_messages:
+        message.panel_status_label = _TELEGRAM_OUTBOX_STATUS_LABELS.get(
+            message.status,
+            message.status,
+        )
+
+    inbound_updates = list(
+        TelegramInboundUpdate.objects.select_related(
+            "staff_link__user",
+            "customer_subscription__customer",
+        ).order_by("-received_at", "-pk")[:10]
+    )
+    for update in inbound_updates:
+        update.panel_status_label = _TELEGRAM_INBOUND_STATUS_LABELS.get(
+            update.status,
+            update.status,
+        )
+
+    return render(
+        request,
+        "backoffice/telegram/dashboard.html",
+        {
+            "bot_is_enabled": bool(settings.TELEGRAM_BOT_ENABLED),
+            "bot_token_is_configured": bool(settings.TELEGRAM_BOT_TOKEN),
+            "webhook_secret_is_configured": bool(settings.TELEGRAM_WEBHOOK_SECRET),
+            "outbox_counts": {
+                "pending": TelegramOutboxMessage.objects.filter(
+                    status=TelegramOutboxMessage.Status.PENDING
+                ).count(),
+                "retry": TelegramOutboxMessage.objects.filter(
+                    status=TelegramOutboxMessage.Status.RETRY
+                ).count(),
+                "failed": TelegramOutboxMessage.objects.filter(
+                    status=TelegramOutboxMessage.Status.FAILED
+                ).count(),
+                "sent": TelegramOutboxMessage.objects.filter(
+                    status=TelegramOutboxMessage.Status.SENT
+                ).count(),
+            },
+            "connected_staff_count": TelegramStaffLink.objects.filter(
+                is_active=True,
+            ).count(),
+            "customer_subscription_count": CustomerTelegramSubscription.objects.filter(
+                is_active=True,
+            ).count(),
+            "failed_inbound_count": TelegramInboundUpdate.objects.filter(
+                status=TelegramInboundUpdate.Status.FAILED,
+            ).count(),
+            "outbox_messages": outbox_messages,
+            "inbound_updates": inbound_updates,
+            "connected_staff": TelegramStaffLink.objects.filter(
+                is_active=True,
+            ).select_related("user").order_by("-last_seen_at", "-linked_at")[:6],
+            "customer_subscriptions": CustomerTelegramSubscription.objects.filter(
+                is_active=True,
+            ).select_related("customer", "car").order_by("-last_seen_at", "-subscribed_at")[:6],
+        },
+    )
+
+
+@system_administrator_required
+def telegram_settings(request):
+    settings_record = get_telegram_integration_settings()
+    if request.method == "POST":
+        form = TelegramIntegrationSettingsForm(request.POST, instance=settings_record)
+        if form.is_valid():
+            try:
+                update_telegram_integration_settings(
+                    actor=request.user,
+                    settings_data=form.cleaned_data,
+                )
+            except ValidationError as error:
+                _add_service_errors(form, error)
+            else:
+                messages.success(request, "تنظیمات عملیاتی Telegram ذخیره شد.")
+                return redirect("backoffice:telegram_settings")
+    else:
+        form = TelegramIntegrationSettingsForm(instance=settings_record)
+
+    return render(
+        request,
+        "backoffice/telegram/settings.html",
+        {
+            "form": form,
+            "bot_token_is_configured": bool(settings.TELEGRAM_BOT_TOKEN),
+            "webhook_secret_is_configured": bool(settings.TELEGRAM_WEBHOOK_SECRET),
+        },
+    )
+
+
+@system_administrator_required
+def telegram_channel_list(request):
+    from integrations.models import TelegramChannel
+
+    return render(
+        request,
+        "backoffice/telegram/channels.html",
+        {"channels": TelegramChannel.objects.all()},
+    )
+
+
+@system_administrator_required
+def telegram_channel_create(request):
+    if request.method == "POST":
+        form = TelegramChannelForm(request.POST)
+        if form.is_valid():
+            channel = form.save(commit=False)
+            channel.full_clean()
+            channel.save()
+            messages.success(request, f"کانال «{channel.name}» ثبت شد.")
+            return redirect("backoffice:telegram_channel_list")
+    else:
+        form = TelegramChannelForm()
+
+    return render(
+        request,
+        "backoffice/telegram/channel_form.html",
+        {"form": form, "channel": None, "page_title": "افزودن کانال Telegram"},
+    )
+
+
+@system_administrator_required
+def telegram_channel_edit(request, pk):
+    from integrations.models import TelegramChannel
+
+    channel = get_object_or_404(TelegramChannel, pk=pk)
+    if request.method == "POST":
+        form = TelegramChannelForm(request.POST, instance=channel)
+        if form.is_valid():
+            channel = form.save(commit=False)
+            channel.full_clean()
+            channel.save()
+            messages.success(request, f"کانال «{channel.name}» به‌روزرسانی شد.")
+            return redirect("backoffice:telegram_channel_list")
+    else:
+        form = TelegramChannelForm(instance=channel)
+
+    return render(
+        request,
+        "backoffice/telegram/channel_form.html",
+        {"form": form, "channel": channel, "page_title": "ویرایش کانال Telegram"},
+    )
+
+
+@require_POST
+@system_administrator_required
+def telegram_outbox_retry(request, pk):
+    try:
+        retry_failed_telegram_outbox_message(outbox_id=pk, actor=request.user)
+    except TelegramOutboxMessage.DoesNotExist:
+        raise Http404("پیام Telegram پیدا نشد.")
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        messages.success(request, "پیام Telegram برای ارسال مجدد در صف قرار گرفت.")
+
+    return redirect("backoffice:telegram_management")
 
 
 @system_administrator_required

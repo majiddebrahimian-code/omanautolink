@@ -4,6 +4,90 @@ from django.db import models
 from django.db.models import Q
 
 
+class TelegramChannel(models.Model):
+    """One administrator-managed Telegram channel available for publications."""
+
+    name = models.CharField(max_length=120, unique=True)
+    chat_id = models.BigIntegerField(unique=True)
+    username = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+    publish_available_vehicles = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name", "pk"]
+        verbose_name = "کانال Telegram"
+        verbose_name_plural = "کانال‌های Telegram"
+
+    def clean(self):
+        if self.chat_id == 0:
+            raise ValidationError("شناسهٔ کانال Telegram نمی‌تواند صفر باشد.")
+
+    def __str__(self):
+        return self.name
+
+
+class TelegramIntegrationSettings(models.Model):
+    """Singleton, non-secret operational settings for the Telegram integration."""
+
+    class InboundMode(models.TextChoices):
+        WEBHOOK = "webhook", "Webhook"
+        POLLING = "polling", "Long polling"
+
+    class SoldPublicationAction(models.TextChoices):
+        MARK_SOLD = "mark_sold", "Mark as sold"
+        DELETE = "delete", "Delete post"
+
+    inbound_mode = models.CharField(
+        max_length=20,
+        choices=InboundMode.choices,
+        default=InboundMode.WEBHOOK,
+    )
+    customer_notifications_enabled = models.BooleanField(default=True)
+    staff_bot_enabled = models.BooleanField(default=True)
+    vehicle_channel_sync_enabled = models.BooleanField(default=False)
+    default_vehicle_channel = models.ForeignKey(
+        TelegramChannel,
+        on_delete=models.SET_NULL,
+        related_name="default_for_settings",
+        blank=True,
+        null=True,
+    )
+    sold_vehicle_publication_action = models.CharField(
+        max_length=20,
+        choices=SoldPublicationAction.choices,
+        default=SoldPublicationAction.MARK_SOLD,
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="updated_telegram_integration_settings",
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        verbose_name = "تنظیمات Telegram"
+        verbose_name_plural = "تنظیمات Telegram"
+
+    def clean(self):
+        if self.pk not in {None, 1}:
+            raise ValidationError("فقط یک رکورد تنظیمات Telegram مجاز است.")
+        if (
+            self.vehicle_channel_sync_enabled
+            and self.default_vehicle_channel_id is None
+        ):
+            raise ValidationError(
+                "برای فعال‌سازی همگام‌سازی کانال، کانال پیش‌فرض را انتخاب کنید."
+            )
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        return super().save(*args, **kwargs)
+
+
 class TelegramStaffLink(models.Model):
     """
     Historical link between one internal Django user and one Telegram account.

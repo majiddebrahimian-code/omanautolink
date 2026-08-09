@@ -1,0 +1,67 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}مدیریت Telegram | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+{% block page_title %}مدیریت Telegram{% endblock %}
+{% block page_description %}<p>وضعیت امن Bot، اتصال کاربران، صف پیام‌ها و آخرین رخدادهای ورودی را از یک مرکز کنترل بررسی کنید.</p>{% endblock %}
+
+{% block content %}
+<section class="telegram-console">
+    <article class="telegram-console-hero">
+        <div>
+            <span class="telegram-console-hero__eyebrow">TELEGRAM OPERATIONS</span>
+            <h2>مرکز کنترل Bot و اعلان‌ها</h2>
+            <p>توکن Bot و Webhook Secret فقط از متغیرهای محیطی خوانده می‌شوند و هرگز در پنل یا دیتابیس نمایش داده نمی‌شوند.</p>
+        </div>
+        <div class="telegram-console-readiness">
+            <span class="{% if bot_is_enabled %}is-ready{% else %}is-missing{% endif %}"><i class="fa fa-power-off"></i> Bot {% if bot_is_enabled %}فعال{% else %}غیرفعال{% endif %}</span>
+            <span class="{% if bot_token_is_configured %}is-ready{% else %}is-missing{% endif %}"><i class="fa fa-key"></i> توکن {% if bot_token_is_configured %}تنظیم شده{% else %}تنظیم نشده{% endif %}</span>
+            <span class="{% if webhook_secret_is_configured %}is-ready{% else %}is-missing{% endif %}"><i class="fa fa-shield"></i> Webhook Secret {% if webhook_secret_is_configured %}تنظیم شده{% else %}تنظیم نشده{% endif %}</span>
+        </div>
+    </article>
+
+    <section class="telegram-console-metrics" aria-label="خلاصهٔ Telegram">
+        <article><span class="tone-blue"><i class="fa fa-users"></i></span><div><small>کارمندان متصل</small><strong>{{ connected_staff_count }}</strong></div></article>
+        <article><span class="tone-purple"><i class="fa fa-bell"></i></span><div><small>اشتراک مشتریان</small><strong>{{ customer_subscription_count }}</strong></div></article>
+        <article><span class="tone-amber"><i class="fa fa-clock-o"></i></span><div><small>در صف / تلاش مجدد</small><strong>{{ outbox_counts.pending }} / {{ outbox_counts.retry }}</strong></div></article>
+        <article><span class="tone-red"><i class="fa fa-exclamation-triangle"></i></span><div><small>پیام ناموفق</small><strong>{{ outbox_counts.failed }}</strong></div></article>
+        <article><span class="tone-green"><i class="fa fa-paper-plane-o"></i></span><div><small>ارسال موفق</small><strong>{{ outbox_counts.sent }}</strong></div></article>
+        <article><span class="tone-red"><i class="fa fa-download"></i></span><div><small>Update ورودی ناموفق</small><strong>{{ failed_inbound_count }}</strong></div></article>
+    </section>
+
+    <section class="telegram-console-grid">
+        <article class="backoffice-table-card telegram-console-card telegram-console-card--wide">
+            <header class="telegram-console-card__header"><div><h2><i class="fa fa-exchange"></i> صف خروجی پیام‌ها</h2><p>ارسال‌ها از طریق Outbox پایدار و Worker انجام می‌شوند؛ پیام ناموفق بدون حذف تاریخچه قابل ارسال مجدد است.</p></div></header>
+            <div class="backoffice-table-scroll"><table class="backoffice-table telegram-outbox-table"><thead><tr><th>نوع</th><th>گیرنده</th><th>وضعیت</th><th>تلاش</th><th>زمان</th><th>اقدام</th></tr></thead><tbody>
+                {% for message in outbox_messages %}
+                    <tr>
+                        <td><strong>{{ message.message_type }}</strong><small>{{ message.get_operation_display }}</small></td>
+                        <td>{% if message.staff_link %}کارمند: {{ message.staff_link.user.get_full_name|default:message.staff_link.user.username }}{% elif message.customer_subscription %}مشتری: {{ message.customer_subscription.customer.full_name }}<small>{{ message.customer_subscription.car.title }}</small>{% else %}—{% endif %}</td>
+                        <td><span class="telegram-state telegram-state--{{ message.status }}">{{ message.panel_status_label }}</span>{% if message.last_error_summary %}<small class="telegram-error-note">{{ message.last_error_summary }}</small>{% endif %}</td>
+                        <td>{{ message.attempt_count }}</td>
+                        <td>{{ message.created_at|date:"Y/m/d H:i" }}</td>
+                        <td>{% if message.status == 'failed' %}<form method="post" action="{% url 'backoffice:telegram_outbox_retry' message.pk %}">{% csrf_token %}<button type="submit" class="backoffice-button backoffice-button--secondary backoffice-button--small"><i class="fa fa-repeat"></i> ارسال مجدد</button></form>{% else %}—{% endif %}</td>
+                    </tr>
+                {% empty %}<tr><td colspan="6" class="backoffice-table-empty">هنوز پیامی در Outbox ثبت نشده است.</td></tr>{% endfor %}
+            </tbody></table></div>
+        </article>
+
+        <article class="telegram-console-card telegram-console-card--side">
+            <header class="telegram-console-card__header"><div><h2><i class="fa fa-user-circle-o"></i> کارمندان متصل</h2><p>اتصال با کد یک‌بارمصرف و شناسهٔ عددی Telegram اعتبارسنجی می‌شود.</p></div></header>
+            <ul class="telegram-identity-list">{% for link in connected_staff %}<li><span><i class="fa fa-user"></i></span><div><strong>{{ link.user.get_full_name|default:link.user.username }}</strong><small dir="ltr">@{{ link.telegram_username|default:"unknown" }}</small></div><time>{{ link.last_seen_at|date:"Y/m/d H:i"|default:"—" }}</time></li>{% empty %}<li class="telegram-empty">هنوز کارمندی متصل نشده است.</li>{% endfor %}</ul>
+            <a class="backoffice-button backoffice-button--secondary backoffice-button--small" href="{% url 'backoffice:staff_list' %}"><i class="fa fa-users"></i> مدیریت کارکنان</a>
+        </article>
+
+        <article class="telegram-console-card telegram-console-card--side">
+            <header class="telegram-console-card__header"><div><h2><i class="fa fa-bell-o"></i> اشتراک رهگیری مشتری</h2><p>اعلان تغییر مرحله فقط برای اشتراک فعال همان خودرو ایجاد می‌شود.</p></div></header>
+            <ul class="telegram-identity-list">{% for subscription in customer_subscriptions %}<li><span><i class="fa fa-car"></i></span><div><strong>{{ subscription.customer.full_name }}</strong><small>{{ subscription.car.title }}</small></div><time>{{ subscription.last_seen_at|date:"Y/m/d H:i"|default:"—" }}</time></li>{% empty %}<li class="telegram-empty">هنوز اشتراک فعالی وجود ندارد.</li>{% endfor %}</ul>
+        </article>
+
+        <article class="backoffice-table-card telegram-console-card telegram-console-card--wide">
+            <header class="telegram-console-card__header"><div><h2><i class="fa fa-download"></i> آخرین Updateهای ورودی</h2><p>برای حریم خصوصی، متن خام دستورها و کدهای فعال‌سازی ذخیره نمی‌شوند.</p></div></header>
+            <div class="backoffice-table-scroll"><table class="backoffice-table telegram-inbound-table"><thead><tr><th>شناسهٔ Update</th><th>نوع / دستور</th><th>هویت تأییدشده</th><th>وضعیت</th><th>زمان</th></tr></thead><tbody>
+                {% for update in inbound_updates %}<tr><td><code>{{ update.telegram_update_id }}</code></td><td>{{ update.get_update_type_display }}<small>{{ update.command_name|default:"—" }}</small></td><td>{% if update.staff_link %}کارمند: {{ update.staff_link.user.get_full_name|default:update.staff_link.user.username }}{% elif update.customer_subscription %}مشتری: {{ update.customer_subscription.customer.full_name }}{% else %}تأییدنشده{% endif %}</td><td><span class="telegram-state telegram-state--{{ update.status }}">{{ update.panel_status_label }}</span></td><td>{{ update.received_at|date:"Y/m/d H:i" }}</td></tr>{% empty %}<tr><td colspan="5" class="backoffice-table-empty">هنوز Update ورودی ثبت نشده است.</td></tr>{% endfor %}
+            </tbody></table></div>
+        </article>
+    </section>
+</section>
+{% endblock %}

@@ -30,6 +30,7 @@ from integrations.services import (
     ingest_and_process_telegram_update,
     link_staff_telegram_account,
     queue_telegram_message,
+    retry_failed_telegram_outbox_message,
     unsubscribe_customer_telegram_tracking,
 )
 from integrations.telegram.gateway import TelegramGatewayTransientError
@@ -801,3 +802,32 @@ class TelegramWebhookTests(TelegramIntegrationBaseTests):
         self.assertEqual(forbidden_response.status_code, 403)
         self.assertEqual(valid_response.status_code, 200)
         self.assertEqual(valid_response.json(), {"ok": True, "duplicate": False})
+
+
+class TelegramOutboxAdministrativeRecoveryTests(TestCase):
+    def setUp(self):
+        self.administrator = get_user_model().objects.create_superuser(
+            username="telegram-retry-administrator",
+            password="test-password",
+        )
+        self.outbox_message = TelegramOutboxMessage.objects.create(
+            operation=TelegramOutboxMessage.Operation.SEND_MESSAGE,
+            chat_id=700001,
+            body="پیام ناموفق",
+            message_type="test_failure",
+            idempotency_key="telegram-admin-retry-test",
+            status=TelegramOutboxMessage.Status.FAILED,
+            attempt_count=6,
+            last_error_summary="خطای آزمایشی",
+        )
+
+    def test_system_administrator_can_requeue_a_failed_outbox_message(self):
+        result = retry_failed_telegram_outbox_message(
+            outbox_id=self.outbox_message.pk,
+            actor=self.administrator,
+        )
+
+        result.refresh_from_db()
+        self.assertEqual(result.status, TelegramOutboxMessage.Status.PENDING)
+        self.assertEqual(result.last_error_summary, "")
+        self.assertEqual(result.attempt_count, 6)

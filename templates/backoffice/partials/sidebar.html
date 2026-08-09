@@ -43,7 +43,7 @@
 
             {% for section in panel_navigation %}
                 <li class="backoffice-nav-section">
-                    <details class="backoffice-nav-group">
+                    <details class="backoffice-nav-group"{% if section.is_open %} open{% endif %}>
                         <summary>
                             <span>
                                 <i class="fa {{ section.icon }}" aria-hidden="true"></i>
@@ -57,7 +57,7 @@
                             {% for item in section.items %}
                                 {% if item.children %}
                                     <li>
-                                        <details class="backoffice-nav-subgroup">
+                                        <details class="backoffice-nav-subgroup"{% if item.is_active %} open{% endif %}>
                                             <summary>
                                                 <span>
                                                     <i class="fa {{ item.icon }}" aria-hidden="true"></i>
@@ -72,7 +72,8 @@
                                                     <li>
                                                         <a
                                                             href="{{ child.url }}"
-                                                            class="backoffice-nav-link backoffice-nav-link--nested {% if request.resolver_match.url_name == child.url_name %}is-active{% endif %}"
+                                                            class="backoffice-nav-link backoffice-nav-link--nested {% if child.is_active %}is-active{% endif %}"
+                                                            {% if child.is_active %}aria-current="page"{% endif %}
                                                         >
                                                             <i class="fa {{ child.icon }}" aria-hidden="true"></i>
                                                             <span>{{ child.label }}</span>
@@ -86,7 +87,8 @@
                                     <li>
                                         <a
                                             href="{{ item.url }}"
-                                            class="backoffice-nav-link backoffice-nav-link--sub {% if request.resolver_match.url_name == item.url_name %}is-active{% endif %}"
+                                            class="backoffice-nav-link backoffice-nav-link--sub {% if item.is_active %}is-active{% endif %}"
+                                            {% if item.is_active %}aria-current="page"{% endif %}
                                         >
                                             <i class="fa {{ item.icon }}" aria-hidden="true"></i>
                                             <span>{{ item.label }}</span>

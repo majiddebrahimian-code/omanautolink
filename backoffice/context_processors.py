@@ -8,5 +8,8 @@ def panel_navigation(request):
         return {}
 
     return {
-        "panel_navigation": build_panel_navigation(request.user),
+        "panel_navigation": build_panel_navigation(
+            request.user,
+            current_view_name=resolver_match.view_name,
+        ),
     }

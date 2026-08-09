@@ -7,7 +7,7 @@
     <title>{% block title %}پنل مدیریت{% endblock %}</title>
     {% if site_config.favicon %}<link rel="icon" href="{{ site_config.favicon.url }}">{% endif %}
     <link rel="stylesheet" href="{% static 'core/vendor/persian-adminlte/font-awesome/css/font-awesome.min.css' %}">
-    <link rel="stylesheet" href="{% static 'backoffice/panel.css' %}?v=staff-role-combination-1">
+    <link rel="stylesheet" href="{% static 'backoffice/panel.css' %}?v=telegram-settings-layout-1">
 </head>
 <body class="backoffice-body">
     <div class="backoffice-shell">
@@ -49,7 +49,7 @@
         </div>
     </div>
     <div class="backoffice-backdrop" data-panel-sidebar-backdrop></div>
-    <script src="{% static 'backoffice/panel.js' %}?v=user-menu-2" defer></script>
+    <script src="{% static 'backoffice/panel.js' %}?v=sidebar-accordion-1" defer></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -24,6 +24,7 @@ from .models import (
     CustomerTrackingNotification,
     TelegramCustomerActivationToken,
     TelegramInboundUpdate,
+    TelegramIntegrationSettings,
     TelegramOutboxMessage,
     TelegramStageConfirmationSession,
     TelegramStaffLink,
@@ -32,6 +33,36 @@ from .models import (
 
 
 logger = logging.getLogger(__name__)
+
+
+def get_telegram_integration_settings():
+    """Return the singleton operational configuration; secrets stay in .env."""
+
+    settings_record, _ = TelegramIntegrationSettings.objects.get_or_create(pk=1)
+    return settings_record
+
+
+@transaction.atomic
+def update_telegram_integration_settings(*, actor, settings_data):
+    """Persist non-secret Telegram controls after administrator authorization."""
+
+    _require_system_administrator(actor=actor)
+    settings_record, _ = TelegramIntegrationSettings.objects.select_for_update().get_or_create(
+        pk=1
+    )
+    for field_name in (
+        "inbound_mode",
+        "staff_bot_enabled",
+        "customer_notifications_enabled",
+        "vehicle_channel_sync_enabled",
+        "default_vehicle_channel",
+        "sold_vehicle_publication_action",
+    ):
+        setattr(settings_record, field_name, settings_data[field_name])
+    settings_record.updated_by = actor
+    settings_record.full_clean()
+    settings_record.save()
+    return settings_record
 
 
 def _clean_telegram_identifier(value, field_name):
@@ -770,6 +801,9 @@ def queue_customer_tracking_notifications_for_event(*, tracking_event):
     if tracking_event.event_type not in customer_visible_events:
         return []
 
+    if not get_telegram_integration_settings().customer_notifications_enabled:
+        return []
+
     subscriptions = list(
         CustomerTelegramSubscription.objects.select_related("car")
         .filter(
@@ -1431,3 +1465,31 @@ def get_due_telegram_outbox_message_ids(*, limit=100):
         .order_by("created_at")
         .values_list("pk", flat=True)[:limit]
     )
+
+
+@transaction.atomic
+def retry_failed_telegram_outbox_message(*, outbox_id, actor):
+    """Safely re-queue one failed outbound message after administrator review."""
+
+    _require_system_administrator(actor=actor)
+    outbox_message = TelegramOutboxMessage.objects.select_for_update().get(pk=outbox_id)
+
+    if outbox_message.status != TelegramOutboxMessage.Status.FAILED:
+        raise ValidationError("فقط پیام‌های ناموفق Telegram قابل ارسال مجدد هستند.")
+
+    outbox_message.status = TelegramOutboxMessage.Status.PENDING
+    outbox_message.next_attempt_at = None
+    outbox_message.delivery_started_at = None
+    outbox_message.last_error_summary = ""
+    outbox_message.save(
+        update_fields=[
+            "status",
+            "next_attempt_at",
+            "delivery_started_at",
+            "last_error_summary",
+        ]
+    )
+    transaction.on_commit(
+        lambda outbox_pk=outbox_message.pk: _schedule_outbox_delivery(outbox_pk)
+    )
+    return outbox_message

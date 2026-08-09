@@ -27,6 +27,34 @@
         });
     }
 
+    const navigationGroups = document.querySelectorAll(
+        ".backoffice-navigation .backoffice-nav-group"
+    );
+
+    navigationGroups.forEach((group) => {
+        const summary = group.querySelector(":scope > summary");
+
+        if (!summary) {
+            return;
+        }
+
+        summary.addEventListener("click", () => {
+            // Native <details> changes its state after the click event. Queue
+            // the accordion update so the newly opened section remains open.
+            window.setTimeout(() => {
+                if (!group.open) {
+                    return;
+                }
+
+                navigationGroups.forEach((otherGroup) => {
+                    if (otherGroup !== group) {
+                        otherGroup.open = false;
+                    }
+                });
+            }, 0);
+        });
+    });
+
     const userMenu = document.querySelector("[data-user-menu]");
     const userMenuTrigger = document.querySelector("[data-user-menu-trigger]");
     const userMenuDropdown = document.querySelector("[data-user-menu-dropdown]");

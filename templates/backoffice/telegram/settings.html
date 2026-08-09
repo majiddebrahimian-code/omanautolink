@@ -1,0 +1,99 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}تنظیمات Telegram | {{ site_config.site_name }}{% endblock %}
+{% block page_title %}تنظیمات Telegram{% endblock %}
+{% block page_description %}
+    <p>عملیات Bot، اعلان مشتری و همگام‌سازی کانال را از یک صفحهٔ منظم کنترل کنید. اطلاعات محرمانه فقط در فایل <code>.env</code> نگه‌داری می‌شوند.</p>
+{% endblock %}
+{% block page_actions %}
+    <a href="{% url 'backoffice:telegram_management' %}" class="backoffice-button backoffice-button--secondary"><i class="fa fa-arrow-right"></i> بازگشت</a>
+{% endblock %}
+
+{% block content %}
+<section class="backoffice-form-notice backoffice-form-notice--staff">
+    <i class="fa fa-shield"></i>
+    <p>
+        Bot Token: {% if bot_token_is_configured %}تنظیم شده{% else %}تنظیم نشده{% endif %}
+        · Webhook Secret: {% if webhook_secret_is_configured %}تنظیم شده{% else %}تنظیم نشده{% endif %}.
+        مقدار این اسرار در پنل نمایش یا ذخیره نمی‌شود.
+    </p>
+</section>
+
+<form method="post" class="backoffice-staff-form telegram-settings-form" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="backoffice-form-errors">{{ form.non_field_errors }}</div>{% endif %}
+
+    <section class="backoffice-form-section telegram-settings-section">
+        <header>
+            <span><i class="fa fa-exchange"></i></span>
+            <div>
+                <h2>دریافت و عملیات Bot</h2>
+                <p>برای سرور واقعی Webhook و برای توسعهٔ محلی Long Polling را انتخاب کنید.</p>
+            </div>
+        </header>
+
+        <div class="telegram-settings-layout">
+            <div class="telegram-settings-field">
+                {{ form.inbound_mode.label_tag }}
+                {{ form.inbound_mode }}
+                {% if form.inbound_mode.errors %}<div class="backoffice-field__error">{{ form.inbound_mode.errors }}</div>{% endif %}
+            </div>
+
+            <label class="telegram-toggle-card" for="{{ form.staff_bot_enabled.id_for_label }}">
+                {{ form.staff_bot_enabled }}
+                <span class="telegram-toggle-card__track" aria-hidden="true"></span>
+                <span class="telegram-toggle-card__content">
+                    <strong>{{ form.staff_bot_enabled.label }}</strong>
+                    <small>کارمندان مجاز می‌توانند مرحلهٔ خودرو را با Bot ثبت یا تکمیل کنند.</small>
+                </span>
+            </label>
+
+            <label class="telegram-toggle-card" for="{{ form.customer_notifications_enabled.id_for_label }}">
+                {{ form.customer_notifications_enabled }}
+                <span class="telegram-toggle-card__track" aria-hidden="true"></span>
+                <span class="telegram-toggle-card__content">
+                    <strong>{{ form.customer_notifications_enabled.label }}</strong>
+                    <small>پس از تغییر مرحله، برای مشتریِ متصل پیام اطلاع‌رسانی ارسال می‌شود.</small>
+                </span>
+            </label>
+        </div>
+    </section>
+
+    <section class="backoffice-form-section telegram-settings-section">
+        <header>
+            <span><i class="fa fa-bullhorn"></i></span>
+            <div>
+                <h2>کانال خودرو</h2>
+                <p>انتشار و به‌روزرسانی پست خودروهای قابل فروش در کانال Telegram را تعیین کنید.</p>
+            </div>
+        </header>
+
+        <div class="telegram-settings-layout">
+            <label class="telegram-toggle-card telegram-toggle-card--wide" for="{{ form.vehicle_channel_sync_enabled.id_for_label }}">
+                {{ form.vehicle_channel_sync_enabled }}
+                <span class="telegram-toggle-card__track" aria-hidden="true"></span>
+                <span class="telegram-toggle-card__content">
+                    <strong>{{ form.vehicle_channel_sync_enabled.label }}</strong>
+                    <small>فقط پس از انتخاب یک کانال فعال، این گزینه را روشن کنید.</small>
+                </span>
+            </label>
+
+            <div class="telegram-settings-field">
+                {{ form.default_vehicle_channel.label_tag }}
+                {{ form.default_vehicle_channel }}
+                {% if form.default_vehicle_channel.errors %}<div class="backoffice-field__error">{{ form.default_vehicle_channel.errors }}</div>{% endif %}
+            </div>
+
+            <div class="telegram-settings-field">
+                {{ form.sold_vehicle_publication_action.label_tag }}
+                {{ form.sold_vehicle_publication_action }}
+                {% if form.sold_vehicle_publication_action.errors %}<div class="backoffice-field__error">{{ form.sold_vehicle_publication_action.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </section>
+
+    <footer class="backoffice-form-actions">
+        <button type="submit" class="backoffice-button backoffice-button--primary"><i class="fa fa-check"></i> ذخیرهٔ تنظیمات</button>
+    </footer>
+</form>
+{% endblock %}

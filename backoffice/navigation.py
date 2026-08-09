@@ -32,7 +32,31 @@ def _link(*, label, icon, url_name):
     }
 
 
-def build_panel_navigation(user):
+def _apply_active_state(navigation, current_view_name):
+    """Mark exactly one relevant sidebar branch as open for the current view."""
+    for section in navigation:
+        section_is_active = False
+
+        for item in section["items"]:
+            item_is_active = (
+                not item.get("ignore_active_state", False)
+                and item.get("url_name") == current_view_name
+            )
+
+            for child in item.get("children", []):
+                child_is_active = child.get("url_name") == current_view_name
+                child["is_active"] = child_is_active
+                item_is_active = item_is_active or child_is_active
+
+            item["is_active"] = item_is_active
+            section_is_active = section_is_active or item_is_active
+
+        section["is_open"] = section_is_active
+
+    return navigation
+
+
+def build_panel_navigation(user, *, current_view_name=None):
     navigation = []
 
     machine_items = []
@@ -146,14 +170,44 @@ def build_panel_navigation(user):
     if user.is_authenticated and user.is_active and user.is_superuser:
         navigation.append(
             {
+                "label": "مدیریت Telegram",
+                "icon": "fa-paper-plane",
+                "items": [
+                    _link(
+                        label="مرکز کنترل Telegram",
+                        icon="fa-dashboard",
+                        url_name="backoffice:telegram_management",
+                    ),
+                    _link(
+                        label="تنظیمات Telegram",
+                        icon="fa-cog",
+                        url_name="backoffice:telegram_settings",
+                    ),
+                    _link(
+                        label="کانال‌های Telegram",
+                        icon="fa-bullhorn",
+                        url_name="backoffice:telegram_channel_list",
+                    ),
+                ],
+            }
+        )
+
+    if user.is_authenticated and user.is_active and user.is_superuser:
+        navigation.append(
+            {
                 "label": "گزارش‌ها و حسابرسی",
                 "icon": "fa-line-chart",
                 "items": [
-                    _link(
-                        label="داشبورد مدیریتی",
-                        icon="fa-dashboard",
-                        url_name="backoffice:dashboard",
-                    ),
+                    {
+                        **_link(
+                            label="داشبورد مدیریتی",
+                            icon="fa-dashboard",
+                            url_name="backoffice:dashboard",
+                        ),
+                        # The dashboard has its own root link, so it must not
+                        # expand the reports section when that root is active.
+                        "ignore_active_state": True,
+                    },
                     _link(
                         label="گزارش رویدادها",
                         icon="fa-history",
@@ -260,4 +314,4 @@ def build_panel_navigation(user):
             }
         )
 
-    return navigation
+    return _apply_active_state(navigation, current_view_name)
