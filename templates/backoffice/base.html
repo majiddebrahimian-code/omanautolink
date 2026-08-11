@@ -7,7 +7,7 @@
     <title>{% block title %}پنل مدیریت{% endblock %}</title>
     {% if site_config.favicon %}<link rel="icon" href="{{ site_config.favicon.url }}">{% endif %}
     <link rel="stylesheet" href="{% static 'core/vendor/persian-adminlte/font-awesome/css/font-awesome.min.css' %}">
-    <link rel="stylesheet" href="{% static 'backoffice/panel.css' %}?v=telegram-settings-layout-1">
+    <link rel="stylesheet" href="{% static 'backoffice/panel.css' %}?v=sidebar-collapse-4">
 </head>
 <body class="backoffice-body">
     <div class="backoffice-shell">
@@ -44,12 +44,31 @@
                 </section>
                 {% if messages %}<section class="backoffice-messages" aria-live="polite">{% for message in messages %}<div class="backoffice-alert backoffice-alert--{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}</section>{% endif %}
                 {% block content %}{% endblock %}
+                {% if page_obj %}
+                    <section class="backoffice-page-size-control" aria-label="تعداد نمایش در هر صفحه">
+                        <form method="get">
+                            {% for key, value in request.GET.items %}
+                                {% if key != "page" and key != "per_page" %}
+                                    <input type="hidden" name="{{ key }}" value="{{ value }}">
+                                {% endif %}
+                            {% endfor %}
+                            <label for="backoffice-per-page">نمایش در هر صفحه</label>
+                            <select id="backoffice-per-page" name="per_page" class="backoffice-select" onchange="this.form.submit()">
+                                <option value="10" {% if page_obj.paginator.per_page == 10 %}selected{% endif %}>10 ردیف</option>
+                                <option value="20" {% if page_obj.paginator.per_page == 20 %}selected{% endif %}>20 ردیف</option>
+                                <option value="50" {% if page_obj.paginator.per_page == 50 %}selected{% endif %}>50 ردیف</option>
+                                <option value="100" {% if page_obj.paginator.per_page == 100 %}selected{% endif %}>100 ردیف</option>
+                                <option value="150" {% if page_obj.paginator.per_page == 150 %}selected{% endif %}>150 ردیف</option>
+                            </select>
+                        </form>
+                    </section>
+                {% endif %}
             </main>
             <footer class="backoffice-footer">پنل مدیریت {{ site_config.site_name|default:"سایت" }}</footer>
         </div>
     </div>
     <div class="backoffice-backdrop" data-panel-sidebar-backdrop></div>
-    <script src="{% static 'backoffice/panel.js' %}?v=sidebar-accordion-1" defer></script>
+    <script src="{% static 'backoffice/panel.js' %}?v=sidebar-collapse-4" defer></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

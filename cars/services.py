@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from accounts.authorization import (
@@ -13,11 +13,13 @@ from accounts.authorization import (
     require_permission,
 )
 from customers.models import Customer
+from tracking.models import CarStageProgress, Stage
 from tracking.services import start_tracking_for_sold_car
 
 from .models import (
     Car,
     CarPhoto,
+    CarVideo,
     VehicleArchiveEvent,
     VehicleHold,
     VehicleInventoryEvent,
@@ -339,6 +341,38 @@ def upload_car_photos(
     )
 
     return created_photos
+
+
+@transaction.atomic
+def upload_car_video(
+    *,
+    car_id,
+    actor,
+    video_data,
+    source=VehicleInventoryEvent.Source.BACKOFFICE,
+):
+    """Add one normal vehicle video through the same inventory boundary."""
+    require_permission(
+        actor=actor,
+        permission="cars.add_carvideo",
+        error_message="شما اجازهٔ افزودن ویدیوی ماشین را ندارید.",
+    )
+    if not isinstance(video_data, Mapping):
+        raise ValidationError("اطلاعات ویدیوی ماشین معتبر نیست.")
+
+    validated_source = _validate_inventory_source(source=source)
+    car = _get_mutable_inventory_car(car_id=car_id)
+    video = CarVideo(car=car, **dict(video_data))
+    video.full_clean()
+    video.save()
+
+    _record_inventory_photo_event(
+        car=car,
+        actor=actor,
+        source=validated_source,
+        changes={"operation": "video_added", "video_id": video.pk},
+    )
+    return video
 
 
 def _get_mutable_car_photo(*, car_id, photo_id):
@@ -754,6 +788,108 @@ def mark_vehicle_as_sold(
     car.telegram_customer_activation_code = activation_result["code"]
     car.telegram_customer_activation_expires_at = activation_result["expires_at"]
 
+    from integrations.services import queue_vehicle_channel_sale_state_change
+    queue_vehicle_channel_sale_state_change(car_id=car.pk, actor=actor)
+
+    return car
+
+
+def get_vehicle_sale_reversal_eligibility(*, car):
+    """Return whether a sale may be reversed before any later stage begins."""
+    if car.is_deleted or car.status != Car.Status.SOLD:
+        return False, "فقط خودروی فروخته‌شده قابل بازگشت است."
+
+    first_stage = Stage.objects.filter(is_active=True).order_by("order", "pk").first()
+    if first_stage is None or car.current_stage_id != first_stage.pk:
+        return False, "بازگشت از فروش فقط در مرحلهٔ اول مجاز است."
+
+    later_stage_progress_exists = CarStageProgress.objects.filter(car=car).exclude(
+        stage_id=first_stage.pk
+    ).filter(
+        Q(actual_arrival__isnull=False)
+        | Q(completed_at__isnull=False)
+        | Q(skipped_at__isnull=False)
+    ).exists()
+    if later_stage_progress_exists:
+        return False, "برای این خودرو مرحلهٔ بعدی شروع شده است و بازگشت مجاز نیست."
+
+    return True, ""
+
+
+@transaction.atomic
+def reverse_vehicle_sale(*, car_id, actor, reason, source=VehicleInventoryEvent.Source.BACKOFFICE):
+    """Return a mistakenly sold vehicle to inventory during its first stage only."""
+    require_permission(
+        actor=actor,
+        permission="cars.reverse_vehicle_sale",
+        error_message="شما اجازهٔ بازگشت از فروش را ندارید.",
+    )
+    _validate_inventory_source(source=source)
+    cleaned_reason = str(reason or "").strip()
+    if len(cleaned_reason) < 10:
+        raise ValidationError("دلیل بازگشت از فروش باید حداقل 10 کاراکتر باشد.")
+
+    car = Car.objects.select_for_update().select_related("customer", "current_stage").get(pk=car_id)
+    allowed, rejection_reason = get_vehicle_sale_reversal_eligibility(car=car)
+    if not allowed:
+        raise ValidationError(rejection_reason)
+
+    previous_tracking_code = car.tracking_code
+    previous_customer_id = car.customer_id
+    now = timezone.now()
+
+    from customers.models import CustomVehicleRequest
+    from integrations.models import CustomerTelegramSubscription, TelegramCustomerActivationToken
+
+    # The first automatic tracking records are operational state, not the sale
+    # audit. They must be cleared so a future valid sale can start a new route.
+    CarStageProgress.objects.filter(car=car).delete()
+
+    TelegramCustomerActivationToken.objects.select_for_update().filter(
+        car=car,
+        revoked_at__isnull=True,
+    ).update(revoked_at=now, revoked_by=actor)
+    CustomerTelegramSubscription.objects.select_for_update().filter(
+        car=car,
+        is_active=True,
+    ).update(
+        is_active=False,
+        unsubscribed_at=now,
+        unsubscribe_reason="بازگشت از فروش توسط مدیریت سیستم.",
+    )
+
+    custom_request = CustomVehicleRequest.objects.select_for_update().filter(sold_car=car).first()
+    if custom_request is not None:
+        custom_request.status = CustomVehicleRequest.Status.NEW
+        custom_request.sold_car = None
+        custom_request.sold_at = None
+        custom_request.sold_by = None
+        custom_request.save(update_fields=["status", "sold_car", "sold_at", "sold_by", "updated_at"])
+
+    car.customer = None
+    car.current_stage = None
+    car.target_delivery = None
+    car.tracking_code = None
+    car.status = Car.Status.FOR_SALE
+    car.save(update_fields=["customer", "current_stage", "target_delivery", "tracking_code", "status"])
+
+    VehicleInventoryEvent.objects.create(
+        car=car,
+        action=VehicleInventoryEvent.Action.SALE_REVERSED,
+        performed_by=actor,
+        source=source,
+        changes={
+            "reason": cleaned_reason,
+            "previous_status": Car.Status.SOLD,
+            "new_status": Car.Status.FOR_SALE,
+            "previous_tracking_code": previous_tracking_code,
+            "previous_customer_id": previous_customer_id,
+            "custom_request_reopened": custom_request is not None,
+        },
+    )
+
+    from integrations.services import queue_vehicle_channel_sale_state_change
+    queue_vehicle_channel_sale_state_change(car_id=car.pk, actor=actor)
     return car
 
 
@@ -781,6 +917,46 @@ def publish_vehicle_for_sale(*, car_id, actor):
     car.save(update_fields=["status"])
 
     return car
+
+
+@transaction.atomic
+def create_inventory_car_and_publish_to_telegram(*, actor, vehicle_data, source):
+    """Create a vehicle, make it public, and queue its first channel post."""
+    car = create_inventory_car(
+        actor=actor,
+        vehicle_data=vehicle_data,
+        source=source,
+    )
+    car = publish_vehicle_for_sale(car_id=car.pk, actor=actor)
+
+    from integrations.services import queue_vehicle_channel_publication
+
+    publication, outbox_message = queue_vehicle_channel_publication(
+        car_id=car.pk,
+        actor=actor,
+    )
+    return car, publication, outbox_message
+
+
+@transaction.atomic
+def update_inventory_car_and_publish_to_telegram(*, car_id, actor, vehicle_data, source):
+    """Save inventory changes and publish or update the matching channel post."""
+    car = update_inventory_car(
+        car_id=car_id,
+        actor=actor,
+        vehicle_data=vehicle_data,
+        source=source,
+    )
+    if car.status == Car.Status.DRAFT:
+        car = publish_vehicle_for_sale(car_id=car.pk, actor=actor)
+
+    from integrations.services import queue_vehicle_channel_publication
+
+    publication, outbox_message = queue_vehicle_channel_publication(
+        car_id=car.pk,
+        actor=actor,
+    )
+    return car, publication, outbox_message
 
 
 @transaction.atomic

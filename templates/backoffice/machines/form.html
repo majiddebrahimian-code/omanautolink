@@ -66,6 +66,18 @@
                 <i class="fa fa-check" aria-hidden="true"></i>
                 {{ submit_label }}
             </button>
+            {% if can_publish_to_telegram %}
+                <button
+                    type="submit"
+                    name="submit_action"
+                    value="publish_to_telegram"
+                    class="backoffice-button backoffice-button--outline"
+                    title="ثبت اطلاعات و قرار دادن پست خودرو در صف انتشار کانال Telegram"
+                >
+                    <i class="fa fa-paper-plane" aria-hidden="true"></i>
+                    انتشار در Telegram
+                </button>
+            {% endif %}
             <a href="{% url 'backoffice:machine_list' %}" class="backoffice-button backoffice-button--secondary">
                 انصراف
             </a>

@@ -140,6 +140,11 @@ class AdminCustomVehicleRequestConversionForm(forms.Form):
     car = forms.ModelChoiceField(
         label="خودروی رزرو‌شده",
         queryset=Car.objects.none(),
+        widget=forms.Select(
+            attrs={
+                "class": "backoffice-select backoffice-conversion-control",
+            }
+        ),
         error_messages={
             "required": "انتخاب خودروی رزرو‌شده الزامی است.",
             "invalid_choice": "خودروی انتخاب‌شده معتبر نیست.",
@@ -151,7 +156,10 @@ class AdminCustomVehicleRequestConversionForm(forms.Form):
         max_length=50,
         widget=forms.TextInput(
             attrs={
+                "class": "backoffice-input backoffice-conversion-control",
                 "dir": "ltr",
+                "placeholder": "@username",
+                "autocomplete": "off",
             }
         ),
         error_messages={

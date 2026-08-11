@@ -423,6 +423,12 @@ class TelegramOutboxMessage(models.Model):
 
     class Operation(models.TextChoices):
         SEND_MESSAGE = "send_message", "Send message"
+        EDIT_MESSAGE = "edit_message", "Edit message"
+        SEND_PHOTO = "send_photo", "Send photo"
+        SEND_VIDEO = "send_video", "Send video"
+        SEND_MEDIA_GROUP = "send_media_group", "Send media group"
+        EDIT_MEDIA_CAPTION = "edit_media_caption", "Edit media caption"
+        DELETE_MESSAGE = "delete_message", "Delete message"
         ANSWER_CALLBACK = "answer_callback", "Answer callback"
 
     class Status(models.TextChoices):
@@ -442,6 +448,10 @@ class TelegramOutboxMessage(models.Model):
     body = models.TextField(blank=True)
     reply_markup = models.JSONField(blank=True, null=True)
     reply_to_message_id = models.BigIntegerField(blank=True, null=True)
+    target_message_id = models.BigIntegerField(blank=True, null=True)
+    media_object_type = models.CharField(max_length=20, blank=True)
+    media_object_id = models.PositiveBigIntegerField(blank=True, null=True)
+    media_object_refs = models.JSONField(blank=True, null=True)
     message_type = models.CharField(max_length=80)
     idempotency_key = models.CharField(max_length=200, unique=True)
     inbound_update = models.ForeignKey(
@@ -496,6 +506,35 @@ class TelegramOutboxMessage(models.Model):
             raise ValidationError("پیام ارسالی تلگرام باید شناسهٔ چت داشته باشد.")
 
         if (
+            self.operation in {
+                self.Operation.EDIT_MESSAGE,
+                self.Operation.EDIT_MEDIA_CAPTION,
+                self.Operation.DELETE_MESSAGE,
+            }
+            and (self.chat_id is None or self.target_message_id is None)
+        ):
+            raise ValidationError(
+                "ویرایش پیام تلگرام باید شناسهٔ چت و شناسهٔ پیام مقصد داشته باشد."
+            )
+
+        if self.operation in {self.Operation.SEND_PHOTO, self.Operation.SEND_VIDEO} and (
+            self.chat_id is None
+            or not self.media_object_type
+            or self.media_object_id is None
+        ):
+            raise ValidationError("رسانهٔ Telegram باید چت و فایل مقصد معتبر داشته باشد.")
+
+        if self.operation == self.Operation.SEND_MEDIA_GROUP and (
+            self.chat_id is None or not self.media_object_refs
+        ):
+            raise ValidationError("آلبوم Telegram باید چت و رسانه‌های معتبر داشته باشد.")
+
+        if self.operation == self.Operation.SEND_MEDIA_GROUP and not (
+            2 <= len(self.media_object_refs or []) <= 10
+        ):
+            raise ValidationError("هر آلبوم Telegram باید بین ۲ تا ۱۰ رسانه داشته باشد.")
+
+        if (
             self.operation == self.Operation.ANSWER_CALLBACK
             and not self.callback_query_id.strip()
         ):
@@ -503,6 +542,52 @@ class TelegramOutboxMessage(models.Model):
 
     def __str__(self):
         return f"Telegram {self.operation} ({self.status}) #{self.pk}"
+
+
+class TelegramVehiclePublication(models.Model):
+    """The durable identity of one vehicle post in one Telegram channel."""
+
+    car = models.ForeignKey(
+        "cars.Car",
+        on_delete=models.PROTECT,
+        related_name="telegram_publications",
+    )
+    channel = models.ForeignKey(
+        TelegramChannel,
+        on_delete=models.PROTECT,
+        related_name="vehicle_publications",
+    )
+    latest_outbox_message = models.ForeignKey(
+        TelegramOutboxMessage,
+        on_delete=models.SET_NULL,
+        related_name="vehicle_publications",
+        blank=True,
+        null=True,
+    )
+    telegram_message_id = models.BigIntegerField(blank=True, null=True)
+    content_mode = models.CharField(max_length=20, default="message")
+    revision = models.PositiveIntegerField(default=0)
+    last_synced_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["car", "channel"],
+                name="one_vehicle_post_per_channel",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["channel", "telegram_message_id"],
+                name="tg_vehicle_channel_msg_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.car} in {self.channel}"
 
 
 class CustomerTrackingNotification(models.Model):

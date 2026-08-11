@@ -105,6 +105,10 @@ class Car(models.Model):
                 "archive_vehicle",
                 "Can archive a vehicle",
             ),
+            (
+                "reverse_vehicle_sale",
+                "Can reverse a sale during the first tracking stage",
+            ),
         ]
 
     def __str__(self):
@@ -171,6 +175,30 @@ class CarPhoto(models.Model):
 
     def __str__(self):
         return f"Photo for {self.car.tracking_code}"
+
+
+class CarVideo(models.Model):
+    """A normal public vehicle video, separate from 360-degree image frames."""
+
+    car = models.ForeignKey(
+        Car,
+        on_delete=models.CASCADE,
+        related_name="videos",
+    )
+    video = models.FileField(
+        upload_to="cars/videos/",
+        validators=[FileExtensionValidator(["mp4", "mov", "webm"])],
+    )
+    telegram_file_id = models.CharField(max_length=200, blank=True, null=True)
+    caption = models.CharField(max_length=250, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sort_order", "pk"]
+
+    def __str__(self):
+        return f"Video for {self.car}"
 
 
 class CarSpinFrame(models.Model):
@@ -335,6 +363,7 @@ class VehicleInventoryEvent(models.Model):
     class Action(models.TextChoices):
         CREATED = "created", "Created"
         UPDATED = "updated", "Updated"
+        SALE_REVERSED = "sale_reversed", "Sale reversed"
 
     class Source(models.TextChoices):
         BACKOFFICE = "backoffice", "Backoffice"

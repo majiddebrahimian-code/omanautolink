@@ -16,6 +16,13 @@
             <span class="{% if bot_is_enabled %}is-ready{% else %}is-missing{% endif %}"><i class="fa fa-power-off"></i> Bot {% if bot_is_enabled %}فعال{% else %}غیرفعال{% endif %}</span>
             <span class="{% if bot_token_is_configured %}is-ready{% else %}is-missing{% endif %}"><i class="fa fa-key"></i> توکن {% if bot_token_is_configured %}تنظیم شده{% else %}تنظیم نشده{% endif %}</span>
             <span class="{% if webhook_secret_is_configured %}is-ready{% else %}is-missing{% endif %}"><i class="fa fa-shield"></i> Webhook Secret {% if webhook_secret_is_configured %}تنظیم شده{% else %}تنظیم نشده{% endif %}</span>
+            <form method="post" action="{% url 'backoffice:telegram_bot_connection_test' %}">
+                {% csrf_token %}
+                <button type="submit" class="telegram-console-test-button">
+                    <i class="fa fa-plug" aria-hidden="true"></i>
+                    تست اتصال Bot
+                </button>
+            </form>
         </div>
     </article>
 

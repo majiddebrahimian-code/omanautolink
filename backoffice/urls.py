@@ -10,9 +10,19 @@ urlpatterns = [
     path("reports/audit-log/", views.audit_log, name="audit_log"),
     path("telegram/", views.telegram_management, name="telegram_management"),
     path("telegram/settings/", views.telegram_settings, name="telegram_settings"),
+    path(
+        "telegram/test-bot/",
+        views.telegram_bot_connection_test,
+        name="telegram_bot_connection_test",
+    ),
     path("telegram/channels/", views.telegram_channel_list, name="telegram_channel_list"),
     path("telegram/channels/new/", views.telegram_channel_create, name="telegram_channel_create"),
     path("telegram/channels/<int:pk>/edit/", views.telegram_channel_edit, name="telegram_channel_edit"),
+    path(
+        "telegram/channels/<int:pk>/test-access/",
+        views.telegram_channel_access_test,
+        name="telegram_channel_access_test",
+    ),
     path(
         "telegram/outbox/<int:pk>/retry/",
         views.telegram_outbox_retry,
@@ -30,6 +40,11 @@ urlpatterns = [
         "machines/<int:pk>/photos/upload/",
         views.machine_photo_upload,
         name="machine_photo_upload",
+    ),
+    path(
+        "machines/<int:pk>/videos/upload/",
+        views.machine_video_upload,
+        name="machine_video_upload",
     ),
     path(
         "machines/<int:pk>/photos/<int:photo_pk>/update/",
@@ -81,6 +96,16 @@ urlpatterns = [
         "machines/sold/delivered/",
         views.delivered_machine_list,
         name="delivered_machine_list",
+    ),
+    path(
+        "machines/sold/<int:pk>/sync-telegram/",
+        views.vehicle_sale_sync_telegram,
+        name="vehicle_sale_sync_telegram",
+    ),
+    path(
+        "machines/sold/<int:pk>/reverse-sale/",
+        views.vehicle_sale_reverse,
+        name="vehicle_sale_reverse",
     ),
     path(
         "machines/sold/<int:pk>/",

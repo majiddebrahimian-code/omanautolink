@@ -146,6 +146,8 @@
                     <strong><i class="fa fa-check-circle" aria-hidden="true"></i> متصل</strong>
                     <dl>
                         <div><dt>حساب</dt><dd dir="ltr">{{ staff_user.current_telegram_link.telegram_username|default:"بدون نام کاربری" }}</dd></div>
+                        <div><dt>شناسهٔ کاربر Telegram</dt><dd dir="ltr">{{ staff_user.current_telegram_link.telegram_user_id }}</dd></div>
+                        <div><dt>شناسهٔ گفت‌وگوی خصوصی</dt><dd dir="ltr">{{ staff_user.current_telegram_link.telegram_chat_id }}</dd></div>
                         <div><dt>زمان اتصال</dt><dd>{{ staff_user.current_telegram_link.linked_at|date:"Y/m/d H:i" }}</dd></div>
                         <div><dt>آخرین مشاهده</dt><dd>{{ staff_user.current_telegram_link.last_seen_at|date:"Y/m/d H:i"|default:"—" }}</dd></div>
                     </dl>

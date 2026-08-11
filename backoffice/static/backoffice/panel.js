@@ -3,19 +3,48 @@
     const toggleButton = document.querySelector("[data-panel-sidebar-toggle]");
     const backdrop = document.querySelector("[data-panel-sidebar-backdrop]");
 
-    function closeSidebar() {
+    const desktopSidebarQuery = window.matchMedia("(min-width: 961px)");
+    const sidebarPreferenceKey = "oml-backoffice-sidebar-collapsed";
+
+    function syncSidebarToggle() {
         if (!toggleButton) {
             return;
         }
-
-        body.classList.remove("panel-sidebar-open");
-        toggleButton.setAttribute("aria-expanded", "false");
+        if (desktopSidebarQuery.matches) {
+            toggleButton.setAttribute(
+                "aria-expanded",
+                String(!body.classList.contains("panel-sidebar-collapsed")),
+            );
+        } else {
+            toggleButton.setAttribute(
+                "aria-expanded",
+                String(body.classList.contains("panel-sidebar-open")),
+            );
+        }
     }
+
+    function closeSidebar() {
+        if (!toggleButton || desktopSidebarQuery.matches) {
+            return;
+        }
+        body.classList.remove("panel-sidebar-open");
+        syncSidebarToggle();
+    }
+
+    if (desktopSidebarQuery.matches && localStorage.getItem(sidebarPreferenceKey) === "true") {
+        body.classList.add("panel-sidebar-collapsed");
+    }
+    syncSidebarToggle();
 
     if (toggleButton && backdrop) {
         toggleButton.addEventListener("click", () => {
-            const isOpen = body.classList.toggle("panel-sidebar-open");
-            toggleButton.setAttribute("aria-expanded", String(isOpen));
+            if (desktopSidebarQuery.matches) {
+                const isCollapsed = body.classList.toggle("panel-sidebar-collapsed");
+                localStorage.setItem(sidebarPreferenceKey, String(isCollapsed));
+            } else {
+                body.classList.toggle("panel-sidebar-open");
+            }
+            syncSidebarToggle();
         });
 
         backdrop.addEventListener("click", closeSidebar);
@@ -24,6 +53,11 @@
             if (event.key === "Escape") {
                 closeSidebar();
             }
+        });
+
+        desktopSidebarQuery.addEventListener("change", () => {
+            body.classList.remove("panel-sidebar-open");
+            syncSidebarToggle();
         });
     }
 
@@ -89,6 +123,15 @@
             if (event.key === "Escape") {
                 closeUserMenu();
             }
+        });
+    }
+
+    const selectedPageSize = new URLSearchParams(window.location.search).get("per_page");
+    if (selectedPageSize) {
+        document.querySelectorAll(".backoffice-pagination a").forEach((link) => {
+            const url = new URL(link.href, window.location.origin);
+            url.searchParams.set("per_page", selectedPageSize);
+            link.href = url.pathname + "?" + url.searchParams.toString();
         });
     }
 

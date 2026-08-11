@@ -26,6 +26,7 @@ from cars.services import (
     place_vehicle_on_hold,
     publish_vehicle_for_sale,
     release_vehicle_hold,
+    reverse_vehicle_sale,
     restore_archived_vehicle,
 )
 from cars.spin import assess_car_spin_frames, get_public_spin_payload
@@ -362,6 +363,49 @@ class VehicleHoldServiceTests(TestCase):
 
         self.assertEqual(sold_car.status, Car.Status.SOLD)
         self.assertTrue(sold_car.tracking_code)
+
+
+    def test_sale_can_be_reversed_while_vehicle_is_still_in_first_stage(self):
+        first_stage = Stage.objects.create(name="Sale Confirmed", order=1)
+        second_stage = Stage.objects.create(name="Port", order=2)
+        StageTransition.objects.create(
+            from_stage=first_stage,
+            to_stage=second_stage,
+            estimated_duration_days=3,
+        )
+        place_vehicle_on_hold(car_id=self.car.id, actor=self.sales_employee)
+        sold_car = mark_vehicle_as_sold(
+            car_id=self.car.id,
+            actor=self.sales_employee,
+            full_name="Test Customer",
+            phone="09120000000",
+            telegram_id="123456789",
+        )
+        original_tracking_code = sold_car.tracking_code
+        administrator = get_user_model().objects.create_superuser(
+            username="sale-reversal-administrator",
+            password="test-password",
+        )
+
+        reversed_car = reverse_vehicle_sale(
+            car_id=sold_car.id,
+            actor=administrator,
+            reason="Customer selected the vehicle by mistake.",
+        )
+        reversed_car.refresh_from_db()
+
+        self.assertEqual(reversed_car.status, Car.Status.FOR_SALE)
+        self.assertIsNone(reversed_car.customer)
+        self.assertIsNone(reversed_car.tracking_code)
+        self.assertIsNone(reversed_car.current_stage)
+        self.assertFalse(CarStageProgress.objects.filter(car=reversed_car).exists())
+        self.assertTrue(
+            VehicleInventoryEvent.objects.filter(
+                car=reversed_car,
+                action=VehicleInventoryEvent.Action.SALE_REVERSED,
+                changes__previous_tracking_code=original_tracking_code,
+            ).exists()
+        )
 
 
 class VehicleArchiveServiceTests(TestCase):

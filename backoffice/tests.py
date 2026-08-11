@@ -28,7 +28,13 @@ from backoffice.navigation import build_panel_navigation
 from tracking.models import CarStageProgress, Stage, StageTransition, TrackingEvent
 from tracking.services import complete_stage, confirm_stage, start_tracking_for_sold_car
 from core.models import HeaderNavigationItem, SiteConfiguration
-from integrations.models import TelegramInboundUpdate, TelegramOutboxMessage
+from integrations.models import (
+    TelegramChannel,
+    TelegramInboundUpdate,
+    TelegramOutboxMessage,
+    TelegramStaffLink,
+    TelegramVehiclePublication,
+)
 
 
 class BackofficeSidebarNavigationTests(TestCase):
@@ -256,6 +262,61 @@ class BackofficeMachineWorkflowTests(TestCase):
         response = self.client.get(reverse("backoffice:machine_list"))
 
         self.assertEqual(response.status_code, 403)
+
+    def test_machine_list_shows_and_filters_telegram_publication_state(self):
+        published_machine = self.create_machine(
+            title="Published machine",
+            status=Car.Status.FOR_SALE,
+        )
+        unpublished_machine = self.create_machine(
+            title="Unpublished machine",
+            status=Car.Status.DRAFT,
+        )
+        channel = TelegramChannel.objects.create(
+            name="Machine list test channel",
+            chat_id=-100777001,
+        )
+        outbox = TelegramOutboxMessage.objects.create(
+            operation=TelegramOutboxMessage.Operation.SEND_MESSAGE,
+            chat_id=channel.chat_id,
+            body="Published vehicle",
+            message_type="test_vehicle_publication",
+            idempotency_key="backoffice-machine-list-telegram-state",
+            status=TelegramOutboxMessage.Status.SENT,
+            telegram_message_id=771,
+        )
+        TelegramVehiclePublication.objects.create(
+            car=published_machine,
+            channel=channel,
+            latest_outbox_message=outbox,
+            telegram_message_id=771,
+        )
+        self.client.force_login(self.employee)
+
+        response = self.client.get(reverse("backoffice:machine_list"))
+
+        self.assertContains(response, "منتشرشده")
+        self.assertContains(response, "منتشر نشده")
+        self.assertContains(response, "backoffice-machine-filter-form")
+
+        filtered_response = self.client.get(
+            reverse("backoffice:machine_list"),
+            {"telegram": "published"},
+        )
+        self.assertContains(filtered_response, published_machine.title)
+        self.assertNotContains(filtered_response, unpublished_machine.title)
+
+    def test_inventory_forms_offer_telegram_publication_to_authorized_employee(self):
+        machine = self.create_machine(status=Car.Status.DRAFT)
+        self.client.force_login(self.employee)
+
+        create_response = self.client.get(reverse("backoffice:machine_create"))
+        edit_response = self.client.get(
+            reverse("backoffice:machine_edit", args=[machine.pk])
+        )
+
+        self.assertContains(create_response, "انتشار در Telegram")
+        self.assertContains(edit_response, "انتشار در Telegram")
 
     def test_publish_action_moves_a_draft_to_for_sale(self):
         machine = self.create_machine(status=Car.Status.DRAFT)
@@ -942,6 +1003,22 @@ class BackofficeStaffManagementTests(TestCase):
             response,
             reverse("backoffice:staff_telegram_link_issue", args=[self.employee.pk]),
         )
+
+    def test_staff_profile_displays_automatically_captured_telegram_ids(self):
+        TelegramStaffLink.objects.create(
+            user=self.employee,
+            telegram_user_id=700001,
+            telegram_chat_id=800001,
+            telegram_username="linked-employee",
+        )
+        self.client.force_login(self.administrator)
+
+        response = self.client.get(
+            reverse("backoffice:staff_detail", args=[self.employee.pk])
+        )
+
+        self.assertContains(response, "700001")
+        self.assertContains(response, "800001")
 
 
 class BackofficeCustomerAndClearanceWorkflowTests(TestCase):

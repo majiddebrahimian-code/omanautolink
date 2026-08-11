@@ -4,23 +4,27 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import StaffProfile
 from accounts.services import RoleGroup, ensure_default_role_groups
-from cars.models import Car
+from cars.models import Car, CarPhoto, CarVideo
 from customers.models import Customer, SearchLog
 from integrations.models import (
     CustomerTelegramSubscription,
     CustomerTrackingNotification,
     TelegramCustomerActivationToken,
+    TelegramChannel,
     TelegramInboundUpdate,
+    TelegramIntegrationSettings,
     TelegramOutboxMessage,
     TelegramStageConfirmationSession,
     TelegramStaffLink,
     TelegramStaffLinkToken,
+    TelegramVehiclePublication,
 )
 from integrations.services import (
     activate_customer_telegram_tracking,
@@ -30,7 +34,10 @@ from integrations.services import (
     ingest_and_process_telegram_update,
     link_staff_telegram_account,
     queue_telegram_message,
+    queue_vehicle_channel_publication,
     retry_failed_telegram_outbox_message,
+    test_telegram_bot_connection,
+    test_telegram_channel_access,
     unsubscribe_customer_telegram_tracking,
 )
 from integrations.telegram.gateway import TelegramGatewayTransientError
@@ -50,6 +57,57 @@ class FakeSuccessfulTelegramGateway:
     def answer_callback_query(self, **kwargs):
         self.callback_answers.append(kwargs)
         return True
+
+    def edit_message_text(self, **kwargs):
+        self.sent_messages.append({"edit": kwargs})
+        return {"message_id": kwargs["message_id"]}
+
+    def send_photo(self, **kwargs):
+        self.sent_messages.append({"photo": kwargs})
+        return {"message_id": 23456, "photo": [{"file_id": "telegram-photo-id"}]}
+
+    def send_video(self, **kwargs):
+        self.sent_messages.append({"video": kwargs})
+        return {"message_id": 34567, "video": {"file_id": "telegram-video-id"}}
+
+    def send_media_group(self, **kwargs):
+        self.sent_messages.append({"media_group": kwargs})
+        result = []
+        for index, item in enumerate(kwargs["media_items"]):
+            result.append(
+                {
+                    "message_id": 40000 + index,
+                    "photo": [{"file_id": f"telegram-photo-{index}"}]
+                    if item["kind"] == "photo"
+                    else [],
+                    "video": {"file_id": f"telegram-video-{index}"}
+                    if item["kind"] == "video"
+                    else {},
+                }
+            )
+        return result
+
+    def edit_message_caption(self, **kwargs):
+        self.sent_messages.append({"edit_caption": kwargs})
+        return {"message_id": kwargs["message_id"]}
+
+    def delete_message(self, **kwargs):
+        self.sent_messages.append({"delete": kwargs})
+        return True
+
+    def get_me(self):
+        return {"id": 99001, "username": "oml_test_bot", "first_name": "OML"}
+
+    def get_chat(self, **kwargs):
+        return {"id": kwargs["chat_id"], "type": "channel", "title": "Test channel"}
+
+    def get_chat_member(self, **kwargs):
+        return {
+            "status": "administrator",
+            "can_post_messages": True,
+            "can_edit_messages": True,
+            "can_delete_messages": True,
+        }
 
 
 class FakeTransientTelegramGateway:
@@ -802,6 +860,169 @@ class TelegramWebhookTests(TelegramIntegrationBaseTests):
         self.assertEqual(forbidden_response.status_code, 403)
         self.assertEqual(valid_response.status_code, 200)
         self.assertEqual(valid_response.json(), {"ok": True, "duplicate": False})
+
+
+@override_settings(TELEGRAM_BOT_ENABLED=True, TELEGRAM_BOT_TOKEN="test-token")
+class TelegramVehiclePublicationTests(TestCase):
+    def setUp(self):
+        self.administrator = get_user_model().objects.create_superuser(
+            username="vehicle-publication-administrator",
+            password="test-password",
+        )
+        self.channel = TelegramChannel.objects.create(
+            name="Vehicle channel",
+            chat_id=-100700001,
+            username="vehicle_channel",
+        )
+        TelegramIntegrationSettings.objects.create(
+            pk=1,
+            vehicle_channel_sync_enabled=True,
+            default_vehicle_channel=self.channel,
+        )
+        self.car = Car.objects.create(
+            title="Telegram publication vehicle",
+            brand="Toyota",
+            model="Camry",
+            year=2025,
+            status=Car.Status.FOR_SALE,
+            price_amount=2500000000,
+        )
+
+    def test_first_publish_queues_a_message_and_later_edits_that_same_message(self):
+        publication, first_outbox = queue_vehicle_channel_publication(
+            car_id=self.car.pk,
+            actor=self.administrator,
+        )
+
+        self.assertEqual(first_outbox.operation, TelegramOutboxMessage.Operation.SEND_MESSAGE)
+        self.assertEqual(first_outbox.chat_id, self.channel.chat_id)
+        self.assertIn(self.car.title, first_outbox.body)
+        self.assertEqual(publication.telegram_message_id, None)
+
+        gateway = FakeSuccessfulTelegramGateway()
+        deliver_telegram_outbox_message(
+            outbox_id=first_outbox.pk,
+            gateway=gateway,
+        )
+        publication.refresh_from_db()
+        self.assertEqual(publication.telegram_message_id, 12345)
+
+        self.car.title = "Updated Telegram publication vehicle"
+        self.car.save(update_fields=["title"])
+        _publication, update_outbox = queue_vehicle_channel_publication(
+            car_id=self.car.pk,
+            actor=self.administrator,
+        )
+
+        self.assertEqual(update_outbox.operation, TelegramOutboxMessage.Operation.EDIT_MESSAGE)
+        self.assertEqual(update_outbox.target_message_id, 12345)
+        self.assertIn(self.car.title, update_outbox.body)
+
+        deliver_telegram_outbox_message(
+            outbox_id=update_outbox.pk,
+            gateway=gateway,
+        )
+        self.assertIn("edit", gateway.sent_messages[-1])
+        self.assertTrue(
+            TelegramVehiclePublication.objects.filter(
+                car=self.car,
+                channel=self.channel,
+                telegram_message_id=12345,
+            ).exists()
+        )
+
+    def test_gallery_is_sent_as_one_media_album_with_the_public_caption(self):
+        photo = CarPhoto.objects.create(
+            car=self.car,
+            image=SimpleUploadedFile("vehicle.jpg", b"image-data", content_type="image/jpeg"),
+        )
+        video = CarVideo.objects.create(
+            car=self.car,
+            video=SimpleUploadedFile("vehicle.mp4", b"video-data", content_type="video/mp4"),
+            caption="Vehicle walkaround",
+        )
+
+        publication, media_outbox = queue_vehicle_channel_publication(
+            car_id=self.car.pk,
+            actor=self.administrator,
+        )
+        self.assertEqual(
+            media_outbox.operation,
+            TelegramOutboxMessage.Operation.SEND_MEDIA_GROUP,
+        )
+        self.assertEqual(
+            media_outbox.media_object_refs,
+            [{"type": "car_photo", "id": photo.pk}, {"type": "car_video", "id": video.pk}],
+        )
+        self.assertIn(self.car.title, media_outbox.body)
+        self.assertIn("🏷 برند:", media_outbox.body)
+        self.assertIn("📌 مدل:", media_outbox.body)
+        self.assertIn("برای دریافت مشاوره", media_outbox.body)
+        gateway = FakeSuccessfulTelegramGateway()
+
+        deliver_telegram_outbox_message(outbox_id=media_outbox.pk, gateway=gateway)
+        photo.refresh_from_db()
+        video.refresh_from_db()
+
+        self.assertEqual(photo.telegram_file_id, "telegram-photo-0")
+        self.assertEqual(video.telegram_file_id, "telegram-video-1")
+        publication.refresh_from_db()
+        self.assertEqual(publication.telegram_message_id, 40000)
+        self.assertEqual(publication.content_mode, "caption")
+        self.assertIn("media_group", gateway.sent_messages[-1])
+
+        self.car.title = "Updated media publication vehicle"
+        self.car.save(update_fields=["title"])
+        _publication, update_outbox = queue_vehicle_channel_publication(
+            car_id=self.car.pk,
+            actor=self.administrator,
+        )
+        self.assertEqual(
+            update_outbox.operation,
+            TelegramOutboxMessage.Operation.EDIT_MEDIA_CAPTION,
+        )
+        deliver_telegram_outbox_message(outbox_id=update_outbox.pk, gateway=gateway)
+        self.assertIn("edit_caption", gateway.sent_messages[-1])
+
+
+    def test_legacy_text_post_is_rebuilt_as_one_media_album_before_old_post_is_deleted(self):
+        _publication, text_outbox = queue_vehicle_channel_publication(
+            car_id=self.car.pk,
+            actor=self.administrator,
+        )
+        gateway = FakeSuccessfulTelegramGateway()
+        deliver_telegram_outbox_message(outbox_id=text_outbox.pk, gateway=gateway)
+
+        CarPhoto.objects.create(
+            car=self.car,
+            image=SimpleUploadedFile("replacement.jpg", b"image-data", content_type="image/jpeg"),
+        )
+        CarVideo.objects.create(
+            car=self.car,
+            video=SimpleUploadedFile("replacement.mp4", b"video-data", content_type="video/mp4"),
+        )
+
+        _publication, replacement_outbox = queue_vehicle_channel_publication(
+            car_id=self.car.pk,
+            actor=self.administrator,
+        )
+        self.assertEqual(
+            replacement_outbox.operation,
+            TelegramOutboxMessage.Operation.SEND_MEDIA_GROUP,
+        )
+        self.assertEqual(replacement_outbox.target_message_id, 12345)
+        self.assertEqual(replacement_outbox.message_type, "vehicle_channel_media_republish")
+
+        deliver_telegram_outbox_message(outbox_id=replacement_outbox.pk, gateway=gateway)
+        delete_outbox = TelegramOutboxMessage.objects.get(
+            operation=TelegramOutboxMessage.Operation.DELETE_MESSAGE,
+        )
+        self.assertEqual(delete_outbox.target_message_id, 12345)
+
+        deliver_telegram_outbox_message(outbox_id=delete_outbox.pk, gateway=gateway)
+        delete_outbox.refresh_from_db()
+        self.assertEqual(delete_outbox.status, TelegramOutboxMessage.Status.SENT)
+        self.assertIn("delete", gateway.sent_messages[-1])
 
 
 class TelegramOutboxAdministrativeRecoveryTests(TestCase):

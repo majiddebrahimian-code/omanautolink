@@ -44,6 +44,31 @@
         </section>
     {% endif %}
 
+    {% if can_modify_media and perms.cars.add_carvideo %}
+        <section class="backoffice-form-card backoffice-photo-upload-card">
+            <div class="backoffice-form-section__heading">
+                <h2>افزودن ویدیوی ماشین</h2>
+                <p>ویدیوی MP4، MOV یا WebM را ثبت کنید. پس از زدن «انتشار در Telegram»، ویدیو نیز به کانال فرستاده می‌شود.</p>
+            </div>
+            <form method="post" enctype="multipart/form-data" action="{% url 'backoffice:machine_video_upload' machine.pk %}" class="backoffice-upload-form">
+                {% csrf_token %}
+                <div class="backoffice-form-grid">
+                    {% for field in video_upload_form %}
+                        <div class="backoffice-field">
+                            <label for="{{ field.id_for_label }}" class="backoffice-field__label">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.errors %}<div class="backoffice-field__error">{{ field.errors }}</div>{% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+                <button type="submit" class="backoffice-button backoffice-button--primary">
+                    <i class="fa fa-video-camera" aria-hidden="true"></i>
+                    افزودن ویدیو
+                </button>
+            </form>
+        </section>
+    {% endif %}
+
     <section class="backoffice-photo-grid" aria-label="گالری تصاویر ماشین">
         {% for item in photo_items %}
             {% with photo=item.photo form=item.form %}
@@ -115,6 +140,28 @@
                 <i class="fa fa-picture-o" aria-hidden="true"></i>
                 <strong>هنوز تصویری برای این ماشین ثبت نشده است.</strong>
                 <span>از بخش بالای صفحه تصاویر گالری را انتخاب و اضافه کنید.</span>
+            </div>
+        {% endfor %}
+    </section>
+
+    <section class="backoffice-photo-grid" aria-label="ویدیوهای ماشین">
+        {% for video in videos %}
+            <article class="backoffice-photo-card">
+                <div class="backoffice-photo-card__image">
+                    <video controls preload="metadata">
+                        <source src="{{ video.video.url }}">
+                        مرورگر شما از نمایش ویدیو پشتیبانی نمی‌کند.
+                    </video>
+                </div>
+                <div class="backoffice-photo-card__body">
+                    <strong>{{ video.caption|default:"ویدیوی ماشین" }}</strong>
+                    <small>وضعیت Telegram: {% if video.telegram_file_id %}ارسال شده{% else %}منتظر انتشار{% endif %}</small>
+                </div>
+            </article>
+        {% empty %}
+            <div class="backoffice-photo-empty">
+                <i class="fa fa-video-camera" aria-hidden="true"></i>
+                <strong>هنوز ویدیویی برای این ماشین ثبت نشده است.</strong>
             </div>
         {% endfor %}
     </section>

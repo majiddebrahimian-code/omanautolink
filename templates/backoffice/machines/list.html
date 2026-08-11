@@ -30,9 +30,9 @@
 {% endblock %}
 
 {% block content %}
-    <section class="backoffice-search-card">
-        <form method="get" class="backoffice-search-form">
-            <div>
+    <section class="backoffice-search-card backoffice-machine-filter-card">
+        <form method="get" class="backoffice-machine-filter-form">
+            <div class="backoffice-machine-filter-form__search">
                 <label for="machine-search" class="backoffice-search-label">
                     جست‌وجوی ماشین
                 </label>
@@ -47,13 +47,37 @@
                 >
             </div>
 
+            <div>
+                <label for="machine-status">وضعیت ماشین</label>
+                <select id="machine-status" name="status" class="backoffice-select">
+                    <option value="">همهٔ وضعیت‌ها</option>
+                    <option value="draft" {% if selected_status == "draft" %}selected{% endif %}>پیش‌نویس</option>
+                    <option value="for_sale" {% if selected_status == "for_sale" %}selected{% endif %}>آمادهٔ فروش</option>
+                    <option value="on_hold" {% if selected_status == "on_hold" %}selected{% endif %}>رزرو موقت</option>
+                    <option value="sold" {% if selected_status == "sold" %}selected{% endif %}>فروخته‌شده</option>
+                    <option value="in_transit" {% if selected_status == "in_transit" %}selected{% endif %}>در حال تحویل</option>
+                    <option value="delivered" {% if selected_status == "delivered" %}selected{% endif %}>تحویل‌داده‌شده</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="machine-telegram">انتشار در Telegram</label>
+                <select id="machine-telegram" name="telegram" class="backoffice-select">
+                    <option value="">همه</option>
+                    <option value="published" {% if selected_telegram == "published" %}selected{% endif %}>منتشرشده</option>
+                    <option value="pending" {% if selected_telegram == "pending" %}selected{% endif %}>در صف یا در حال ارسال</option>
+                    <option value="failed" {% if selected_telegram == "failed" %}selected{% endif %}>ناموفق</option>
+                    <option value="not_published" {% if selected_telegram == "not_published" %}selected{% endif %}>منتشر نشده</option>
+                </select>
+            </div>
+
             <div class="backoffice-search-actions">
                 <button type="submit" class="backoffice-button backoffice-button--primary">
                     <i class="fa fa-search" aria-hidden="true"></i>
                     جست‌وجو
                 </button>
 
-                {% if query %}
+                {% if query or selected_status or selected_telegram %}
                     <a href="{% url 'backoffice:machine_list' %}" class="backoffice-button backoffice-button--secondary">
                         پاک‌کردن
                     </a>
@@ -69,6 +93,7 @@
                     <tr>
                         <th>ماشین</th>
                         <th>وضعیت</th>
+                        <th>Telegram</th>
                         <th>خریدار</th>
                         <th>کد رهگیری</th>
                         <th>مرحلهٔ فعلی</th>
@@ -99,6 +124,16 @@
                             <td>
                                 <span class="backoffice-status backoffice-status--{{ machine.status|car_status_tone }}">
                                     {{ machine.status|car_status_label }}
+                                </span>
+                            </td>
+
+                            <td>
+                                <span
+                                    class="backoffice-telegram-state backoffice-telegram-state--{{ machine.telegram_publication_tone }}"
+                                    {% if machine.telegram_publication %}title="کانال: {{ machine.telegram_publication.channel.name }}"{% endif %}
+                                >
+                                    <i class="fa {{ machine.telegram_publication_icon }}" aria-hidden="true"></i>
+                                    {{ machine.telegram_publication_label }}
                                 </span>
                             </td>
 
@@ -197,8 +232,8 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="7" class="backoffice-table-empty">
-                                {% if query %}
+                            <td colspan="8" class="backoffice-table-empty">
+                                {% if query or selected_status or selected_telegram %}
                                     هیچ ماشینی با عبارت «{{ query }}» پیدا نشد.
                                 {% else %}
                                     هنوز ماشینی در سیستم ثبت نشده است.
@@ -213,7 +248,7 @@
         {% if page_obj.paginator.num_pages > 1 %}
             <nav class="backoffice-pagination" aria-label="صفحه‌بندی ماشین‌ها">
                 {% if page_obj.has_previous %}
-                    <a href="?{% if query %}q={{ query|urlencode }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">
+                    <a href="?q={{ query|urlencode }}&amp;status={{ selected_status|urlencode }}&amp;telegram={{ selected_telegram|urlencode }}&amp;page={{ page_obj.previous_page_number }}">
                         قبلی
                     </a>
                 {% endif %}
@@ -223,7 +258,7 @@
                 </span>
 
                 {% if page_obj.has_next %}
-                    <a href="?{% if query %}q={{ query|urlencode }}&amp;{% endif %}page={{ page_obj.next_page_number }}">
+                    <a href="?q={{ query|urlencode }}&amp;status={{ selected_status|urlencode }}&amp;telegram={{ selected_telegram|urlencode }}&amp;page={{ page_obj.next_page_number }}">
                         بعدی
                     </a>
                 {% endif %}

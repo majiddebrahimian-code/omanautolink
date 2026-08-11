@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django import forms
 
-from .models import Car, CarPhoto
+from .models import Car, CarPhoto, CarVideo
 from .services import INVENTORY_EDITABLE_FIELDS
 
 
@@ -159,6 +159,31 @@ class CarPhotoMetadataForm(forms.ModelForm):
         }
 
 
+class CarVideoUploadForm(forms.ModelForm):
+    """Upload one public vehicle video that can also be sent to Telegram."""
+
+    class Meta:
+        model = CarVideo
+        fields = ["video", "caption", "sort_order"]
+        labels = {
+            "video": "انتخاب ویدیو",
+            "caption": "توضیح ویدیو",
+            "sort_order": "ترتیب نمایش",
+        }
+        widgets = {
+            "video": forms.ClearableFileInput(
+                attrs={
+                    "class": "backoffice-file-input",
+                    "accept": "video/mp4,video/quicktime,video/webm",
+                }
+            ),
+            "caption": forms.TextInput(
+                attrs={"class": "backoffice-input", "placeholder": "مثلاً نمای داخلی خودرو"}
+            ),
+            "sort_order": forms.NumberInput(
+                attrs={"class": "backoffice-input", "min": 0, "step": 1}
+            ),
+        }
 class VehicleArchiveReasonForm(forms.Form):
     """Collects the mandatory human reason for an archive operation."""
 
@@ -260,4 +285,25 @@ class VehicleSaleForm(forms.Form):
                 "dir": "ltr",
             }
         ),
+    )
+
+
+class VehicleSaleReversalForm(forms.Form):
+    """Captures the mandatory audit reason for the restricted sale reversal."""
+
+    reason = forms.CharField(
+        label="دلیل بازگشت از فروش",
+        min_length=10,
+        max_length=1000,
+        widget=forms.Textarea(
+            attrs={
+                "class": "backoffice-textarea",
+                "rows": 4,
+                "placeholder": "دلیل اشتباه یا لغو فروش را به‌صورت روشن بنویسید.",
+            }
+        ),
+        error_messages={
+            "required": "دلیل بازگشت از فروش الزامی است.",
+            "min_length": "دلیل باید حداقل 10 کاراکتر باشد.",
+        },
     )

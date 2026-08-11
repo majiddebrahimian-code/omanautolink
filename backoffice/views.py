@@ -55,14 +55,17 @@ from cars.forms import (
     CarInventoryForm,
     CarPhotoMetadataForm,
     CarPhotoUploadForm,
+    CarVideoUploadForm,
     VehicleArchiveReasonForm,
     VehicleHoldCreateForm,
     VehicleHoldReleaseForm,
     VehicleSaleForm,
+    VehicleSaleReversalForm,
 )
 from cars.models import (
     Car,
     CarPhoto,
+    CarVideo,
     VehicleArchiveEvent,
     VehicleHold,
     VehicleInventoryEvent,
@@ -71,15 +74,20 @@ from cars.services import (
     INVENTORY_EDITABLE_STATUSES,
     archive_vehicle,
     create_inventory_car,
+    create_inventory_car_and_publish_to_telegram,
     delete_car_photo,
     mark_vehicle_as_sold,
     place_vehicle_on_hold,
     publish_vehicle_for_sale,
     release_vehicle_hold,
+    get_vehicle_sale_reversal_eligibility,
+    reverse_vehicle_sale,
     set_car_photo_cover,
     update_car_photo_metadata,
     update_inventory_car,
+    update_inventory_car_and_publish_to_telegram,
     upload_car_photos,
+    upload_car_video,
 )
 from core.forms import (
     FooterLinkForm,
@@ -120,15 +128,20 @@ from customers.services import (
 )
 from integrations.models import (
     CustomerTelegramSubscription,
+    TelegramChannel,
     TelegramInboundUpdate,
     TelegramOutboxMessage,
     TelegramStaffLink,
     TelegramStaffLinkToken,
+    TelegramVehiclePublication,
 )
 from integrations.forms import TelegramChannelForm, TelegramIntegrationSettingsForm
 from integrations.services import (
     get_telegram_integration_settings,
+    queue_vehicle_channel_sale_state_change,
     retry_failed_telegram_outbox_message,
+    test_telegram_bot_connection,
+    test_telegram_channel_access,
     update_telegram_integration_settings,
 )
 from tracking.forms import (
@@ -199,6 +212,18 @@ def _add_service_errors(form, error):
         form.add_error(None, message)
 
 
+PAGINATION_SIZE_OPTIONS = (10, 20, 50, 100, 150)
+
+
+def _get_requested_per_page(request, *, default=20):
+    """Accept only administrator-approved list sizes from the query string."""
+    try:
+        selected_size = int(request.GET.get("per_page", default))
+    except (TypeError, ValueError):
+        return default
+    return selected_size if selected_size in PAGINATION_SIZE_OPTIONS else default
+
+
 def _get_paginated_context(*, request, queryset, search_fields, per_page=20):
     """Apply a stable ``q`` search and pagination to an internal list."""
 
@@ -212,7 +237,7 @@ def _get_paginated_context(*, request, queryset, search_fields, per_page=20):
 
         queryset = queryset.filter(search_condition)
 
-    paginator = Paginator(queryset, per_page)
+    paginator = Paginator(queryset, _get_requested_per_page(request, default=per_page))
     page_obj = paginator.get_page(request.GET.get("page"))
 
     return {
@@ -230,11 +255,42 @@ def _active_machine_queryset():
         is_active=True,
     )
 
+    telegram_publication_query = TelegramVehiclePublication.objects.filter(
+        car_id=OuterRef("pk"),
+    )
+    telegram_published_query = telegram_publication_query.filter(
+        telegram_message_id__isnull=False,
+    )
+    telegram_pending_query = telegram_publication_query.filter(
+        latest_outbox_message__status__in=[
+            TelegramOutboxMessage.Status.PENDING,
+            TelegramOutboxMessage.Status.SENDING,
+            TelegramOutboxMessage.Status.RETRY,
+        ],
+    )
+    telegram_failed_query = telegram_publication_query.filter(
+        latest_outbox_message__status=TelegramOutboxMessage.Status.FAILED,
+    )
+
     return (
         Car.objects.filter(is_deleted=False)
         .select_related("customer", "current_stage")
+        .prefetch_related(
+            Prefetch(
+                "telegram_publications",
+                queryset=TelegramVehiclePublication.objects.select_related(
+                    "latest_outbox_message",
+                    "channel",
+                ).order_by("-updated_at", "-pk"),
+                to_attr="telegram_publications_for_panel",
+            )
+        )
         .annotate(
             has_active_hold=Exists(active_hold_query),
+            has_telegram_publication=Exists(telegram_publication_query),
+            has_telegram_publication_success=Exists(telegram_published_query),
+            has_telegram_publication_pending=Exists(telegram_pending_query),
+            has_telegram_publication_failed=Exists(telegram_failed_query),
             inventory_fields_editable=Case(
                 When(
                     status__in=INVENTORY_EDITABLE_STATUSES,
@@ -250,7 +306,22 @@ def _active_machine_queryset():
 
 
 def _get_machine_list_context(request, *, queryset):
-    return _get_paginated_context(
+    selected_status = (request.GET.get("status") or "").strip()
+    selected_telegram = (request.GET.get("telegram") or "").strip()
+
+    if selected_status in set(Car.Status.values):
+        queryset = queryset.filter(status=selected_status)
+
+    if selected_telegram == "published":
+        queryset = queryset.filter(has_telegram_publication_success=True)
+    elif selected_telegram == "pending":
+        queryset = queryset.filter(has_telegram_publication_pending=True)
+    elif selected_telegram == "failed":
+        queryset = queryset.filter(has_telegram_publication_failed=True)
+    elif selected_telegram == "not_published":
+        queryset = queryset.filter(has_telegram_publication=False)
+
+    context = _get_paginated_context(
         request=request,
         queryset=queryset,
         search_fields=(
@@ -261,6 +332,43 @@ def _get_machine_list_context(request, *, queryset):
             "customer__full_name",
         ),
     )
+    _decorate_machine_telegram_states(context["page_obj"].object_list)
+    context.update(
+        {
+            "selected_status": selected_status,
+            "selected_telegram": selected_telegram,
+        }
+    )
+    return context
+
+
+def _decorate_machine_telegram_states(machines):
+    """Attach the latest channel-sync state for the list view only."""
+
+    labels = {
+        TelegramOutboxMessage.Status.PENDING: ("در صف ارسال", "pending", "fa-clock-o"),
+        TelegramOutboxMessage.Status.SENDING: ("در حال ارسال", "pending", "fa-refresh"),
+        TelegramOutboxMessage.Status.RETRY: ("در انتظار تلاش مجدد", "retry", "fa-repeat"),
+        TelegramOutboxMessage.Status.FAILED: ("ناموفق", "failed", "fa-exclamation-triangle"),
+    }
+    for machine in machines:
+        publication = next(
+            iter(getattr(machine, "telegram_publications_for_panel", [])),
+            None,
+        )
+        latest_outbox = publication.latest_outbox_message if publication else None
+
+        if latest_outbox and latest_outbox.status in labels:
+            label, tone, icon = labels[latest_outbox.status]
+        elif publication and publication.telegram_message_id:
+            label, tone, icon = "منتشرشده", "published", "fa-paper-plane"
+        else:
+            label, tone, icon = "منتشر نشده", "not-published", "fa-paper-plane-o"
+
+        machine.telegram_publication = publication
+        machine.telegram_publication_label = label
+        machine.telegram_publication_tone = tone
+        machine.telegram_publication_icon = icon
 
 
 @staff_member_required
@@ -449,6 +557,45 @@ def telegram_channel_edit(request, pk):
 
 @require_POST
 @system_administrator_required
+def telegram_bot_connection_test(request):
+    """Run a safe getMe readiness check; credentials never reach the response."""
+    try:
+        result = test_telegram_bot_connection(actor=request.user)
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        display_name = f"@{result['username']}" if result["username"] else result["first_name"]
+        messages.success(request, f"ارتباط با Bot تلگرام {display_name or 'تنظیم‌شده'} برقرار است.")
+    return redirect("backoffice:telegram_management")
+
+
+@require_POST
+@system_administrator_required
+def telegram_channel_access_test(request, pk):
+    """Check the Bot's real posting privileges for one configured channel."""
+    try:
+        result = test_telegram_channel_access(actor=request.user, channel_id=pk)
+    except TelegramChannel.DoesNotExist:
+        raise Http404("کانال Telegram پیدا نشد.")
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        channel = result["channel"]
+        if result["is_fully_ready"]:
+            messages.success(
+                request,
+                f"دسترسی Bot به کانال «{channel.name}» کامل است: ارسال، ویرایش و حذف پست.",
+            )
+        else:
+            messages.warning(
+                request,
+                f"Bot می‌تواند در کانال «{channel.name}» پست بگذارد، اما دسترسی ویرایش یا حذف کامل نیست.",
+            )
+    return redirect("backoffice:telegram_channel_list")
+
+
+@require_POST
+@system_administrator_required
 def telegram_outbox_retry(request, pk):
     try:
         retry_failed_telegram_outbox_message(outbox_id=pk, actor=request.user)
@@ -477,7 +624,7 @@ def audit_log(request):
     else:
         entries = get_audit_entries()
 
-    paginator = Paginator(entries, 25)
+    paginator = Paginator(entries, _get_requested_per_page(request, default=20))
     page_obj = paginator.get_page(request.GET.get("page"))
     page_obj.object_list = [
         format_audit_entry(entry) for entry in page_obj.object_list
@@ -511,18 +658,36 @@ def machine_create(request):
 
         if form.is_valid():
             try:
-                car = create_inventory_car(
-                    actor=request.user,
-                    vehicle_data=form.cleaned_data,
-                    source=VehicleInventoryEvent.Source.BACKOFFICE,
+                publish_to_telegram = (
+                    request.POST.get("submit_action") == "publish_to_telegram"
                 )
+                if publish_to_telegram:
+                    car, _publication, _outbox_message = (
+                        create_inventory_car_and_publish_to_telegram(
+                            actor=request.user,
+                            vehicle_data=form.cleaned_data,
+                            source=VehicleInventoryEvent.Source.BACKOFFICE,
+                        )
+                    )
+                else:
+                    car = create_inventory_car(
+                        actor=request.user,
+                        vehicle_data=form.cleaned_data,
+                        source=VehicleInventoryEvent.Source.BACKOFFICE,
+                    )
             except ValidationError as error:
                 _add_service_errors(form, error)
             else:
-                messages.success(
-                    request,
-                    f"ماشین «{car.title}» به‌صورت پیش‌نویس ثبت شد.",
-                )
+                if publish_to_telegram:
+                    messages.success(
+                        request,
+                        f"ماشین «{car.title}» منتشر و در صف ارسال به Telegram قرار گرفت.",
+                    )
+                else:
+                    messages.success(
+                        request,
+                        f"ماشین «{car.title}» به‌صورت پیش‌نویس ثبت شد.",
+                    )
                 return redirect("backoffice:machine_list")
     else:
         form = CarInventoryForm()
@@ -539,6 +704,7 @@ def machine_create(request):
                 "ماشین ابتدا به‌صورت پیش‌نویس ذخیره می‌شود. انتشار، رزرو و فروش "
                 "عملیات جداگانه و قابل رهگیری هستند."
             ),
+            "can_publish_to_telegram": request.user.has_perm("cars.publish_vehicle"),
         },
     )
 
@@ -546,7 +712,7 @@ def machine_create(request):
 @panel_permissions_required("cars.change_car")
 def machine_edit(request, pk):
     machine = get_object_or_404(
-        Car.objects.prefetch_related("photos"),
+        Car.objects.prefetch_related("photos", "videos"),
         pk=pk,
         is_deleted=False,
     )
@@ -556,19 +722,38 @@ def machine_edit(request, pk):
 
         if form.is_valid():
             try:
-                updated_machine = update_inventory_car(
-                    car_id=machine.id,
-                    actor=request.user,
-                    vehicle_data=form.cleaned_data,
-                    source=VehicleInventoryEvent.Source.BACKOFFICE,
+                publish_to_telegram = (
+                    request.POST.get("submit_action") == "publish_to_telegram"
                 )
+                if publish_to_telegram:
+                    updated_machine, _publication, _outbox_message = (
+                        update_inventory_car_and_publish_to_telegram(
+                            car_id=machine.id,
+                            actor=request.user,
+                            vehicle_data=form.cleaned_data,
+                            source=VehicleInventoryEvent.Source.BACKOFFICE,
+                        )
+                    )
+                else:
+                    updated_machine = update_inventory_car(
+                        car_id=machine.id,
+                        actor=request.user,
+                        vehicle_data=form.cleaned_data,
+                        source=VehicleInventoryEvent.Source.BACKOFFICE,
+                    )
             except ValidationError as error:
                 _add_service_errors(form, error)
             else:
-                messages.success(
-                    request,
-                    f"اطلاعات ماشین «{updated_machine.title}» به‌روزرسانی شد.",
-                )
+                if publish_to_telegram:
+                    messages.success(
+                        request,
+                        f"تغییرات «{updated_machine.title}» در صف همگام‌سازی Telegram قرار گرفت.",
+                    )
+                else:
+                    messages.success(
+                        request,
+                        f"اطلاعات ماشین «{updated_machine.title}» به‌روزرسانی شد.",
+                    )
                 return redirect("backoffice:machine_list")
     else:
         form = CarInventoryForm(instance=machine)
@@ -587,6 +772,10 @@ def machine_edit(request, pk):
             ),
             "photo_preview": list(machine.photos.all()[:4]),
             "photo_count": machine.photos.count(),
+            "can_publish_to_telegram": (
+                request.user.has_perm("cars.publish_vehicle")
+                and machine.status in {Car.Status.DRAFT, Car.Status.FOR_SALE}
+            ),
         },
     )
 
@@ -594,7 +783,7 @@ def machine_edit(request, pk):
 @panel_permissions_required("cars.view_carphoto")
 def machine_photo_manage(request, pk):
     machine = get_object_or_404(
-        Car.objects.prefetch_related("photos"),
+        Car.objects.prefetch_related("photos", "videos"),
         pk=pk,
         is_deleted=False,
     )
@@ -618,6 +807,8 @@ def machine_photo_manage(request, pk):
             "machine": machine,
             "photo_items": photo_items,
             "upload_form": CarPhotoUploadForm(),
+            "video_upload_form": CarVideoUploadForm(),
+            "videos": list(machine.videos.all()),
             "can_modify_media": can_modify_media,
         },
     )
@@ -650,6 +841,33 @@ def machine_photo_upload(request, pk):
             " ".join(
                 error for errors in form.errors.values() for error in errors
             ),
+        )
+
+    return redirect("backoffice:machine_photo_manage", pk=machine.pk)
+
+
+@panel_permissions_required("cars.add_carvideo")
+@require_POST
+def machine_video_upload(request, pk):
+    machine = get_object_or_404(Car, pk=pk, is_deleted=False)
+    form = CarVideoUploadForm(request.POST, request.FILES)
+
+    if form.is_valid():
+        try:
+            video = upload_car_video(
+                car_id=machine.id,
+                actor=request.user,
+                video_data=form.cleaned_data,
+                source=VehicleInventoryEvent.Source.BACKOFFICE,
+            )
+        except ValidationError as error:
+            messages.error(request, " ".join(error.messages))
+        else:
+            messages.success(request, f"ویدیوی «{video.video.name}» افزوده شد.")
+    else:
+        messages.error(
+            request,
+            " ".join(error for errors in form.errors.values() for error in errors),
         )
 
     return redirect("backoffice:machine_photo_manage", pk=machine.pk)
@@ -1044,6 +1262,11 @@ def delivery_machine_detail(request, pk):
         else "backoffice:pending_delivery_list"
     )
 
+    reversal_allowed, reversal_rejection_reason = get_vehicle_sale_reversal_eligibility(
+        car=car
+    )
+    can_reverse_sale = request.user.has_perm("cars.reverse_vehicle_sale") and reversal_allowed
+
     return render(
         request,
         "backoffice/machines/delivery_detail.html",
@@ -1055,7 +1278,61 @@ def delivery_machine_detail(request, pk):
                 "این ماشین در یک پرونده نمایش داده می‌شود."
             ),
             "list_url_name": list_url_name,
+            "can_reverse_sale": can_reverse_sale,
+            "can_sync_sale_telegram": request.user.has_perm("cars.sell_vehicle"),
+            "sale_reversal_rejection_reason": reversal_rejection_reason,
         },
+    )
+
+
+@panel_permissions_required("cars.sell_vehicle")
+@require_POST
+def vehicle_sale_sync_telegram(request, pk):
+    """One-time safe backfill for a previously sold vehicle channel post."""
+    machine = get_object_or_404(Car, pk=pk, is_deleted=False)
+    if machine.status != Car.Status.SOLD:
+        messages.error(request, "?????????? ???? ??? ???? ????? ?????????? ????? ??????.")
+    else:
+        outbox_message = queue_vehicle_channel_sale_state_change(
+            car_id=machine.pk,
+            actor=request.user,
+        )
+        if outbox_message is None:
+            messages.info(request, "??? ??????????? ???? ??? ????? ?? ????? ???? ???? ???.")
+        else:
+            messages.success(request, "??????????? ??????????? ?? ?? Telegram ???? ????.")
+    return redirect("backoffice:delivery_machine_detail", pk=machine.pk)
+
+
+@panel_permissions_required("cars.reverse_vehicle_sale")
+def vehicle_sale_reverse(request, pk):
+    """Confirm a first-stage-only sale reversal through the shared service."""
+    machine = get_object_or_404(Car, pk=pk, is_deleted=False)
+
+    if request.method == "POST":
+        form = VehicleSaleReversalForm(request.POST)
+        if form.is_valid():
+            try:
+                reverse_vehicle_sale(
+                    car_id=machine.pk,
+                    actor=request.user,
+                    reason=form.cleaned_data["reason"],
+                )
+            except ValidationError as error:
+                _add_service_errors(form, error)
+            else:
+                messages.success(
+                    request,
+                    f"???? ????? ?{machine.title}? ??? ?? ? ????? ?????? ?????? ???? ???.",
+                )
+                return redirect("backoffice:machine_list")
+    else:
+        form = VehicleSaleReversalForm()
+
+    return render(
+        request,
+        "backoffice/machines/sale_reverse_confirm.html",
+        {"form": form, "machine": machine},
     )
 
 
@@ -1356,7 +1633,7 @@ def clearance_queue(request):
     if action_filter not in {"all", "completed"}:
         queue = [item for item in queue if item["action"] == action_filter]
 
-    paginator = Paginator(queue, 20)
+    paginator = Paginator(queue, _get_requested_per_page(request, default=20))
     return render(
         request,
         "backoffice/clearance/queue.html",
@@ -2478,7 +2755,7 @@ def _get_staff_list_context(request):
             has_pending_telegram_link_code=False,
         )
 
-    paginator = Paginator(queryset, 20)
+    paginator = Paginator(queryset, _get_requested_per_page(request, default=20))
     page_obj = paginator.get_page(request.GET.get("page"))
     _decorate_staff_records(page_obj.object_list)
 

@@ -6,6 +6,7 @@ the final tracking change to ``tracking.services.confirm_stage``.
 """
 
 import logging
+import mimetypes
 import secrets
 from datetime import timedelta
 
@@ -29,6 +30,7 @@ from .models import (
     TelegramStageConfirmationSession,
     TelegramStaffLink,
     TelegramStaffLinkToken,
+    TelegramVehiclePublication,
 )
 
 
@@ -40,6 +42,464 @@ def get_telegram_integration_settings():
 
     settings_record, _ = TelegramIntegrationSettings.objects.get_or_create(pk=1)
     return settings_record
+
+
+def _get_configured_telegram_gateway(*, gateway=None):
+    """Return a gateway only when the environment-owned Bot config is ready."""
+    if not settings.TELEGRAM_BOT_ENABLED or not settings.TELEGRAM_BOT_TOKEN:
+        raise ValidationError("Bot تلگرام در فایل .env فعال یا تنظیم نشده است.")
+
+    if gateway is not None:
+        return gateway
+
+    from .telegram.gateway import TelegramHTTPGateway
+
+    return TelegramHTTPGateway()
+
+
+def test_telegram_bot_connection(*, actor, gateway=None):
+    """Safely verify the configured Bot identity for a System Administrator."""
+    _require_system_administrator(actor=actor)
+    gateway = _get_configured_telegram_gateway(gateway=gateway)
+
+    try:
+        bot = gateway.get_me()
+    except Exception as error:
+        logger.warning("Telegram Bot connectivity test failed.")
+        raise ValidationError(
+            "اتصال به Bot تلگرام برقرار نشد. Token، اینترنت و فعال‌بودن Bot را بررسی کنید."
+        ) from error
+
+    if not isinstance(bot, dict) or not bot.get("id"):
+        raise ValidationError("پاسخ Bot تلگرام معتبر نبود.")
+
+    return {
+        "bot_id": bot["id"],
+        "username": str(bot.get("username") or ""),
+        "first_name": str(bot.get("first_name") or ""),
+    }
+
+
+def test_telegram_channel_access(*, actor, channel_id, gateway=None):
+    """Verify a Bot can publish and maintain posts in one configured channel."""
+    from .models import TelegramChannel
+
+    _require_system_administrator(actor=actor)
+    channel = TelegramChannel.objects.get(pk=channel_id)
+    gateway = _get_configured_telegram_gateway(gateway=gateway)
+
+    try:
+        bot = gateway.get_me()
+        gateway.get_chat(chat_id=channel.chat_id)
+        membership = gateway.get_chat_member(
+            chat_id=channel.chat_id,
+            user_id=bot["id"],
+        )
+    except Exception as error:
+        logger.warning("Telegram channel access test failed for channel_id=%s.", channel.pk)
+        raise ValidationError(
+            "بررسی کانال ناموفق بود. مطمئن شوید Bot به کانال افزوده شده و شناسهٔ کانال صحیح است."
+        ) from error
+
+    if not isinstance(membership, dict):
+        raise ValidationError("پاسخ دسترسی کانال Telegram معتبر نبود.")
+
+    membership_status = str(membership.get("status") or "")
+    is_owner = membership_status in {"creator", "owner"}
+    is_administrator = membership_status == "administrator"
+    can_post = is_owner or bool(membership.get("can_post_messages"))
+    can_edit = is_owner or bool(membership.get("can_edit_messages"))
+    can_delete = is_owner or bool(membership.get("can_delete_messages"))
+
+    if not (is_owner or is_administrator):
+        raise ValidationError("Bot باید مدیر کانال Telegram باشد.")
+    if not can_post:
+        raise ValidationError("Bot اجازهٔ ارسال پست در این کانال را ندارد.")
+
+    return {
+        "channel": channel,
+        "can_post": can_post,
+        "can_edit": can_edit,
+        "can_delete": can_delete,
+        "is_fully_ready": can_edit and can_delete,
+    }
+
+
+def _vehicle_publication_body(*, car):
+    """Create the title, specifications, description, then public contact CTA."""
+    details = [
+        f"🚗 {car.title}",
+        "",
+        f"🏷 برند: {car.brand}",
+        f"📌 مدل: {car.model}",
+    ]
+
+    if car.year:
+        details.append(f"📅 سال ساخت: {car.year}")
+    if car.color:
+        details.append(f"🎨 رنگ: {car.color}")
+    if car.mileage:
+        details.append(f"📏 کارکرد: {car.mileage:,} کیلومتر")
+    if car.price_amount:
+        details.append(f"💰 قیمت: {car.price_amount:,.0f}")
+    if car.location:
+        details.append(f"📍 محل خودرو: {car.location}")
+
+    description = (car.description or "").strip()
+    if description:
+        details.extend(["", f"📄 {description[:700]}"])
+
+    details.extend(
+        ["", "💬 برای دریافت مشاوره و ثبت درخواست، با مشاوران ما در تلگرام تماس بگیرید."]
+    )
+    # Captions attached to Telegram photos/videos have a 1,024-character limit.
+    return "\n".join(details)[:1024]
+
+
+def _unpublished_vehicle_media_refs(*, car):
+    """Return stable references for gallery files not yet known by Telegram."""
+    from cars.models import CarPhoto, CarVideo
+
+    references = []
+    for photo in CarPhoto.objects.filter(
+        car=car,
+        telegram_file_id__isnull=True,
+        image__isnull=False,
+    ).exclude(image="").order_by("sort_order", "pk"):
+        references.append({"type": "car_photo", "id": photo.pk})
+    for video in CarVideo.objects.filter(
+        car=car,
+        telegram_file_id__isnull=True,
+        video__isnull=False,
+    ).exclude(video="").order_by("sort_order", "pk"):
+        references.append({"type": "car_video", "id": video.pk})
+    return references
+
+
+def _vehicle_media_refs(*, car):
+    """Return every publishable local vehicle media reference in display order."""
+    from cars.models import CarPhoto, CarVideo
+
+    references = []
+    for photo in CarPhoto.objects.filter(
+        car=car,
+        image__isnull=False,
+    ).exclude(image="").order_by("sort_order", "pk"):
+        references.append({"type": "car_photo", "id": photo.pk})
+    for video in CarVideo.objects.filter(
+        car=car,
+        video__isnull=False,
+    ).exclude(video="").order_by("sort_order", "pk"):
+        references.append({"type": "car_video", "id": video.pk})
+    return references
+
+
+@transaction.atomic
+def queue_vehicle_channel_publication(*, car_id, actor, enforce_permission=True):
+    """Queue one vehicle post or safely rebuild a legacy text-only post as media."""
+    if enforce_permission:
+        require_permission(
+            actor=actor,
+            permission="cars.publish_vehicle",
+            error_message="شما اجازهٔ انتشار خودرو در Telegram را ندارید.",
+        )
+
+    if not settings.TELEGRAM_BOT_ENABLED or not settings.TELEGRAM_BOT_TOKEN:
+        raise ValidationError("Bot Telegram در فایل .env فعال یا تنظیم نشده است.")
+
+    settings_record = TelegramIntegrationSettings.objects.select_for_update().get_or_create(
+        pk=1
+    )[0]
+    channel = settings_record.default_vehicle_channel
+
+    if not settings_record.vehicle_channel_sync_enabled:
+        raise ValidationError("همگام‌سازی خودرو با کانال Telegram فعال نشده است.")
+    if channel is None or not channel.is_active or not channel.publish_available_vehicles:
+        raise ValidationError("یک کانال فعال و مجاز برای انتشار خودرو انتخاب کنید.")
+
+    from cars.models import Car
+
+    car = Car.objects.select_for_update().get(pk=car_id)
+    if car.is_deleted or car.status != Car.Status.FOR_SALE:
+        raise ValidationError("??? ???????? ????? ???? ???? ?? Telegram ????? ???????.")
+
+    publication = (
+        TelegramVehiclePublication.objects.select_for_update()
+        .filter(car=car, channel=channel)
+        .first()
+    )
+    if publication is None:
+        publication = TelegramVehiclePublication.objects.create(car=car, channel=channel)
+
+    body = _vehicle_publication_body(car=car)
+    all_media_refs = _vehicle_media_refs(car=car)
+    unsent_media_refs = _unpublished_vehicle_media_refs(car=car)
+    previous_outbox = publication.latest_outbox_message
+
+    if (
+        publication.telegram_message_id is None
+        and previous_outbox is not None
+        and previous_outbox.status
+        in {TelegramOutboxMessage.Status.PENDING, TelegramOutboxMessage.Status.RETRY}
+    ):
+        previous_outbox.body = body
+        previous_outbox.save(update_fields=["body"])
+        _queue_unsent_vehicle_media(
+            car=car,
+            channel=channel,
+            excluded_refs=_outbox_media_refs(outbox_message=previous_outbox),
+        )
+        return publication, previous_outbox
+
+    legacy_text_post_needs_rebuild = (
+        publication.telegram_message_id is not None
+        and publication.content_mode == "message"
+        and bool(all_media_refs)
+    )
+    if (
+        publication.telegram_message_id is not None
+        and previous_outbox is not None
+        and previous_outbox.status == TelegramOutboxMessage.Status.SENT
+        and previous_outbox.body == body
+        and not legacy_text_post_needs_rebuild
+    ):
+        _queue_unsent_vehicle_media(car=car, channel=channel)
+        return publication, previous_outbox
+
+    publication.revision += 1
+    if publication.telegram_message_id is None:
+        candidate_refs = unsent_media_refs
+        message_type_prefix = "publish"
+        replacement_target_message_id = None
+    elif legacy_text_post_needs_rebuild:
+        candidate_refs = all_media_refs
+        message_type_prefix = "media_republish"
+        replacement_target_message_id = publication.telegram_message_id
+    else:
+        candidate_refs = []
+
+    if candidate_refs:
+        initial_refs = candidate_refs[:10]
+        operation = (
+            TelegramOutboxMessage.Operation.SEND_MEDIA_GROUP
+            if len(initial_refs) > 1
+            else (
+                TelegramOutboxMessage.Operation.SEND_PHOTO
+                if initial_refs[0]["type"] == "car_photo"
+                else TelegramOutboxMessage.Operation.SEND_VIDEO
+            )
+        )
+        message_type = f"vehicle_channel_{message_type_prefix}"
+        idempotency_key = (
+            f"vehicle-channel:{channel.pk}:car:{car.pk}:{message_type_prefix}:"
+            f"{publication.revision}"
+        )
+        target_message_id = replacement_target_message_id
+    elif publication.telegram_message_id is None:
+        initial_refs = []
+        operation = TelegramOutboxMessage.Operation.SEND_MESSAGE
+        message_type = "vehicle_channel_publish"
+        idempotency_key = f"vehicle-channel:{channel.pk}:car:{car.pk}:publish:{publication.revision}"
+        target_message_id = None
+    else:
+        initial_refs = []
+        operation = (
+            TelegramOutboxMessage.Operation.EDIT_MEDIA_CAPTION
+            if publication.content_mode == "caption"
+            else TelegramOutboxMessage.Operation.EDIT_MESSAGE
+        )
+        message_type = "vehicle_channel_update"
+        idempotency_key = f"vehicle-channel:{channel.pk}:car:{car.pk}:update:{publication.revision}"
+        target_message_id = publication.telegram_message_id
+
+    outbox_message = queue_telegram_message(
+        chat_id=channel.chat_id,
+        body=body,
+        message_type=message_type,
+        idempotency_key=idempotency_key,
+        target_message_id=target_message_id,
+        operation=operation,
+        media_object_type=(initial_refs[0]["type"] if len(initial_refs) == 1 else ""),
+        media_object_id=(initial_refs[0]["id"] if len(initial_refs) == 1 else None),
+        media_object_refs=(initial_refs if len(initial_refs) > 1 else None),
+    )
+    publication.latest_outbox_message = outbox_message
+    publication.save(update_fields=["latest_outbox_message", "revision", "updated_at"])
+    _queue_unsent_vehicle_media(
+        car=car,
+        channel=channel,
+        excluded_refs=initial_refs,
+    )
+    return publication, outbox_message
+
+
+@transaction.atomic
+def queue_vehicle_channel_sale_state_change(*, car_id, actor):
+    """Queue the configured channel action after sale or first-stage reversal.
+
+    This is called only by the authorized shared sale services. It never makes
+    an HTTP request; it creates durable outbox work for the Worker.
+    """
+    from cars.models import Car
+
+    settings_record = TelegramIntegrationSettings.objects.select_for_update().filter(pk=1).first()
+    if (
+        settings_record is None
+        or not settings_record.vehicle_channel_sync_enabled
+        or settings_record.default_vehicle_channel_id is None
+    ):
+        return None
+
+    car = Car.objects.select_for_update().get(pk=car_id)
+    channel = settings_record.default_vehicle_channel
+    publication = (
+        TelegramVehiclePublication.objects.select_for_update()
+        .filter(car=car, channel=channel)
+        .first()
+    )
+
+    if car.status == Car.Status.FOR_SALE and (
+        publication is None or publication.telegram_message_id is None
+    ):
+        return queue_vehicle_channel_publication(
+            car_id=car.pk,
+            actor=actor,
+            enforce_permission=False,
+        )[1]
+
+    if publication is None or publication.telegram_message_id is None:
+        return None
+
+    publication.revision += 1
+    if car.status == Car.Status.SOLD:
+        if (
+            settings_record.sold_vehicle_publication_action
+            == TelegramIntegrationSettings.SoldPublicationAction.DELETE
+        ):
+            outbox_message = queue_telegram_message(
+                chat_id=channel.chat_id,
+                body="",
+                message_type="vehicle_channel_sale_delete",
+                idempotency_key=(
+                    f"vehicle-channel:{channel.pk}:car:{car.pk}:sale-delete:"
+                    f"{publication.revision}"
+                ),
+                target_message_id=publication.telegram_message_id,
+                operation=TelegramOutboxMessage.Operation.DELETE_MESSAGE,
+            )
+            # A deleted post cannot be edited on sale reversal. Reset the live
+            # identity so the reversal creates a fresh available-vehicle post.
+            publication.telegram_message_id = None
+            publication.content_mode = "message"
+        else:
+            body = (_vehicle_publication_body(car=car) + "\n\n⛔ وضعیت: فروخته‌شد")[:1024]
+            operation = (
+                TelegramOutboxMessage.Operation.EDIT_MEDIA_CAPTION
+                if publication.content_mode == "caption"
+                else TelegramOutboxMessage.Operation.EDIT_MESSAGE
+            )
+            outbox_message = queue_telegram_message(
+                chat_id=channel.chat_id,
+                body=body,
+                message_type="vehicle_channel_sale_mark_sold",
+                idempotency_key=(
+                    f"vehicle-channel:{channel.pk}:car:{car.pk}:sale-mark:"
+                    f"{publication.revision}"
+                ),
+                target_message_id=publication.telegram_message_id,
+                operation=operation,
+            )
+    elif car.status == Car.Status.FOR_SALE:
+        body = _vehicle_publication_body(car=car)
+        operation = (
+            TelegramOutboxMessage.Operation.EDIT_MEDIA_CAPTION
+            if publication.content_mode == "caption"
+            else TelegramOutboxMessage.Operation.EDIT_MESSAGE
+        )
+        outbox_message = queue_telegram_message(
+            chat_id=channel.chat_id,
+            body=body,
+            message_type="vehicle_channel_sale_reversed",
+            idempotency_key=(
+                f"vehicle-channel:{channel.pk}:car:{car.pk}:sale-reversed:"
+                f"{publication.revision}"
+            ),
+            target_message_id=publication.telegram_message_id,
+            operation=operation,
+        )
+    else:
+        return None
+
+    publication.latest_outbox_message = outbox_message
+    publication.save(
+        update_fields=[
+            "latest_outbox_message",
+            "telegram_message_id",
+            "content_mode",
+            "revision",
+            "updated_at",
+        ]
+    )
+    return outbox_message
+
+
+def _queue_unsent_vehicle_media(*, car, channel, excluded_refs=None):
+    """Queue each gallery file once; Telegram file IDs prevent duplicates."""
+    from cars.models import CarPhoto, CarVideo
+
+    excluded_refs = {
+        (item["type"], item["id"])
+        for item in (excluded_refs or [])
+    }
+
+    for photo in CarPhoto.objects.filter(
+        car=car,
+        telegram_file_id__isnull=True,
+        image__isnull=False,
+    ).exclude(image=""):
+        if ("car_photo", photo.pk) in excluded_refs:
+            continue
+        queue_telegram_message(
+            chat_id=channel.chat_id,
+            body="",
+            message_type="vehicle_channel_photo",
+            idempotency_key=f"vehicle-channel:{channel.pk}:photo:{photo.pk}",
+            operation=TelegramOutboxMessage.Operation.SEND_PHOTO,
+            media_object_type="car_photo",
+            media_object_id=photo.pk,
+        )
+
+    for video in CarVideo.objects.filter(
+        car=car,
+        telegram_file_id__isnull=True,
+        video__isnull=False,
+    ).exclude(video=""):
+        if ("car_video", video.pk) in excluded_refs:
+            continue
+        queue_telegram_message(
+            chat_id=channel.chat_id,
+            body=video.caption,
+            message_type="vehicle_channel_video",
+            idempotency_key=f"vehicle-channel:{channel.pk}:video:{video.pk}",
+            operation=TelegramOutboxMessage.Operation.SEND_VIDEO,
+            media_object_type="car_video",
+            media_object_id=video.pk,
+        )
+
+
+def _outbox_media_refs(*, outbox_message):
+    """Normalize an outbox item's local media references for duplicate avoidance."""
+    if outbox_message.operation == TelegramOutboxMessage.Operation.SEND_MEDIA_GROUP:
+        return list(outbox_message.media_object_refs or [])
+    if outbox_message.operation in {
+        TelegramOutboxMessage.Operation.SEND_PHOTO,
+        TelegramOutboxMessage.Operation.SEND_VIDEO,
+    } and outbox_message.media_object_type and outbox_message.media_object_id:
+        return [{
+            "type": outbox_message.media_object_type,
+            "id": outbox_message.media_object_id,
+        }]
+    return []
 
 
 @transaction.atomic
@@ -71,7 +531,9 @@ def _clean_telegram_identifier(value, field_name):
     except (TypeError, ValueError):
         raise ValidationError(f"{field_name} تلگرام معتبر نیست.")
 
-    if normalized_value <= 0:
+    # Private users are positive, while Telegram channel/group chat IDs are
+    # conventionally negative (for example: -100...). Only zero is invalid.
+    if normalized_value == 0:
         raise ValidationError(f"{field_name} تلگرام معتبر نیست.")
 
     return normalized_value
@@ -991,6 +1453,11 @@ def queue_telegram_message(
     idempotency_key,
     reply_markup=None,
     reply_to_message_id=None,
+    target_message_id=None,
+    operation=TelegramOutboxMessage.Operation.SEND_MESSAGE,
+    media_object_type="",
+    media_object_id=None,
+    media_object_refs=None,
     inbound_update=None,
     staff_link=None,
     customer_subscription=None,
@@ -1000,11 +1467,15 @@ def queue_telegram_message(
     outbox_message, created = TelegramOutboxMessage.objects.get_or_create(
         idempotency_key=str(idempotency_key),
         defaults={
-            "operation": TelegramOutboxMessage.Operation.SEND_MESSAGE,
+            "operation": operation,
             "chat_id": _clean_telegram_identifier(chat_id, "شناسهٔ چت"),
             "body": str(body or ""),
             "reply_markup": reply_markup,
             "reply_to_message_id": reply_to_message_id,
+            "target_message_id": target_message_id,
+            "media_object_type": str(media_object_type or ""),
+            "media_object_id": media_object_id,
+            "media_object_refs": media_object_refs,
             "message_type": str(message_type),
             "inbound_update": inbound_update,
             "staff_link": staff_link,
@@ -1320,6 +1791,10 @@ def _record_outbox_success(*, outbox_id, telegram_result):
         message_id = None
         if isinstance(telegram_result, dict):
             message_id = telegram_result.get("message_id")
+        elif isinstance(telegram_result, list) and telegram_result:
+            first_result = telegram_result[0]
+            if isinstance(first_result, dict):
+                message_id = first_result.get("message_id")
 
         outbox_message.status = TelegramOutboxMessage.Status.SENT
         outbox_message.sent_at = timezone.now()
@@ -1338,7 +1813,186 @@ def _record_outbox_success(*, outbox_id, telegram_result):
             ]
         )
 
+        publication = (
+            TelegramVehiclePublication.objects.select_for_update()
+            .select_related("car", "channel")
+            .filter(latest_outbox_message=outbox_message)
+            .first()
+        )
+        if publication is not None:
+            if outbox_message.operation in {
+                TelegramOutboxMessage.Operation.SEND_MESSAGE,
+                TelegramOutboxMessage.Operation.SEND_PHOTO,
+                TelegramOutboxMessage.Operation.SEND_VIDEO,
+                TelegramOutboxMessage.Operation.SEND_MEDIA_GROUP,
+            }:
+                publication.telegram_message_id = message_id
+                publication.content_mode = (
+                    "caption"
+                    if outbox_message.operation
+                    in {
+                        TelegramOutboxMessage.Operation.SEND_PHOTO,
+                        TelegramOutboxMessage.Operation.SEND_VIDEO,
+                        TelegramOutboxMessage.Operation.SEND_MEDIA_GROUP,
+                    }
+                    else "message"
+                )
+            publication.last_synced_at = timezone.now()
+            publication.save(
+                update_fields=[
+                    "telegram_message_id",
+                    "content_mode",
+                    "last_synced_at",
+                    "updated_at",
+                ]
+            )
+
+            if (
+                outbox_message.message_type == "vehicle_channel_media_republish"
+                and outbox_message.target_message_id is not None
+                and message_id is not None
+            ):
+                replacement_refs = {
+                    (item["type"], item["id"])
+                    for item in _outbox_media_refs(outbox_message=outbox_message)
+                }
+                obsolete_message_ids = {outbox_message.target_message_id}
+                legacy_media_messages = TelegramOutboxMessage.objects.filter(
+                    chat_id=publication.channel.chat_id,
+                    status=TelegramOutboxMessage.Status.SENT,
+                    operation__in={
+                        TelegramOutboxMessage.Operation.SEND_PHOTO,
+                        TelegramOutboxMessage.Operation.SEND_VIDEO,
+                    },
+                    telegram_message_id__isnull=False,
+                ).exclude(pk=outbox_message.pk)
+                for legacy_message in legacy_media_messages:
+                    legacy_ref = (
+                        legacy_message.media_object_type,
+                        legacy_message.media_object_id,
+                    )
+                    if legacy_ref in replacement_refs:
+                        obsolete_message_ids.add(legacy_message.telegram_message_id)
+
+                for obsolete_message_id in obsolete_message_ids:
+                    if obsolete_message_id == message_id:
+                        continue
+                    queue_telegram_message(
+                        chat_id=publication.channel.chat_id,
+                        body="",
+                        message_type="vehicle_channel_remove_legacy_post",
+                        idempotency_key=(
+                            f"vehicle-channel:{publication.channel_id}:car:{publication.car_id}:"
+                            f"replacement:{outbox_message.pk}:delete:{obsolete_message_id}"
+                        ),
+                        target_message_id=obsolete_message_id,
+                        operation=TelegramOutboxMessage.Operation.DELETE_MESSAGE,
+                    )
+
+            if publication.telegram_message_id is not None:
+                channel_message_ids = dict(publication.car.channel_message_ids or {})
+                channel_message_ids[str(publication.channel_id)] = publication.telegram_message_id
+                publication.car.channel_message_ids = channel_message_ids
+                publication.car.save(update_fields=["channel_message_ids"])
+
+        if outbox_message.operation in {
+            TelegramOutboxMessage.Operation.SEND_PHOTO,
+            TelegramOutboxMessage.Operation.SEND_VIDEO,
+            TelegramOutboxMessage.Operation.SEND_MEDIA_GROUP,
+        }:
+            _store_telegram_media_file_ids(
+                outbox_message=outbox_message,
+                telegram_result=telegram_result,
+            )
+
         return {"outcome": "sent"}
+
+
+def _store_telegram_media_file_ids(*, outbox_message, telegram_result):
+    """Cache Telegram's returned file ID so an existing file is not resent."""
+    results = telegram_result if isinstance(telegram_result, list) else [telegram_result]
+    for reference, result in zip(_outbox_media_refs(outbox_message=outbox_message), results):
+        _store_telegram_media_file_id(reference=reference, telegram_result=result)
+
+
+def _store_telegram_media_file_id(*, reference, telegram_result):
+    from cars.models import CarPhoto, CarVideo
+
+    if reference["type"] == "car_photo":
+        photo = CarPhoto.objects.select_for_update().filter(pk=reference["id"]).first()
+        photos = telegram_result.get("photo", []) if isinstance(telegram_result, dict) else []
+        file_id = photos[-1].get("file_id") if photos else None
+        if photo is not None and file_id:
+            photo.telegram_file_id = str(file_id)
+            photo.save(update_fields=["telegram_file_id"])
+    elif reference["type"] == "car_video":
+        video = CarVideo.objects.select_for_update().filter(pk=reference["id"]).first()
+        payload = telegram_result.get("video", {}) if isinstance(telegram_result, dict) else {}
+        file_id = payload.get("file_id") if isinstance(payload, dict) else None
+        if video is not None and file_id:
+            video.telegram_file_id = str(file_id)
+            video.save(update_fields=["telegram_file_id"])
+
+
+def _load_outbox_vehicle_media(*, outbox_message):
+    """Read one queued local file only when the Worker is ready to send it."""
+    return _load_vehicle_media_reference(
+        media_object_type=outbox_message.media_object_type,
+        media_object_id=outbox_message.media_object_id,
+    )
+
+
+def _load_vehicle_media_reference(*, media_object_type, media_object_id):
+    """Load one local gallery file without modifying its website source file."""
+    from cars.models import CarPhoto, CarVideo
+    from .telegram.gateway import TelegramGatewayPermanentError
+
+    if media_object_type == "car_photo":
+        item = CarPhoto.objects.filter(pk=media_object_id).first()
+        file_field = item.image if item is not None else None
+    elif media_object_type == "car_video":
+        item = CarVideo.objects.filter(pk=media_object_id).first()
+        file_field = item.video if item is not None else None
+    else:
+        item = None
+        file_field = None
+
+    if item is None or not file_field:
+        raise TelegramGatewayPermanentError("Queued vehicle media no longer exists.")
+
+    try:
+        with file_field.open("rb") as media_file:
+            file_data = media_file.read()
+    except Exception as error:
+        raise TelegramGatewayPermanentError("Queued vehicle media cannot be read.") from error
+
+    content_type = mimetypes.guess_type(file_field.name)[0] or "application/octet-stream"
+    file_name = file_field.name.rsplit("/", 1)[-1]
+
+    if media_object_type == "car_photo" and content_type != "image/jpeg":
+        # Telegram's sendPhoto is most reliable with JPEG. Keep the original
+        # website asset untouched and convert only the outbound upload bytes.
+        try:
+            from io import BytesIO
+            from PIL import Image
+
+            image = Image.open(BytesIO(file_data)).convert("RGB")
+            converted = BytesIO()
+            image.save(converted, format="JPEG", quality=92, optimize=True)
+            file_data = converted.getvalue()
+            file_name = f"{file_name.rsplit('.', 1)[0]}.jpg"
+            content_type = "image/jpeg"
+        except Exception as error:
+            raise TelegramGatewayPermanentError(
+                "Queued vehicle image cannot be converted for Telegram."
+            ) from error
+
+    return {
+        "kind": "photo" if media_object_type == "car_photo" else "video",
+        "file_name": file_name,
+        "file_data": file_data,
+        "content_type": content_type,
+    }
 
 
 def _record_outbox_failure(*, outbox_id, transient, error):
@@ -1408,6 +2062,60 @@ def deliver_telegram_outbox_message(*, outbox_id, gateway=None):
                 text=outbox_message.body,
                 reply_markup=outbox_message.reply_markup,
                 reply_to_message_id=outbox_message.reply_to_message_id,
+            )
+        elif outbox_message.operation == TelegramOutboxMessage.Operation.EDIT_MESSAGE:
+            telegram_result = gateway.edit_message_text(
+                chat_id=outbox_message.chat_id,
+                message_id=outbox_message.target_message_id,
+                text=outbox_message.body,
+                reply_markup=outbox_message.reply_markup,
+            )
+        elif outbox_message.operation in {
+            TelegramOutboxMessage.Operation.SEND_PHOTO,
+            TelegramOutboxMessage.Operation.SEND_VIDEO,
+        }:
+            media_item = _load_outbox_vehicle_media(
+                outbox_message=outbox_message
+            )
+            if outbox_message.operation == TelegramOutboxMessage.Operation.SEND_PHOTO:
+                telegram_result = gateway.send_photo(
+                    chat_id=outbox_message.chat_id,
+                    file_name=media_item["file_name"],
+                    file_data=media_item["file_data"],
+                    content_type=media_item["content_type"],
+                    caption=outbox_message.body,
+                )
+            else:
+                telegram_result = gateway.send_video(
+                    chat_id=outbox_message.chat_id,
+                    file_name=media_item["file_name"],
+                    file_data=media_item["file_data"],
+                    content_type=media_item["content_type"],
+                    caption=outbox_message.body,
+                )
+        elif outbox_message.operation == TelegramOutboxMessage.Operation.SEND_MEDIA_GROUP:
+            media_items = [
+                _load_vehicle_media_reference(
+                    media_object_type=reference["type"],
+                    media_object_id=reference["id"],
+                )
+                for reference in _outbox_media_refs(outbox_message=outbox_message)
+            ]
+            telegram_result = gateway.send_media_group(
+                chat_id=outbox_message.chat_id,
+                media_items=media_items,
+                caption=outbox_message.body,
+            )
+        elif outbox_message.operation == TelegramOutboxMessage.Operation.EDIT_MEDIA_CAPTION:
+            telegram_result = gateway.edit_message_caption(
+                chat_id=outbox_message.chat_id,
+                message_id=outbox_message.target_message_id,
+                caption=outbox_message.body,
+            )
+        elif outbox_message.operation == TelegramOutboxMessage.Operation.DELETE_MESSAGE:
+            telegram_result = gateway.delete_message(
+                chat_id=outbox_message.chat_id,
+                message_id=outbox_message.target_message_id,
             )
         elif outbox_message.operation == TelegramOutboxMessage.Operation.ANSWER_CALLBACK:
             telegram_result = gateway.answer_callback_query(

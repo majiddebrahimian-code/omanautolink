@@ -8,6 +8,12 @@
 {% block page_description %}<p>{{ page_description }}</p>{% endblock %}
 
 {% block page_actions %}
+    {% if can_sync_sale_telegram and car.status == "sold" %}
+        <form method="post" action="{% url 'backoffice:vehicle_sale_sync_telegram' car.pk %}" class="backoffice-inline-form">{% csrf_token %}<button type="submit" class="backoffice-button backoffice-button--outline"><i class="fa fa-paper-plane" aria-hidden="true"></i> همگام‌سازی Telegram</button></form>
+    {% endif %}
+    {% if can_reverse_sale %}
+        <a href="{% url 'backoffice:vehicle_sale_reverse' car.pk %}" class="backoffice-button backoffice-button--danger"><i class="fa fa-undo" aria-hidden="true"></i> بازگشت از فروش</a>
+    {% endif %}
     <a href="{% url list_url_name %}" class="backoffice-button backoffice-button--secondary">
         <i class="fa fa-arrow-right" aria-hidden="true"></i>
         بازگشت به فهرست
