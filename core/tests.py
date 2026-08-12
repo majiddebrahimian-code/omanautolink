@@ -56,7 +56,7 @@ class PublicWebsiteTests(TestCase):
         self.assertContains(response, self.public_car.title)
         self.assertNotContains(response, self.hidden_car.title)
         self.assertContains(response, "مسیر واردات")
-        self.assertContains(response, "مشاوره در تلگرام")
+        self.assertContains(response, "header-consultation-link")
 
     def test_navigation_changes_are_rendered_from_database(self):
         HeaderNavigationItem.objects.create(
@@ -69,7 +69,7 @@ class PublicWebsiteTests(TestCase):
 
         self.assertContains(response, "راهنمای خرید")
 
-    def test_homepage_control_rail_uses_database_quick_actions(self):
+    def test_homepage_quick_links_use_database_quick_actions(self):
         home_page = self.site_config.home_page
         quick_action, _ = HomeQuickAction.objects.get_or_create(
             home_page=home_page,
@@ -87,10 +87,10 @@ class PublicWebsiteTests(TestCase):
 
         response = self.client.get(reverse("core:home"))
 
-        self.assertContains(response, "lobby-layout")
-        self.assertContains(response, "lobby-rail__action")
+        self.assertContains(response, "home-page")
+        self.assertContains(response, "home-quick-links")
         self.assertContains(response, "گفت‌وگو با مشاور")
-        self.assertContains(response, "lobby-icon--support")
+        self.assertContains(response, "homepage.css")
 
     def test_public_vehicle_list_and_detail_exclude_non_public_vehicles(self):
         list_response = self.client.get(reverse("cars:vehicle_list"))

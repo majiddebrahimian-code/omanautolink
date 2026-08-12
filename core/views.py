@@ -2,6 +2,8 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
+from blog.services import public_post_queryset
+
 from cars.public import attach_cover_photos, public_car_queryset, with_public_photos
 from cars.spin import get_public_spin_payload
 from tracking.models import Stage
@@ -39,6 +41,7 @@ def home(request):
     )
     attach_cover_photos(featured_vehicles)
 
+    featured_posts = list(public_post_queryset()[:3])
     active_stages = list(Stage.objects.filter(is_active=True).order_by("order")[:5])
     feature_cards = list(
         home_config.feature_cards.filter(is_enabled=True).order_by("sort_order", "pk")
@@ -72,6 +75,7 @@ def home(request):
         "hero_car": hero_car,
         "hero_spin": hero_spin,
         "featured_vehicles": featured_vehicles,
+        "featured_posts": featured_posts,
         "active_stages": active_stages,
         "feature_cards": feature_cards,
         "quick_actions": quick_actions,

@@ -31,7 +31,9 @@
     {% if seo_config.bing_site_verification %}<meta name="msvalidate.01" content="{{ seo_config.bing_site_verification }}">{% endif %}
     {% if page_json_ld %}<script type="application/ld+json">{{ page_json_ld }}</script>{% endif %}
 
-    <link rel="stylesheet" href="{% static 'core/css/public-site.css' %}?v=tracking-journey-1">
+    <link rel="stylesheet" href="{% static 'core/vendor/persian-adminlte/font-awesome/css/font-awesome.min.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/public-site.css' %}?v=homepage-foundation-1">
+    {% block extra_styles %}{% endblock %}
     <style>
         :root {
             --site-primary: {{ site_config.primary_color|default:'#2563EB' }};
@@ -40,7 +42,7 @@
         }
     </style>
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
     <a class="skip-link" href="#main-content">پرش به محتوای اصلی</a>
     <div class="site-shell">
         <header class="site-header" data-site-header>
@@ -73,14 +75,18 @@
                     </ul>
                 </nav>
 
-                <form class="header-tracking-form" method="post" action="{% url 'tracking:public_lookup' %}" role="search">
-                    {% csrf_token %}
-                    <label class="sr-only" for="site-tracking-code">کد رهگیری</label>
-                    <input id="site-tracking-code" name="tracking_code" type="text" maxlength="40" autocomplete="off" placeholder="شمارهٔ رهگیری را وارد کنید">
-                    <button type="submit" aria-label="رهگیری خودرو">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
-                    </button>
-                </form>
+                <div class="header-actions">
+                    <a class="header-tracking-link" href="{% url 'tracking:public_lookup' %}">
+                        <i class="fa fa-map-marker" aria-hidden="true"></i>
+                        <span>رهگیری سفارش</span>
+                    </a>
+                    {% if site_config.telegram_url %}
+                        <a class="header-consultation-link" href="{{ site_config.telegram_url }}" target="_blank" rel="noopener noreferrer">
+                            <i class="fa fa-paper-plane" aria-hidden="true"></i>
+                            <span>مشاوره</span>
+                        </a>
+                    {% endif %}
+                </div>
             </div>
         </header>
 
