@@ -6,7 +6,6 @@ from cars.models import Car
 
 from .models import (
     HeaderNavigationItem,
-    HomeQuickAction,
     SeoConfiguration,
     SiteConfiguration,
 )
@@ -55,7 +54,7 @@ class PublicWebsiteTests(TestCase):
         self.assertContains(response, "توضیح سئوی قابل‌تنظیم")
         self.assertContains(response, self.public_car.title)
         self.assertNotContains(response, self.hidden_car.title)
-        self.assertContains(response, "مسیر واردات")
+        self.assertContains(response, 'id="import-route"')
         self.assertContains(response, "header-consultation-link")
 
     def test_navigation_changes_are_rendered_from_database(self):
@@ -69,29 +68,12 @@ class PublicWebsiteTests(TestCase):
 
         self.assertContains(response, "راهنمای خرید")
 
-    def test_homepage_quick_links_use_database_quick_actions(self):
-        home_page = self.site_config.home_page
-        quick_action, _ = HomeQuickAction.objects.get_or_create(
-            home_page=home_page,
-            action=HomeQuickAction.Action.SUPPORT,
-            defaults={
-                "label": "گفت‌وگو با مشاور",
-                "destination": "/contact/",
-                "sort_order": 90,
-            },
-        )
-        quick_action.label = "گفت‌وگو با مشاور"
-        quick_action.destination = "/contact/"
-        quick_action.is_enabled = True
-        quick_action.save()
-
+    def test_homepage_does_not_render_legacy_quick_link_strip(self):
         response = self.client.get(reverse("core:home"))
 
         self.assertContains(response, "home-page")
-        self.assertContains(response, "home-quick-links")
-        self.assertContains(response, "گفت‌وگو با مشاور")
+        self.assertNotContains(response, "home-quick-links")
         self.assertContains(response, "homepage.css")
-
     def test_public_vehicle_list_and_detail_exclude_non_public_vehicles(self):
         list_response = self.client.get(reverse("cars:vehicle_list"))
         detail_response = self.client.get(self.public_car.get_absolute_url())

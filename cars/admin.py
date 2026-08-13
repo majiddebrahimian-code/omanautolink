@@ -79,6 +79,7 @@ class CarAdmin(admin.ModelAdmin):
     change_form_template = "admin/cars/car/change_form.html"
 
     list_display = [
+        "vehicle_code",
         "tracking_code",
         "title",
         "brand",
@@ -89,12 +90,13 @@ class CarAdmin(admin.ModelAdmin):
         "spin_360_enabled",
     ]
     list_filter = ["status", "brand", "is_featured", "is_deleted"]
-    search_fields = ["tracking_code", "title", "brand", "model"]
+    search_fields = ["vehicle_code", "tracking_code", "title", "brand", "model"]
     list_select_related = ["customer", "current_stage"]
     inlines = [CarPhotoInline, CarSpinFrameInline, VehicleArchiveEventInline]
 
     # Lifecycle and external-integration fields must be changed by services.
     readonly_fields = [
+        "vehicle_code",
         "status",
         "tracking_code",
         "customer",
@@ -439,6 +441,7 @@ class VehicleArchiveEventAdmin(admin.ModelAdmin):
     ]
     list_filter = ["action", "source", "created_at"]
     search_fields = [
+        "car__vehicle_code",
         "car__tracking_code",
         "car__title",
         "performed_by__username",
@@ -491,6 +494,7 @@ class VehicleHoldAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "created_at"]
     search_fields = [
         "car__title",
+        "car__vehicle_code",
         "car__tracking_code",
         "customer_name",
         "customer_phone",

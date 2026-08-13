@@ -1,44 +1,52 @@
 {% extends "public/base.html" %}
 
 {% block content %}
-<section class="page-hero">
+<section class="section public-inventory-section">
     <div class="container">
-        <p class="eyebrow"><span></span>موجودی به‌روز</p>
-        <h1>خودروهای موجود</h1>
-        <p>خودروهای آمادهٔ فروش را بررسی کنید. برای مذاکره و هماهنگی خرید، از طریق مشاوران ما در تلگرام ارتباط بگیرید.</p>
-    </div>
-</section>
+        <form method="get" class="public-inventory-search public-inventory-search--primary" data-inventory-search aria-label="جست‌وجوی خودروهای موجود">
+            <div class="public-inventory-search__intro">
+                <p class="eyebrow"><span></span>موجودی به‌روز</p>
+                <h1>خودروی موردنظر خود را پیدا کنید</h1>
+                <p>برند، مدل، بازهٔ سال ساخت و بودجه را انتخاب کنید.</p>
+            </div>
+            <div class="public-inventory-search__grid public-inventory-search__grid--six">
+                <label class="public-inventory-search__field"><span>برند</span><select name="brand"><option value="">همهٔ برندها</option>{% for brand in filter_options.brands %}<option value="{{ brand }}" {% if selected_filters.brand == brand %}selected{% endif %}>{{ brand }}</option>{% endfor %}</select></label>
+                <label class="public-inventory-search__field"><span>مدل</span><select name="model"><option value="">همهٔ مدل‌ها</option>{% for model in filter_options.models %}<option value="{{ model }}" {% if selected_filters.model == model %}selected{% endif %}>{{ model }}</option>{% endfor %}</select></label>
+                <label class="public-inventory-search__field"><span>سال ساخت از</span><select name="year_min"><option value="">بدون محدودیت</option>{% for year in filter_options.years %}<option value="{{ year }}" {% if selected_filters.year_min == year %}selected{% endif %}>{{ year }}</option>{% endfor %}</select></label>
+                <label class="public-inventory-search__field"><span>سال ساخت تا</span><select name="year_max"><option value="">بدون محدودیت</option>{% for year in filter_options.years %}<option value="{{ year }}" {% if selected_filters.year_max == year %}selected{% endif %}>{{ year }}</option>{% endfor %}</select></label>
+                <label class="public-inventory-search__field"><span>قیمت از</span><input type="number" inputmode="numeric" name="price_min" value="{{ selected_filters.price_min|default:'' }}" min="{{ filter_options.min_price }}" placeholder="حداقل قیمت"></label>
+                <label class="public-inventory-search__field"><span>قیمت تا</span><input type="number" inputmode="numeric" name="price_max" value="{{ selected_filters.price_max|default:'' }}" max="{{ filter_options.max_price }}" placeholder="حداکثر قیمت"></label>
+            </div>
+            <div class="public-inventory-search__actions"><button class="button button--primary" type="submit"><i class="fa fa-search" aria-hidden="true"></i> نمایش خودروها</button>{% if selected_filters.brand or selected_filters.model or selected_filters.year_min or selected_filters.year_max or selected_filters.price_min or selected_filters.price_max %}<a href="{% url 'cars:vehicle_list' %}">پاک‌کردن فیلترها</a>{% endif %}</div>
+        </form>
 
-<section class="section">
-    <div class="container">
-        <div class="inventory-grid">
+        <div class="public-inventory-results-heading"><h2>خودروهای موجود</h2><span>{{ page_obj.paginator.count }} خودرو</span></div>
+        <div class="inventory-grid inventory-grid--refined">
             {% for vehicle in vehicles %}
-                <article class="vehicle-card">
+                <article class="vehicle-card vehicle-card--refined">
                     <a class="vehicle-card__media" href="{{ vehicle.get_absolute_url }}">
-                        {% if vehicle.cover_photo %}
-                            <img src="{{ vehicle.cover_photo.image.url }}" alt="{{ vehicle.cover_photo.alt_text|default:vehicle.title }}" width="720" height="450" loading="lazy">
-                        {% else %}
-                            <span class="vehicle-card__placeholder" aria-hidden="true">{{ vehicle.brand|slice:":1" }}</span>
-                        {% endif %}
+                        {% if vehicle.cover_photo %}<img src="{{ vehicle.cover_photo.image.url }}" alt="{{ vehicle.cover_photo.alt_text|default:vehicle.title }}" width="720" height="450" loading="lazy">{% else %}<span class="vehicle-card__placeholder" aria-hidden="true">{{ vehicle.brand|slice:":1" }}</span>{% endif %}
                     </a>
                     <div class="vehicle-card__body">
-                        <p>{{ vehicle.brand }} · {{ vehicle.model }}</p>
-                        <h2><a href="{{ vehicle.get_absolute_url }}">{{ vehicle.title }}</a></h2>
-                        <div><span>{% if vehicle.year %}{{ vehicle.year }}{% else %}سال نامشخص{% endif %}</span><strong>{{ vehicle.price_display }}</strong></div>
+                        <div class="vehicle-card__title-row"><h2><a href="{{ vehicle.get_absolute_url }}">{{ vehicle.title }}</a></h2><strong>{{ vehicle.price_display }}</strong></div>
+                        <small class="vehicle-card__code">کد خودرو: <b dir="ltr">{{ vehicle.vehicle_code }}</b></small>
+                        <details class="vehicle-card__details">
+                            <summary>مشخصات بیشتر <i class="fa fa-chevron-down" aria-hidden="true"></i></summary>
+                            <dl>
+                                <div><dt>برند و مدل</dt><dd>{{ vehicle.brand }} {{ vehicle.model }}</dd></div>
+                                <div><dt>سال ساخت</dt><dd>{{ vehicle.year|default:"—" }}</dd></div>
+                                <div><dt>رنگ</dt><dd>{{ vehicle.color|default:"—" }}</dd></div>
+                                <div><dt>کارکرد</dt><dd>{% if vehicle.mileage %}{{ vehicle.mileage }} کیلومتر{% else %}—{% endif %}</dd></div>
+                            </dl>
+                            <a href="{{ vehicle.get_absolute_url }}">مشاهدهٔ صفحهٔ خودرو <i class="fa fa-arrow-left" aria-hidden="true"></i></a>
+                        </details>
                     </div>
                 </article>
             {% empty %}
-                <div class="empty-state"><p>در حال حاضر خودروی قابل‌نمایش در موجودی نیست.</p><a class="button button--primary" href="{% url 'customers:custom_vehicle_request_create' %}">ثبت درخواست خودروی سفارشی</a></div>
+                <div class="empty-state"><p>خودرویی مطابق فیلترهای شما پیدا نشد.</p><a class="button button--primary" href="{% url 'customers:custom_vehicle_request_create' %}">ثبت درخواست خودروی سفارشی</a></div>
             {% endfor %}
         </div>
-
-        {% if page_obj.paginator.num_pages > 1 %}
-            <nav class="pagination" aria-label="صفحه‌بندی خودروها">
-                {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}">قبلی</a>{% endif %}
-                <span class="current">{{ page_obj.number }} از {{ page_obj.paginator.num_pages }}</span>
-                {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}">بعدی</a>{% endif %}
-            </nav>
-        {% endif %}
+        {% if page_obj.paginator.num_pages > 1 %}<nav class="pagination" aria-label="صفحه‌بندی خودروها">{% if page_obj.has_previous %}<a href="?{% if pagination_query %}{{ pagination_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">قبلی</a>{% endif %}<span class="current">{{ page_obj.number }} از {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a href="?{% if pagination_query %}{{ pagination_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">بعدی</a>{% endif %}</nav>{% endif %}
     </div>
 </section>
 {% endblock %}

@@ -4,23 +4,30 @@ from django.shortcuts import render
 
 from core.seo import breadcrumb_schema, page_context
 
+from .inventory_search import apply_public_inventory_filters, public_inventory_filter_options
 from .public import attach_cover_photos, public_car_queryset, with_public_photos
 from .spin import get_public_spin_payload
 
 
 def public_vehicle_list(request):
-    vehicles = with_public_photos(
-        public_car_queryset().order_by("-is_featured", "-created_at")
+    public_queryset = public_car_queryset()
+    filtered_queryset, selected_filters = apply_public_inventory_filters(
+        public_queryset,
+        request.GET,
     )
+    vehicles = with_public_photos(filtered_queryset)
     paginator = Paginator(vehicles, 12)
     page_obj = paginator.get_page(request.GET.get("page"))
     attach_cover_photos(page_obj.object_list)
+
+    pagination_query = request.GET.copy()
+    pagination_query.pop("page", None)
 
     context = {
         **page_context(
             request,
             title="خودروهای موجود برای واردات",
-            description="خودروهای آمادهٔ فروش و واردات را بررسی کنید و برای دریافت مشاوره با کارشناسان تماس بگیرید.",
+            description="خودروهای آمادهٔ فروش و واردات را بر اساس کد خودرو، برند، مدل، رنگ، سال و بودجه بررسی کنید.",
             canonical_path="/cars/",
             structured_data=breadcrumb_schema(
                 request,
@@ -32,9 +39,14 @@ def public_vehicle_list(request):
         ),
         "page_obj": page_obj,
         "vehicles": page_obj.object_list,
+        "selected_filters": selected_filters,
+        "filter_options": public_inventory_filter_options(
+            public_queryset,
+            selected_brand=selected_filters["brand"],
+        ),
+        "pagination_query": pagination_query.urlencode(),
     }
     return render(request, "cars/vehicle_list.html", context)
-
 
 def public_vehicle_detail(request, slug, pk):
     vehicle = with_public_photos(public_car_queryset()).filter(pk=pk).first()

@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
+    <meta name="color-scheme" content="light">
     <title>{{ page_title|default:site_config.site_name }}</title>
     {% if page_description %}<meta name="description" content="{{ page_description }}">{% endif %}
     {% if page_keywords %}<meta name="keywords" content="{{ page_keywords }}">{% endif %}
@@ -32,7 +32,7 @@
     {% if page_json_ld %}<script type="application/ld+json">{{ page_json_ld }}</script>{% endif %}
 
     <link rel="stylesheet" href="{% static 'core/vendor/persian-adminlte/font-awesome/css/font-awesome.min.css' %}">
-    <link rel="stylesheet" href="{% static 'core/css/public-site.css' %}?v=homepage-foundation-1">
+    <link rel="stylesheet" href="{% static 'core/css/public-site.css' %}?v=public-inventory-clean-2">
     {% block extra_styles %}{% endblock %}
     <style>
         :root {
@@ -146,6 +146,6 @@
             </div>
         </footer>
     </div>
-    <script src="{% static 'core/js/public-site.js' %}?v=tracking-journey-1" defer></script>
+    <script src="{% static 'core/js/public-site.js' %}?v=inventory-search-1&tracking-journey-1" defer></script>
 </body>
 </html>

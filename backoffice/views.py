@@ -328,6 +328,7 @@ def _get_machine_list_context(request, *, queryset):
             "title",
             "brand",
             "model",
+            "vehicle_code",
             "tracking_code",
             "customer__full_name",
         ),
@@ -1063,6 +1064,7 @@ def vehicle_hold_list(request):
         queryset=queryset,
         search_fields=(
             "car__title",
+            "car__vehicle_code",
             "car__tracking_code",
             "customer_name",
             "customer_phone",
@@ -1185,7 +1187,7 @@ def _get_sold_machine_context(request, *, queryset):
             )
             .order_by("-updated_at")
         ),
-        search_fields=("customer__full_name", "tracking_code"),
+        search_fields=("customer__full_name", "vehicle_code", "tracking_code"),
     )
 
     for machine in context["page_obj"].object_list:
@@ -1462,7 +1464,7 @@ def customer_list(request):
     context = _get_paginated_context(
         request=request,
         queryset=queryset,
-        search_fields=("full_name", "phone", "telegram_id", "cars__tracking_code"),
+        search_fields=("full_name", "phone", "telegram_id", "cars__vehicle_code", "cars__tracking_code"),
     )
     context.update(
         {

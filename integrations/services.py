@@ -130,6 +130,7 @@ def _vehicle_publication_body(*, car):
     details = [
         f"🚗 {car.title}",
         "",
+        f"🆔 کد خودرو: {car.vehicle_code}",
         f"🏷 برند: {car.brand}",
         f"📌 مدل: {car.model}",
     ]

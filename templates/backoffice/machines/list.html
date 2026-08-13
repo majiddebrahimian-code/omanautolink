@@ -43,7 +43,7 @@
                     name="q"
                     value="{{ query }}"
                     class="backoffice-input"
-                    placeholder="نام ماشین، برند، مدل، نام خریدار یا کد رهگیری"
+                    placeholder="نام ماشین، برند، مدل، نام خریدار، کد خودرو یا کد رهگیری"
                 >
             </div>
 
@@ -116,6 +116,7 @@
                                         <small>
                                             {{ machine.brand }} {{ machine.model }}
                                             {% if machine.year %}— {{ machine.year }}{% endif %}
+                                            <br><span dir="ltr">{{ machine.vehicle_code }}</span>
                                         </small>
                                     </div>
                                 </div>

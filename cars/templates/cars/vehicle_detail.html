@@ -41,6 +41,7 @@
             <h1>{{ vehicle.title }}</h1>
             <p>{{ vehicle.brand }} · {{ vehicle.model }}</p>
             <p class="vehicle-detail__price">{{ vehicle.price_display }}</p>
+            <p class="vehicle-detail__inventory-code">کد خودرو برای مشاوره: <strong dir="ltr">{{ vehicle.vehicle_code }}</strong></p>
             <ul class="vehicle-specs">
                 {% if vehicle.year %}<li>سال ساخت: {{ vehicle.year }}</li>{% endif %}
                 {% if vehicle.color %}<li>رنگ: {{ vehicle.color }}</li>{% endif %}

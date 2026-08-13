@@ -295,4 +295,37 @@
     };
 
     document.querySelectorAll("[data-tracking-journey]").forEach(setupTrackingJourney);
+
+    const revealElements = document.querySelectorAll("[data-reveal]");
+    if (revealElements.length) {
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (reduceMotion || !("IntersectionObserver" in window)) {
+            revealElements.forEach((element) => element.classList.add("has-revealed"));
+        } else {
+            const observer = new IntersectionObserver(
+                (entries, currentObserver) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add("has-revealed");
+                            currentObserver.unobserve(entry.target);
+                        }
+                    });
+                },
+                { threshold: 0.12 },
+            );
+            revealElements.forEach((element) => observer.observe(element));
+        }
+    }
+// Keep the price-slider value understandable while preserving a normal GET form.
+document.querySelectorAll("[data-inventory-search]").forEach((form) => {
+    const slider = form.querySelector("[data-price-slider]");
+    const output = form.querySelector("[data-price-output]");
+    if (!slider || !output) {
+        return;
+    }
+    const formatPrice = (value) => Number(value || 0).toLocaleString("fa-IR");
+    const updatePrice = () => { output.textContent = formatPrice(slider.value); };
+    slider.addEventListener("input", updatePrice);
+    updatePrice();
+});
 })();

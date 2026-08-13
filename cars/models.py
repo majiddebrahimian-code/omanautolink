@@ -1,3 +1,5 @@
+import secrets
+
 from django.db import models
 from django.conf import settings
 
@@ -26,6 +28,15 @@ class Car(models.Model):
         IN_TRANSIT = "in_transit", "In transit"
         DELIVERED = "delivered", "Delivered"
 
+    # Public inventory code: created at vehicle creation and safe to share with a consultant.
+    # This is deliberately different from the private tracking code created after a sale.
+    vehicle_code = models.CharField(
+        max_length=24,
+        unique=True,
+        blank=True,
+        editable=False,
+        db_index=True,
+    )
     tracking_code = models.CharField(max_length=40, unique=True, blank=True, null=True)
     title = models.CharField(max_length=200)
     slug = models.SlugField(
@@ -112,7 +123,7 @@ class Car(models.Model):
         ]
 
     def __str__(self):
-        identifier = self.tracking_code or f"Car #{self.pk}"
+        identifier = self.vehicle_code or self.tracking_code or f"Car #{self.pk}"
         return f"{identifier} — {self.title}"
 
     def _generate_unique_slug(self):
@@ -129,7 +140,18 @@ class Car(models.Model):
 
         return candidate
 
+    def _generate_unique_vehicle_code(self):
+        """Create a short, stable inventory reference for customer-consultant calls."""
+
+        existing_cars = type(self).objects.exclude(pk=self.pk)
+        while True:
+            candidate = f"CAR-{secrets.token_hex(4).upper()}"
+            if not existing_cars.filter(vehicle_code=candidate).exists():
+                return candidate
+
     def save(self, *args, **kwargs):
+        if not self.vehicle_code:
+            self.vehicle_code = self._generate_unique_vehicle_code()
         if not self.slug:
             self.slug = self._generate_unique_slug()
 

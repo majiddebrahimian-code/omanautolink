@@ -1209,3 +1209,60 @@ class PublicVehicleGalleryTemplateTests(TestCase):
         self.assertContains(response, "data-gallery-spin-control")
         self.assertContains(response, "data-gallery-main-image")
         self.assertContains(response, "data-gallery-thumbnail", count=2)
+
+
+class PublicInventorySearchTests(TestCase):
+    def setUp(self):
+        self.blue_car = Car.objects.create(
+            title="Blue Search Vehicle",
+            brand="Toyota",
+            model="Camry",
+            year=2024,
+            color="Blue",
+            price_amount=120000,
+            status=Car.Status.FOR_SALE,
+        )
+        self.red_car = Car.objects.create(
+            title="Red Search Vehicle",
+            brand="Kia",
+            model="K5",
+            year=2022,
+            color="Red",
+            price_amount=90000,
+            status=Car.Status.FOR_SALE,
+        )
+
+    def test_new_vehicle_receives_a_stable_public_vehicle_code(self):
+        self.assertRegex(self.blue_car.vehicle_code, r"^CAR-[0-9A-F]{8}$")
+        self.blue_car.refresh_from_db()
+        self.assertRegex(self.blue_car.vehicle_code, r"^CAR-[0-9A-F]{8}$")
+
+    def test_public_inventory_can_search_by_vehicle_code_and_dynamic_brand(self):
+        response = self.client.get(
+            reverse("cars:vehicle_list"),
+            {"q": self.blue_car.vehicle_code, "brand": "Toyota"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.blue_car.title)
+        self.assertNotContains(response, self.red_car.title)
+        self.assertContains(response, self.blue_car.vehicle_code)
+        self.assertContains(response, 'name="brand"')
+        self.assertContains(response, '<option value="Toyota" selected>')
+
+    def test_public_inventory_filters_by_price_range(self):
+        response = self.client.get(
+            reverse("cars:vehicle_list"),
+            {"price_min": "100000", "price_max": "130000"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.blue_car.title)
+        self.assertNotContains(response, self.red_car.title)
+    def test_homepage_exposes_the_shared_vehicle_search_form(self):
+        response = self.client.get(reverse("core:home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "approved-hero-search")
+        self.assertContains(response, 'action="/cars/"')
+        self.assertContains(response, "Toyota")

@@ -1,211 +1,218 @@
 {% extends "public/base.html" %}
 {% load static %}
 
-{% block body_class %}home-page{% endblock %}
+{% block body_class %}home-page home-page--approved{% endblock %}
 
 {% block extra_styles %}
-    <link rel="stylesheet" href="{% static 'core/css/homepage.css' %}?v=homepage-redesign-1">
+    <link rel="stylesheet" href="{% static 'core/css/homepage.css' %}?v=approved-frontend-magazine-panel-1">
 {% endblock %}
 
 {% block content %}
-<section class="home-hero"{% if home_config.hero_background_image %} style="--home-hero-image: url('{{ home_config.hero_background_image.url }}');{% endif %}" aria-labelledby="home-title">
-    <div class="home-hero__overlay" aria-hidden="true"></div>
-    <div class="container home-hero__grid">
-        <div class="home-hero__copy">
-            {% if home_config.hero_eyebrow %}<p class="home-kicker">{{ home_config.hero_eyebrow }}</p>{% endif %}
-            <h1 id="home-title">{{ home_config.hero_title|default:site_config.tagline|default:site_config.site_name }}</h1>
-            {% if home_config.hero_description %}<p class="home-hero__description">{{ home_config.hero_description }}</p>{% endif %}
-            <div class="home-hero__actions">
-                {% if home_config.primary_cta_label and home_config.primary_cta_destination %}
-                    <a class="home-button home-button--primary" href="{{ home_config.primary_cta_destination }}">
-                        <span>{{ home_config.primary_cta_label }}</span><i class="fa fa-arrow-left" aria-hidden="true"></i>
-                    </a>
-                {% else %}
-                    <a class="home-button home-button--primary" href="{% url 'cars:vehicle_list' %}"><span>مشاهده خودروها</span><i class="fa fa-arrow-left" aria-hidden="true"></i></a>
-                {% endif %}
-                <a class="home-button home-button--outline" href="{% url 'tracking:public_lookup' %}">
-                    <span>رهگیری سفارش</span><i class="fa fa-map-marker" aria-hidden="true"></i>
-                </a>
+<section class="approved-hero" id="top" aria-labelledby="home-title" style="{% if home_config.hero_background_image %}--approved-hero-image: url('{{ home_config.hero_background_image.url }}');{% else %}--approved-hero-image: url('{% static 'core/images/home/approved/hero.jpg' %}');{% endif %}">
+    <div class="approved-hero__overlay" aria-hidden="true"></div>
+    <div class="container approved-hero__content" data-reveal>
+        <form class="approved-hero-search approved-hero-search--booking" action="{% url 'cars:vehicle_list' %}" method="get" aria-labelledby="home-title">
+            <p class="approved-hero-search__eyebrow">موجودی واقعی خودروهای عمان</p>
+            <h1 id="home-title">خودروی موردنظر خود را پیدا کنید</h1>
+            <p class="approved-hero-search__intro">فیلترهای زیر را انتخاب کنید تا فقط خودروهای متناسب با بودجه و سلیقهٔ شما نمایش داده شوند.</p>
+            <div class="approved-hero-search__fields">
+                <label class="approved-hero-search__field">
+                    <span>برند</span>
+                    <select name="brand">
+                        <option value="">همهٔ برندها</option>
+                        {% for brand in vehicle_search_options.brands %}<option value="{{ brand }}">{{ brand }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label class="approved-hero-search__field">
+                    <span>مدل</span>
+                    <select name="model">
+                        <option value="">همهٔ مدل‌ها</option>
+                        {% for model in vehicle_search_options.models %}<option value="{{ model }}">{{ model }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label class="approved-hero-search__field">
+                    <span>سال ساخت از</span>
+                    <select name="year_min">
+                        <option value="">بدون محدودیت</option>
+                        {% for year in vehicle_search_options.years %}<option value="{{ year }}">{{ year }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label class="approved-hero-search__field">
+                    <span>سال ساخت تا</span>
+                    <select name="year_max">
+                        <option value="">بدون محدودیت</option>
+                        {% for year in vehicle_search_options.years %}<option value="{{ year }}">{{ year }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label class="approved-hero-search__field">
+                    <span>قیمت از</span>
+                    <input name="price_min" type="number" inputmode="numeric" min="{{ vehicle_search_options.min_price }}" placeholder="حداقل قیمت">
+                </label>
+                <label class="approved-hero-search__field">
+                    <span>قیمت تا</span>
+                    <input name="price_max" type="number" inputmode="numeric" max="{{ vehicle_search_options.max_price }}" placeholder="حداکثر قیمت">
+                </label>
             </div>
-        </div>
-
-        <div class="home-hero__vehicle">
-            {% if hero_spin %}
-                <div class="home-hero__spin" data-spin-viewer data-spin-frames-id="hero-spin-frames" tabindex="0" role="group" aria-label="نمای ۳۶۰ درجهٔ {{ hero_car.title }}. برای چرخش، تصویر را بکشید یا از کلیدهای جهت‌دار استفاده کنید.">
-                    <img data-spin-image src="{{ hero_spin.frame_urls.0 }}" alt="نمای خودرو {{ hero_car.title }}" width="1280" height="800" fetchpriority="high" decoding="sync">
-                </div>
-                {{ hero_spin.frame_urls|json_script:"hero-spin-frames" }}
-            {% elif hero_car and hero_car.cover_photo %}
-                <img src="{{ hero_car.cover_photo.image.url }}" alt="{{ hero_car.cover_photo.alt_text|default:hero_car.title }}" width="1280" height="800" fetchpriority="high" decoding="sync">
-            {% endif %}
-        </div>
-    </div>
-</section>
-
-<section class="home-featured section" aria-labelledby="featured-vehicles-title">
-    <div class="container">
-        <div class="home-section-heading">
-            <div>
-                <p class="home-kicker">انتخاب هوشمندانه</p>
-                <h2 id="featured-vehicles-title">{{ home_config.featured_vehicles_heading|default:"خودروهای منتخب" }}</h2>
+            <button class="approved-button approved-button--primary approved-hero-search__submit" type="submit"><i class="fa fa-search" aria-hidden="true"></i> جست‌وجوی خودرو</button>
+            <div class="approved-hero-search__links">
+                <a href="{% url 'cars:vehicle_list' %}">نمایش همهٔ خودروها</a>
+                <a href="{% url 'customers:custom_vehicle_request_create' %}">خودرو را پیدا نکردید؟ درخواست سفارشی</a>
             </div>
-            <a class="home-text-link" href="{% url 'cars:vehicle_list' %}">مشاهده همه <i class="fa fa-arrow-left" aria-hidden="true"></i></a>
-        </div>
-
-        <div class="featured-vehicle-grid">
-            {% for vehicle in featured_vehicles %}
-                <article class="featured-vehicle-card{% if hero_car and vehicle.pk == hero_car.pk %} is-selected{% endif %}">
-                    <a class="featured-vehicle-card__image" href="{{ vehicle.get_absolute_url }}">
-                        {% if vehicle.cover_photo %}
-                            <img src="{{ vehicle.cover_photo.image.url }}" alt="{{ vehicle.cover_photo.alt_text|default:vehicle.title }}" width="640" height="400" loading="lazy">
-                        {% else %}
-                            <span class="featured-vehicle-card__empty"><i class="fa fa-car" aria-hidden="true"></i></span>
-                        {% endif %}
-                    </a>
-                    <div class="featured-vehicle-card__body">
-                        <p>{{ vehicle.brand }} · {% if vehicle.year %}{{ vehicle.year }}{% else %}سال نامشخص{% endif %}</p>
-                        <h3><a href="{{ vehicle.get_absolute_url }}">{{ vehicle.title }}</a></h3>
-                        <div><span>{% if vehicle.mileage %}{{ vehicle.mileage }} کیلومتر{% else %}کارکرد نامشخص{% endif %}</span><strong>{{ vehicle.price_display }}</strong></div>
-                    </div>
-                </article>
-            {% empty %}
-                <div class="home-empty-state"><p>به‌زودی خودروهای منتخب در این بخش نمایش داده می‌شوند.</p></div>
-            {% endfor %}
-        </div>
-
-        {% if quick_actions %}
-            <div class="home-quick-links" aria-label="دسترسی‌های سریع">
-                {% for action in quick_actions %}
-                    <a href="{{ action.destination }}"{% if action.open_in_new_tab %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ action.label }}</a>
-                {% endfor %}
-            </div>
-        {% endif %}
-    </div>
-</section>
-
-<section class="home-spin-section" aria-labelledby="spin-title">
-    <div class="container home-spin-section__grid">
-        <div class="home-spin-section__copy">
-            <p class="home-kicker">تجربهٔ تعاملی</p>
-            <h2 id="spin-title">نمای <em>360</em> درجه</h2>
-            <p>خودرو را از زوایای مختلف ببینید و با اطمینان بیشتری تصمیم بگیرید.</p>
-            {% if hero_car %}<a class="home-button home-button--primary" href="{{ hero_car.get_absolute_url }}">جزئیات {{ hero_car.title }} <i class="fa fa-arrow-left" aria-hidden="true"></i></a>{% endif %}
-        </div>
-        <div class="home-spin-section__viewer">
-            {% if hero_spin %}
-                <div class="home-spin-section__spin" data-spin-viewer data-spin-frames-id="section-spin-frames" tabindex="0" role="group" aria-label="نمای ۳۶۰ درجهٔ {{ hero_car.title }}. برای چرخش، تصویر را بکشید یا از کلیدهای جهت‌دار استفاده کنید.">
-                    <img data-spin-image src="{{ hero_spin.frame_urls.0 }}" alt="نمای جانبی {{ hero_car.title }}" width="1280" height="800" loading="lazy">
-                </div>
-                {{ hero_spin.frame_urls|json_script:"section-spin-frames" }}
-            {% elif hero_car and hero_car.cover_photo %}
-                <img src="{{ hero_car.cover_photo.image.url }}" alt="{{ hero_car.cover_photo.alt_text|default:hero_car.title }}" width="1280" height="800" loading="lazy">
-            {% endif %}
-            <span class="home-spin-section__badge">360°</span>
-        </div>
-    </div>
-</section>
-
-<section class="home-route section" id="import-route" aria-labelledby="route-title">
-    <div class="container home-route__grid">
-        <div class="home-route__content">
-            <p class="home-kicker">از انتخاب تا تحویل</p>
-            <h2 id="route-title">{{ home_config.route_title|default:"مسیر واردات از عمان" }}</h2>
-            <p>فرایند واردات خودرو را در تمام مراحل، شفاف و قابل رهگیری دنبال کنید.</p>
-            <ol class="home-route__stages">
-                {% for stage in active_stages %}
-                    <li><span>{{ forloop.counter }}</span><strong>{{ stage.name }}</strong></li>
-                {% empty %}
-                    <li class="home-route__empty">مراحل پس از تنظیم مدیر در اینجا نمایش داده می‌شوند.</li>
-                {% endfor %}
-            </ol>
-            {% if home_config.route_transport_label or home_config.route_duration_label %}
-                <div class="home-route__facts">
-                    {% if home_config.route_transport_label %}<span><i class="fa fa-ship" aria-hidden="true"></i>{{ home_config.route_transport_label }}</span>{% endif %}
-                    {% if home_config.route_duration_label %}<span><i class="fa fa-clock-o" aria-hidden="true"></i>{{ home_config.route_duration_label }}</span>{% endif %}
-                </div>
-            {% endif %}
-        </div>
-        <div class="home-route__map">
-            {% if home_config.route_panel_image %}
-                <img src="{{ home_config.route_panel_image.url }}" alt="مسیر {{ home_config.route_origin_label|default:'عمان' }} تا {{ home_config.route_destination_label|default:'ایران' }}" width="960" height="720" loading="lazy">
-            {% endif %}
-            <span class="home-route__origin">{{ home_config.route_origin_label|default:"عمان" }}</span>
-            <span class="home-route__destination">{{ home_config.route_destination_label|default:"ایران" }}</span>
-        </div>
-    </div>
-</section>
-
-<section class="home-tracking" id="tracking" aria-labelledby="tracking-title">
-    <div class="container home-tracking__grid">
-        <div>
-            <p class="home-kicker">رهگیری شفاف</p>
-            <h2 id="tracking-title">{{ home_config.tracking_section_heading|default:"رهگیری خودرو" }}</h2>
-            <p>{{ home_config.tracking_section_description|default:"کد رهگیری خودرو را وارد کنید تا آخرین مرحله و زمان تقریبی تحویل را ببینید." }}</p>
-        </div>
-        <form class="home-tracking__form" method="post" action="{% url 'tracking:public_lookup' %}">
-            {% csrf_token %}
-            <label class="sr-only" for="home-tracking-code">کد رهگیری خودرو</label>
-            <input id="home-tracking-code" name="tracking_code" type="text" maxlength="40" autocomplete="off" placeholder="XXXX-XXXX-XXXX">
-            <button class="home-button home-button--primary" type="submit">رهگیری <i class="fa fa-search" aria-hidden="true"></i></button>
         </form>
     </div>
 </section>
 
-{% if feature_cards %}
-<section class="home-benefits section" aria-labelledby="benefits-title">
-    <div class="container">
-        <div class="home-section-heading home-section-heading--center">
-            <div><p class="home-kicker">چرا ما</p><h2 id="benefits-title">با اطمینان انتخاب کنید</h2></div>
+<section class="approved-section approved-vehicles" id="vehicles" aria-labelledby="featured-vehicles-title">
+    <div class="container" data-reveal>
+        <div class="approved-section-heading">
+            <div>
+                <p class="approved-kicker">انتخاب‌های ویژه</p>
+                <h2 id="featured-vehicles-title">{{ home_config.featured_vehicles_heading|default:"خودروهای منتخب" }}</h2>
+            </div>
+            <a class="approved-text-link" href="{% url 'cars:vehicle_list' %}">مشاهده همه <i class="fa fa-arrow-left" aria-hidden="true"></i></a>
         </div>
-        <div class="home-benefit-grid">
-            {% for card in feature_cards %}
-                <article class="home-benefit-card">
-                    <span class="home-benefit-card__icon"><i class="fa {% if card.icon == 'shield' %}fa-shield{% elif card.icon == 'track' %}fa-map-marker{% elif card.icon == 'message' %}fa-comments-o{% else %}fa-car{% endif %}" aria-hidden="true"></i></span>
-                    <h3>{{ card.title }}</h3>
-                    {% if card.description %}<p>{{ card.description }}</p>{% endif %}
-                    {% if card.cta_label and card.cta_destination %}<a href="{{ card.cta_destination }}">{{ card.cta_label }} <i class="fa fa-arrow-left" aria-hidden="true"></i></a>{% endif %}
+
+        <div class="approved-vehicle-grid">
+            {% for vehicle in featured_vehicles %}
+                <article class="approved-vehicle-card">
+                    <a class="approved-vehicle-card__media" href="{{ vehicle.get_absolute_url }}">
+                        {% if vehicle.cover_photo %}
+                            <img src="{{ vehicle.cover_photo.image.url }}" alt="{{ vehicle.cover_photo.alt_text|default:vehicle.title }}" width="640" height="400" loading="lazy">
+                        {% else %}
+                            <span class="approved-vehicle-card__empty"><i class="fa fa-car" aria-hidden="true"></i></span>
+                        {% endif %}
+                        {% if vehicle.pk in featured_spin_vehicle_ids %}
+                            <span class="approved-spin-tag"><i class="fa fa-cube" aria-hidden="true"></i> نمای ۳۶۰°</span>
+                        {% endif %}
+                    </a>
+                    <div class="approved-vehicle-card__body">
+                        <p>{{ vehicle.brand }} · {% if vehicle.year %}{{ vehicle.year }}{% else %}سال نامشخص{% endif %}{% if vehicle.mileage %} · {{ vehicle.mileage }} کیلومتر{% endif %}</p>
+                        <h3><a href="{{ vehicle.get_absolute_url }}">{{ vehicle.title }}</a></h3>
+                        <strong>{{ vehicle.price_display }}</strong>
+                        <footer>
+                            <span><i class="fa fa-check" aria-hidden="true"></i> موجود</span>
+                            <a href="{{ vehicle.get_absolute_url }}">مشاهده جزئیات <i class="fa fa-arrow-left" aria-hidden="true"></i></a>
+                        </footer>
+                    </div>
                 </article>
+            {% empty %}
+                <div class="approved-empty-state">خودروهای منتخب به‌زودی در این بخش نمایش داده می‌شوند.</div>
             {% endfor %}
+        </div>
+    </div>
+</section>
+
+{% if feature_cards %}
+<section class="approved-section approved-benefits" aria-labelledby="benefits-title">
+    <div class="container approved-benefits__grid" data-reveal>
+        <img src="{% static 'core/images/home/approved/logistics.jpg' %}" alt="خودروهای آماده حمل در عمان" width="1200" height="800" loading="lazy">
+        <div>
+            <p class="approved-kicker">مزیت انتخاب عمان</p>
+            <h2 id="benefits-title">چرا واردات از عمان؟</h2>
+            <div class="approved-benefit-list">
+                {% for card in feature_cards %}
+                    <article class="approved-benefit">
+                        <span class="approved-benefit__icon"><i class="fa {% if card.icon == 'shield' %}fa-shield{% elif card.icon == 'track' %}fa-map-marker{% elif card.icon == 'message' %}fa-comments-o{% else %}fa-car{% endif %}" aria-hidden="true"></i></span>
+                        <div>
+                            <h3>{{ card.title }}</h3>
+                            {% if card.description %}<p>{{ card.description }}</p>{% endif %}
+                            {% if card.cta_label and card.cta_destination %}<a href="{{ card.cta_destination }}">{{ card.cta_label }}</a>{% endif %}
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
         </div>
     </div>
 </section>
 {% endif %}
 
-<section class="home-magazine section" aria-labelledby="magazine-title">
-    <div class="container">
-        <div class="home-section-heading">
-            <div><p class="home-kicker">دانش پیش از خرید</p><h2 id="magazine-title">مقالات و راهنماها</h2></div>
-            <a class="home-text-link" href="{% url 'blog:post_list' %}">مشاهده همه <i class="fa fa-arrow-left" aria-hidden="true"></i></a>
+<section class="approved-route" id="import-route" aria-labelledby="route-title">
+    <div class="container approved-route__inner" data-reveal>
+        <div class="approved-section-heading">
+            <div>
+                <p class="approved-kicker">از مسقط تا مقصد</p>
+                <h2 id="route-title">{{ home_config.route_title|default:"مسیر واردات از عمان تا ایران" }}</h2>
+            </div>
         </div>
-        <div class="home-article-grid">
+        <div class="approved-route__grid">
+            <div class="approved-route__map">
+                {% if home_config.route_panel_image %}
+                    <img src="{{ home_config.route_panel_image.url }}" alt="مسیر {{ home_config.route_origin_label|default:'عمان' }} تا {{ home_config.route_destination_label|default:'ایران' }}" width="960" height="720" loading="lazy">
+                {% endif %}
+                <span class="approved-route__origin">{{ home_config.route_origin_label|default:"عمان" }} <i class="fa fa-map-marker" aria-hidden="true"></i></span>
+                <span class="approved-route__destination">{{ home_config.route_destination_label|default:"ایران" }} <i class="fa fa-map-marker" aria-hidden="true"></i></span>
+            </div>
+            <ol class="approved-stage-list">
+                {% for stage in active_stages %}
+                    <li>
+                        <span class="approved-stage-list__number">{{ forloop.counter }}</span>
+                        <div><strong>{{ stage.name }}</strong>{% if stage.default_duration_days %}<small>زمان تخمینی: {{ stage.default_duration_days }} روز</small>{% endif %}</div>
+                    </li>
+                {% empty %}
+                    <li class="approved-stage-list__empty">مراحل پس از تنظیم مدیر در اینجا نمایش داده می‌شوند.</li>
+                {% endfor %}
+            </ol>
+        </div>
+        {% if home_config.route_transport_label or home_config.route_duration_label %}
+            <div class="approved-route__facts">
+                {% if home_config.route_transport_label %}<span><i class="fa fa-ship" aria-hidden="true"></i>{{ home_config.route_transport_label }}</span>{% endif %}
+                {% if home_config.route_duration_label %}<span><i class="fa fa-clock-o" aria-hidden="true"></i>{{ home_config.route_duration_label }}</span>{% endif %}
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="approved-tracking" id="tracking" aria-labelledby="tracking-title">
+    <div class="container approved-tracking__inner" data-reveal>
+        <div>
+            <p class="approved-kicker">رهگیری شفاف</p>
+            <h2 id="tracking-title">{{ home_config.tracking_section_heading|default:"خودروی شما اکنون کجاست؟" }}</h2>
+            <p>{{ home_config.tracking_section_description|default:"کد اختصاصی را وارد کنید و آخرین وضعیت سفارش را ببینید." }}</p>
+        </div>
+        <form class="approved-tracking__form" method="post" action="{% url 'tracking:public_lookup' %}">
+            {% csrf_token %}
+            <label class="sr-only" for="home-tracking-code">کد رهگیری خودرو</label>
+            <input id="home-tracking-code" name="tracking_code" type="text" maxlength="40" autocomplete="off" placeholder="کد رهگیری خود را وارد کنید">
+            <button class="approved-button approved-button--copper" type="submit">رهگیری <i class="fa fa-search" aria-hidden="true"></i></button>
+        </form>
+    </div>
+</section>
+
+<section class="approved-section approved-magazine" id="articles" aria-labelledby="magazine-title">
+    <div class="container" data-reveal>
+        <div class="approved-section-heading">
+            <div><p class="approved-kicker">دانش و تجربه</p><h2 id="magazine-title">مقالات و راهنماها</h2></div>
+            <a class="approved-text-link" href="{% url 'blog:post_list' %}">مشاهده همه <i class="fa fa-arrow-left" aria-hidden="true"></i></a>
+        </div>
+        <div class="approved-article-grid">
             {% for post in featured_posts %}
-                <article class="home-article-card">
-                    <a class="home-article-card__image" href="{{ post.get_absolute_url }}">
-                        {% if post.cover_image %}<img src="{{ post.cover_image.url }}" alt="{{ post.image_alt_text }}" width="640" height="400" loading="lazy">{% else %}<span><i class="fa fa-newspaper-o" aria-hidden="true"></i></span>{% endif %}
+                <article class="approved-article-card">
+                    <a class="approved-article-card__media" href="{{ post.get_absolute_url }}">
+                        {% if post.cover_image %}
+                            <img src="{{ post.cover_image.url }}" alt="{{ post.image_alt_text|default:post.title }}" width="640" height="400" loading="lazy">
+                        {% else %}
+                            <img src="{% cycle 'core/images/home/approved/article-inspection.jpg' 'core/images/home/approved/article-carrier.jpg' 'core/images/home/approved/article-terminal.jpg' as article_fallback silent %}{% static article_fallback %}" alt="" width="640" height="400" loading="lazy">
+                        {% endif %}
+                        <span>مطالعه مقاله <i class="fa fa-arrow-left" aria-hidden="true"></i></span>
                     </a>
-                    <div class="home-article-card__body">
-                        <p>{% if post.category %}{{ post.category.name }}{% else %}مجله{% endif %}</p>
-                        <h3><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></h3>
-                        {% if post.published_at %}<time datetime="{{ post.published_at|date:'c' }}">{{ post.published_at|date:"Y/m/d" }}</time>{% endif %}
-                    </div>
+                    <h3><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></h3>
+                    <p>{% if post.excerpt %}{{ post.excerpt|truncatechars:110 }}{% else %}نکاتی که پیش از انتخاب و خرید خودرو باید بدانید.{% endif %}</p>
                 </article>
             {% empty %}
-                <div class="home-empty-state"><p>مقالات جدید به‌زودی منتشر می‌شوند.</p></div>
+                <div class="approved-empty-state">مقالات جدید به‌زودی منتشر می‌شوند.</div>
             {% endfor %}
         </div>
     </div>
 </section>
 
-<section class="home-custom-request section" aria-labelledby="custom-request-title">
-    <div class="container home-custom-request__card">
+<section class="approved-custom-request" id="custom-request" aria-labelledby="custom-request-title">
+    <div class="container approved-custom-request__inner" data-reveal>
+        <img src="{% static 'core/images/home/approved/covered.jpg' %}" alt="خودروی سفارشی" width="1200" height="800" loading="lazy">
         <div>
-            <p class="home-kicker">جست‌وجوی اختصاصی در بازار عمان</p>
-            <h2 id="custom-request-title">خودروی موردنظرتان در لیست نیست؟</h2>
-            <p>مشخصات خودروی دلخواهتان را ثبت کنید تا کارشناسان ما گزینه‌های متناسب را در بازار عمان بررسی کنند.</p>
-            <a class="home-button home-button--outline" href="{% url 'customers:custom_vehicle_request_create' %}">ثبت درخواست اختصاصی <i class="fa fa-plus" aria-hidden="true"></i></a>
-        </div>
-        <div class="home-custom-request__visual" aria-hidden="true">
-            {% if hero_car and hero_car.cover_photo %}<img src="{{ hero_car.cover_photo.image.url }}" alt="" width="640" height="400" loading="lazy">{% endif %}
+            <p class="approved-kicker">سفارش اختصاصی</p>
+            <h2 id="custom-request-title">خودروی موردنظرتان را پیدا نکردید؟</h2>
+            <p>مدل، سال و بودجه را اعلام کنید تا بهترین گزینه‌های بازار عمان را بررسی کنیم.</p>
+            <a class="approved-button approved-button--primary" href="{% url 'customers:custom_vehicle_request_create' %}">ثبت درخواست خودروی اختصاصی <i class="fa fa-arrow-left" aria-hidden="true"></i></a>
         </div>
     </div>
 </section>

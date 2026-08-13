@@ -4,6 +4,7 @@ from django.urls import reverse
 
 from blog.services import public_post_queryset
 
+from cars.inventory_search import public_inventory_filter_options
 from cars.public import attach_cover_photos, public_car_queryset, with_public_photos
 from cars.spin import get_public_spin_payload
 from tracking.models import Stage
@@ -29,9 +30,6 @@ def home(request):
         ).first()
         if hero_car:
             attach_cover_photos([hero_car])
-
-    hero_spin = get_public_spin_payload(hero_car) if hero_car else None
-
     featured_vehicles = list(
         with_public_photos(
             public_car_queryset()
@@ -40,6 +38,13 @@ def home(request):
         )
     )
     attach_cover_photos(featured_vehicles)
+
+    featured_spin_vehicle_ids = [
+        vehicle.pk
+        for vehicle in featured_vehicles
+        if (spin_payload := get_public_spin_payload(vehicle))
+        and spin_payload["frame_count"] >= 16
+    ]
 
     featured_posts = list(public_post_queryset()[:3])
     active_stages = list(Stage.objects.filter(is_active=True).order_by("order")[:5])
@@ -73,12 +78,13 @@ def home(request):
             structured_data=structured_data,
         ),
         "hero_car": hero_car,
-        "hero_spin": hero_spin,
         "featured_vehicles": featured_vehicles,
+        "featured_spin_vehicle_ids": featured_spin_vehicle_ids,
         "featured_posts": featured_posts,
         "active_stages": active_stages,
         "feature_cards": feature_cards,
         "quick_actions": quick_actions,
+        "vehicle_search_options": public_inventory_filter_options(public_car_queryset()),
     }
     return render(request, "core/home.html", context)
 
