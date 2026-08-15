@@ -42,8 +42,8 @@ from accounts.services import (
     set_staff_active_state,
     update_staff_member,
 )
-from blog.forms import BlogPostForm
-from blog.models import Post
+from blog.forms import BlogCategoryForm, BlogConfigurationForm, BlogPostForm
+from blog.models import BlogConfiguration, Category, Post
 from blog.services import (
     create_post,
     delete_post,
@@ -113,6 +113,7 @@ from core.models import (
     SocialLink,
     StaticPage,
 )
+from core.public_site import clear_public_site_context_cache
 from core.site_services import (
     create_site_collection_item,
     delete_site_collection_item,
@@ -1819,6 +1820,94 @@ def blog_post_create(request):
                 "یک عملیات جداگانه و قابل‌کنترل است."
             ),
         },
+    )
+
+
+@system_administrator_required
+def blog_settings(request):
+    """Manage presentation and SEO defaults for the public magazine."""
+
+    configuration = BlogConfiguration.get_solo()
+    if request.method == "POST":
+        form = BlogConfigurationForm(
+            request.POST,
+            request.FILES,
+            instance=configuration,
+        )
+        if form.is_valid():
+            form.save()
+            clear_public_site_context_cache()
+            messages.success(request, "تنظیمات صفحهٔ مجله ذخیره شد.")
+            return redirect("backoffice:blog_settings")
+    else:
+        form = BlogConfigurationForm(instance=configuration)
+
+    return render(request, "backoffice/blog/settings.html", {"form": form})
+
+
+@panel_permissions_required("blog.change_post")
+def blog_category_list(request):
+    categories = Category.objects.annotate(post_count=Count("posts")).order_by(
+        "name",
+        "pk",
+    )
+    return render(
+        request,
+        "backoffice/blog/category_list.html",
+        {"categories": categories},
+    )
+
+
+@panel_permissions_required("blog.change_post")
+def blog_category_create(request):
+    form = BlogCategoryForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        category = form.save()
+        messages.success(request, f"دسته‌بندی «{category.name}» ایجاد شد.")
+        return redirect("backoffice:blog_category_list")
+
+    return render(
+        request,
+        "backoffice/blog/category_form.html",
+        {"form": form, "category": None},
+    )
+
+
+@panel_permissions_required("blog.change_post")
+def blog_category_edit(request, pk):
+    category = get_object_or_404(Category, pk=pk)
+    form = BlogCategoryForm(request.POST or None, instance=category)
+    if request.method == "POST" and form.is_valid():
+        category = form.save()
+        messages.success(request, f"دسته‌بندی «{category.name}» به‌روزرسانی شد.")
+        return redirect("backoffice:blog_category_list")
+
+    return render(
+        request,
+        "backoffice/blog/category_form.html",
+        {"form": form, "category": category},
+    )
+
+
+@panel_permissions_required("blog.change_post")
+def blog_category_delete(request, pk):
+    category = get_object_or_404(
+        Category.objects.annotate(post_count=Count("posts")),
+        pk=pk,
+    )
+    if request.method == "POST":
+        category_name = category.name
+        category.delete()
+        messages.success(
+            request,
+            f"دسته‌بندی «{category_name}» حذف شد؛ مقاله‌ها حذف نشدند.",
+        )
+        return redirect("backoffice:blog_category_list")
+
+    return render(
+        request,
+        "backoffice/blog/category_delete_confirm.html",
+        {"category": category},
     )
 
 

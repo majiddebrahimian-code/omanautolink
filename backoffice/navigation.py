@@ -260,6 +260,30 @@ def build_panel_navigation(user, *, current_view_name=None):
             )
         )
 
+    if _may_access(user, "blog.change_post"):
+        blog_items.append(_link(label="دسته‌بندی‌ها", icon="fa-folder-open-o", url_name="backoffice:blog_category_list"))
+
+    if user.is_authenticated and user.is_active and user.is_superuser:
+        blog_items.append(_link(label="تنظیمات مجله", icon="fa-cog", url_name="backoffice:blog_settings"))
+
+    if _may_access(user, "blog.change_post"):
+        blog_items.append(
+            _link(
+                label="دسته‌بندی‌ها",
+                icon="fa-folder-open-o",
+                url_name="backoffice:blog_category_list",
+            )
+        )
+
+    if user.is_authenticated and user.is_active and user.is_superuser:
+        blog_items.append(
+            _link(
+                label="تنظیمات مجله",
+                icon="fa-cog",
+                url_name="backoffice:blog_settings",
+            )
+        )
+
     if blog_items:
         navigation.append(
             {

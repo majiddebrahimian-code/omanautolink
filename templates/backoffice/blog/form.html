@@ -74,6 +74,25 @@
             </div>
         </section>
 
+        <section class="backoffice-form-section backoffice-editorial-feature-section">
+            <div class="backoffice-form-section__heading">
+                <h2>جایگاه در صفحهٔ مجله</h2>
+                <p>مقالهٔ ویژه در ابتدای صفحهٔ عمومی مجله با تصویر و خلاصهٔ بزرگ نمایش داده می‌شود.</p>
+            </div>
+            {% for field in form %}
+                {% if field.name == 'is_featured' %}
+                    <label class="backoffice-check-field" for="{{ field.id_for_label }}">
+                        {{ field }}
+                        <span>
+                            <strong>{{ field.label }}</strong>
+                            {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+                        </span>
+                    </label>
+                    {% if field.errors %}<div class="backoffice-field__error">{{ field.errors }}</div>{% endif %}
+                {% endif %}
+            {% endfor %}
+        </section>
+
         <div class="backoffice-form-actions">
             <button type="submit" class="backoffice-button backoffice-button--primary">
                 <i class="fa fa-check" aria-hidden="true"></i>

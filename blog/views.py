@@ -1,6 +1,7 @@
 import math
 
 from django.core.paginator import Paginator
+from django.db.models import Count, Q
 from django.utils import timezone
 from django.shortcuts import get_object_or_404, render
 from django.utils.html import strip_tags
@@ -96,7 +97,16 @@ def public_post_list(request):
     active_category_slug = (request.GET.get("category") or "").strip()
 
     posts = public_post_queryset()
-    categories = Category.objects.filter(posts__in=posts).distinct().order_by("name")
+    # Sidebar counts reflect only articles that a public visitor may read.
+    visible_post_filter = Q(
+        posts__status="published",
+    ) & (Q(posts__published_at__isnull=True) | Q(posts__published_at__lte=timezone.now()))
+    categories = (
+        Category.objects.filter(posts__in=posts)
+        .annotate(public_post_count=Count("posts", filter=visible_post_filter))
+        .distinct()
+        .order_by("name")
+    )
 
     if query:
         posts = posts.filter(title__icontains=query)
@@ -110,16 +120,36 @@ def public_post_list(request):
     paginator = Paginator(posts, blog_config.articles_per_page)
     page_obj = paginator.get_page(request.GET.get("page"))
     visible_posts = list(page_obj.object_list)
-    _attach_reading_time(visible_posts)
+
+    # The feature is a first-page presentation choice.  It remains part of the
+    # paginator, therefore a later editorial choice never changes page URLs.
+    featured_post = None
+    if page_obj.number == 1:
+        featured_post = posts.filter(is_featured=True).first()
+        if featured_post is None and visible_posts:
+            featured_post = visible_posts[0]
+    reading_posts = list(visible_posts)
+    if featured_post and featured_post not in reading_posts:
+        reading_posts.append(featured_post)
+    _attach_reading_time(reading_posts)
 
     is_filtered_view = bool(query or active_category_slug)
     page_number = request.GET.get("page")
 
     listing_title = blog_config.listing_title
     if query:
-        listing_title = f"جست‌وجوی «{query}» در {blog_config.listing_title}"
+        listing_title = f"جست‌وجوی Â«{query}Â» در {blog_config.listing_title}"
     elif active_category:
         listing_title = f"{active_category.name} | {blog_config.listing_title}"
+
+    # Sidebar content must respect the active public filter and paginator;
+    # never leak an article from a different category or later page.
+    recent_posts = [
+        post
+        for post in visible_posts
+        if post.pk != getattr(featured_post, "pk", None)
+    ][:3]
+    _attach_reading_time(recent_posts)
 
     context = {
         **page_context(
@@ -141,7 +171,7 @@ def public_post_list(request):
                 breadcrumb_schema(
                     request,
                     [
-                        ("صفحهٔ اصلی", "/"),
+                        ("ØµÙحهٔ اصلی", "/"),
                         ("مجله", "/blog/"),
                     ],
                 ),
@@ -150,13 +180,14 @@ def public_post_list(request):
         ),
         "blog_config": blog_config,
         "page_obj": page_obj,
-        "featured_post": visible_posts[0] if visible_posts else None,
-        "posts": visible_posts[1:],
+        "featured_post": featured_post,
+        "posts": [post for post in visible_posts if post.pk != getattr(featured_post, "pk", None)],
         "categories": categories,
         "active_category": active_category,
         "active_category_slug": active_category_slug,
         "query": query,
         "result_count": result_count,
+        "recent_posts": recent_posts,
     }
     return render(request, "blog/post_list.html", context)
 
@@ -203,7 +234,7 @@ def public_post_detail(request, slug):
             breadcrumb_schema(
                 request,
                 [
-                    ("صفحهٔ اصلی", "/"),
+                    ("ØµÙحهٔ اصلی", "/"),
                     ("مجله", "/blog/"),
                     (post.title, post_url),
                 ],

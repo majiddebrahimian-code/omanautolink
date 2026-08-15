@@ -224,3 +224,18 @@
 .home-page--approved main { background: #fbfaf7; }.approved-section, .approved-route, .approved-tracking, .approved-custom-request { position: relative; }.approved-section { background: #fbfaf7; }.approved-vehicles { width: auto; margin: 0 clamp(.7rem, 2vw, 1.6rem); border: 1px solid rgba(180, 142, 94, .18); border-radius: 1.45rem; background: #f0ebe5; box-shadow: 0 12px 30px rgba(20, 36, 58, .055); }.approved-benefits { margin-inline: clamp(.7rem, 2vw, 1.6rem); width: auto; border-radius: 1.45rem; background: #f0ebe5; }.approved-route { margin: 0 clamp(.7rem, 2vw, 1.6rem); padding-right: max(1.5rem, calc((100vw - 1240px) / 2)); padding-left: max(1.5rem, calc((100vw - 1240px) / 2)); border-radius: 1.45rem; background: #edf2f3; }.approved-tracking { margin: 0 clamp(.7rem, 2vw, 1.6rem); border-radius: 1.45rem; background: #10243b; }.approved-magazine { width: auto; margin: 0 clamp(.7rem, 2vw, 1.6rem); border: 1px solid rgba(180, 142, 94, .15); border-radius: 1.45rem; background: #f7f4ef; box-shadow: 0 12px 30px rgba(20, 36, 58, .045); }.approved-custom-request { margin: 0 clamp(.7rem, 2vw, 1.6rem) clamp(3rem, 5vw, 5rem); padding-right: max(1.5rem, calc((100vw - 1240px) / 2)); padding-left: max(1.5rem, calc((100vw - 1240px) / 2)); border-radius: 1.45rem; background: #f0ebe5; }
 .approved-vehicle-card { border-radius: 1rem; background: #fffdf9; box-shadow: 0 8px 23px rgba(20,36,58,.07); }.approved-vehicle-card__media { border-radius: 1rem 1rem .55rem .55rem; background: #e8e4df; }.approved-vehicle-card__media img { object-fit: contain; background: #e8e4df; }.approved-vehicle-card__body { background: #fffdf9; }.approved-benefits__grid { overflow: hidden; border-radius: 1.15rem; }.approved-benefits__grid > img { border-radius: 1.15rem 0 0 1.15rem; }.approved-route__map { border-radius: 1rem; box-shadow: 0 12px 26px rgba(20,36,58,.10); }.approved-route__map img { border-radius: inherit; }.approved-custom-request__inner { border-radius: 1.15rem; }.approved-custom-request__inner > img { border-radius: 1.15rem 0 0 1.15rem; }.approved-article-card { overflow: hidden; border-radius: .9rem; background: #fffdf9; box-shadow: 0 8px 22px rgba(20,36,58,.06); }.approved-article-card h3, .approved-article-card p { padding-inline: .9rem; }.approved-article-card p { padding-bottom: .9rem; }
 @media (max-width: 650px) { .approved-vehicles, .approved-benefits, .approved-route, .approved-tracking, .approved-magazine, .approved-custom-request { margin-right: .65rem; margin-left: .65rem; border-radius: 1rem; }.approved-benefits { padding-inline: 0; }.approved-benefits__grid > img, .approved-custom-request__inner > img { border-radius: 1rem 1rem 0 0; }.approved-route { padding-right: 1.15rem; padding-left: 1.15rem; }.approved-custom-request { padding-right: 0; padding-left: 0; }.approved-custom-request__inner { border-radius: 1rem; } }
+
+/* Keep the Hero photo inside the viewport on every desktop and mobile width. */
+.home-page--approved,
+.home-page--approved .site-shell { overflow-x: clip; }
+.home-page--approved .approved-hero {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+}
+.home-page--approved .approved-hero::before {
+    inset: 0;
+    max-width: none;
+    transform: none;
+    background-position: center center;
+}

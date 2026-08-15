@@ -29,7 +29,7 @@ class BlogConfigurationAdmin(admin.ModelAdmin):
     list_display = ["site_configuration", "listing_title", "articles_per_page"]
     fieldsets = [
         (
-            "نمای فهرست وبلاگ",
+            "نمای Ùهرست وبلاگ",
             {
                 "fields": [
                     "site_configuration",
@@ -41,7 +41,7 @@ class BlogConfigurationAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "پیش‌فرض‌های سئو و اشتراک‌گذاری",
+            "Ù¾ÛŒØ´â€ŒÙرض‌های سئو و اشتراک‌گذاری",
             {
                 "fields": [
                     "default_meta_title",
@@ -76,10 +76,11 @@ class PostAdmin(admin.ModelAdmin):
         "category",
         "author",
         "status",
+        "is_featured",
         "published_at",
         "updated_at",
     ]
-    list_filter = ["status", "category"]
+    list_filter = ["status", "is_featured", "category"]
     search_fields = [
         "title",
         "excerpt",
@@ -103,6 +104,7 @@ class PostAdmin(admin.ModelAdmin):
                     "author",
                     "category",
                     "excerpt",
+                    "is_featured",
                     "content",
                 ]
             },

@@ -32,18 +32,18 @@ class BlogConfiguration(models.Model):
         verbose_name="تنظیمات اصلی سایت",
     )
     listing_eyebrow = models.CharField(
-        "تیتر کوتاه فهرست وبلاگ",
+        "تیتر کوتاه Ùهرست وبلاگ",
         max_length=120,
         default="راهنما و تجربه",
     )
     listing_title = models.CharField(
-        "عنوان فهرست وبلاگ",
+        "عنوان Ùهرست وبلاگ",
         max_length=180,
         default="مجلهٔ واردات خودرو",
     )
     listing_description = models.TextField(
-        "توضیح فهرست وبلاگ",
-        default="محتوای کاربردی برای انتخاب خودرو و درک فرایند واردات و تحویل.",
+        "توضیح Ùهرست وبلاگ",
+        default="محتوای کاربردی برای انتخاب خودرو و درک Ùرایند واردات و تحویل.",
     )
     default_meta_title = models.CharField(
         "عنوان پیش‌فرض سئوی وبلاگ",
@@ -68,7 +68,7 @@ class BlogConfiguration(models.Model):
         validators=[FileExtensionValidator(["png", "jpg", "jpeg", "webp"])],
     )
     articles_per_page = models.PositiveSmallIntegerField(
-        "تعداد مطلب در هر صفحه",
+        "تعداد مطلب در هر ØµÙحه",
         default=12,
         validators=[MinValueValidator(1), MaxValueValidator(48)],
     )
@@ -129,6 +129,11 @@ class Post(models.Model):
         blank=True,
     )
     excerpt = models.TextField("خلاصهٔ مطلب", blank=True)
+    is_featured = models.BooleanField(
+        "مقالهٔ ویژهٔ مجله",
+        default=False,
+        help_text="فقط یک مقالهٔ منتشرشده به‌عنوان مقالهٔ ویژهٔ صفحهٔ مجله نمایش داده می‌شود.",
+    )
     content = models.TextField("متن مطلب")
     status = models.CharField(
         "وضعیت انتشار",

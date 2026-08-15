@@ -1,0 +1,14 @@
+{% extends "backoffice/base.html" %}
+{% block title %}تنظیمات مجله | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+{% block page_title %}تنظیمات مجله{% endblock %}
+{% block page_description %}<p>عنوان، معرفی، تعداد نمایش و تنظیمات پیش‌فرض SEO صفحهٔ عمومی مجله را از همین‌جا کنترل کنید.</p>{% endblock %}
+{% block page_actions %}<a href="{% url 'backoffice:blog_post_list' %}" class="backoffice-button backoffice-button--secondary"><i class="fa fa-list-alt" aria-hidden="true"></i> مقاله‌ها</a>{% endblock %}
+{% block content %}
+<form method="post" enctype="multipart/form-data" class="backoffice-form-card" novalidate>
+{% csrf_token %}
+{% if form.non_field_errors %}<div class="backoffice-form-errors">{{ form.non_field_errors }}</div>{% endif %}
+<section class="backoffice-form-section"><div class="backoffice-form-section__heading"><h2>معرفی صفحه</h2><p>این متن‌ها در تیتر و توضیح صفحهٔ عمومی مجله دیده می‌شوند.</p></div><div class="backoffice-form-grid">{% for field in form %}{% if field.name == 'listing_eyebrow' or field.name == 'listing_title' or field.name == 'listing_description' or field.name == 'articles_per_page' %}<div class="backoffice-field {% if field.name == 'listing_description' %}backoffice-field--wide{% endif %}"><label for="{{ field.id_for_label }}" class="backoffice-field__label">{{ field.label }}</label>{{ field }}{% if field.help_text %}<small class="backoffice-field__help">{{ field.help_text }}</small>{% endif %}{% if field.errors %}<div class="backoffice-field__error">{{ field.errors }}</div>{% endif %}</div>{% endif %}{% endfor %}</div></section>
+<section class="backoffice-form-section"><div class="backoffice-form-section__heading"><h2>SEO و اشتراک‌گذاری</h2><p>این مقادیر، پیش‌فرض‌های صفحهٔ فهرست مجله هستند.</p></div><div class="backoffice-form-grid">{% for field in form %}{% if field.name == 'default_meta_title' or field.name == 'default_meta_description' or field.name == 'default_meta_keywords' or field.name == 'default_og_image' %}<div class="backoffice-field {% if field.name == 'default_meta_description' %}backoffice-field--wide{% endif %}"><label for="{{ field.id_for_label }}" class="backoffice-field__label">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="backoffice-field__error">{{ field.errors }}</div>{% endif %}</div>{% endif %}{% endfor %}</div></section>
+<div class="backoffice-form-actions"><button type="submit" class="backoffice-button backoffice-button--primary"><i class="fa fa-check" aria-hidden="true"></i> ذخیرهٔ تنظیمات</button></div>
+</form>
+{% endblock %}

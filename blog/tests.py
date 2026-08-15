@@ -227,3 +227,54 @@ class PublicBlogViewsTests(TestCase):
         )
         self.assertContains(response, related_post.title)
         self.assertContains(response, "دقیقه")
+
+
+    def test_featured_post_is_used_as_magazine_headline(self):
+        featured_post = Post.objects.create(
+            title="Featured magazine article",
+            slug="featured-magazine-article",
+            content="Featured content",
+            status=Post.Status.PUBLISHED,
+            published_at=timezone.now() - timedelta(days=2),
+            is_featured=True,
+        )
+
+        response = self.client.get(reverse("blog:post_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["featured_post"], featured_post)
+
+    def test_featured_posts_sort_before_newer_standard_posts(self):
+        featured_post = Post.objects.create(
+            title="Editorial feature",
+            slug="editorial-feature",
+            content="Editorial feature content",
+            status=Post.Status.PUBLISHED,
+            published_at=timezone.now() - timedelta(days=2),
+            is_featured=True,
+        )
+
+        self.assertEqual(public_post_queryset().first(), featured_post)
+
+
+    def test_unpublishing_featured_post_clears_feature_state(self):
+        self.visible_post.is_featured = True
+        self.visible_post.save(update_fields=["is_featured"])
+        self.editor = get_user_model().objects.create_user(
+            username="feature-editor",
+            password="test-password",
+            is_staff=True,
+        )
+        self.editor.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="blog",
+                codename="change_post",
+            )
+        )
+
+        draft_post = unpublish_post(
+            post_id=self.visible_post.pk,
+            actor=self.editor,
+        )
+
+        self.assertFalse(draft_post.is_featured)

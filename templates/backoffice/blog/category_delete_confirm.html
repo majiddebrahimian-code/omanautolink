@@ -1,0 +1,5 @@
+{% extends "backoffice/base.html" %}
+{% block title %}حذف دسته‌بندی | {{ site_config.site_name|default:"پنل مدیریت" }}{% endblock %}
+{% block page_title %}حذف دسته‌بندی{% endblock %}
+{% block page_description %}<p>مقاله‌ها حذف نمی‌شوند، اما دسته‌بندی آن‌ها خالی خواهد شد.</p>{% endblock %}
+{% block content %}<form method="post" class="backoffice-form-card">{% csrf_token %}<section class="backoffice-form-section"><div class="backoffice-form-section__heading"><h2>حذف «{{ category.name }}»</h2><p>{{ category.post_count }} مقاله از این دسته‌بندی استفاده می‌کنند.</p></div></section><div class="backoffice-form-actions"><button type="submit" class="backoffice-button backoffice-button--danger"><i class="fa fa-trash" aria-hidden="true"></i> حذف دسته‌بندی</button><a href="{% url 'backoffice:blog_category_list' %}" class="backoffice-button backoffice-button--secondary">انصراف</a></div></form>{% endblock %}

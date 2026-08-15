@@ -25,6 +25,7 @@ POST_EDITABLE_FIELDS = (
     "cover_image",
     "cover_image_alt",
     "excerpt",
+    "is_featured",
     "content",
     "seo_title",
     "meta_description",
@@ -49,7 +50,7 @@ def _editable_post_data(post_data):
     unexpected_fields = set(post_data) - set(POST_EDITABLE_FIELDS)
     if unexpected_fields:
         raise ValidationError(
-            "فیلدهای غیرمجاز برای ویرایش مقاله ارسال شده‌اند."
+            "Ùیلدهای غیرمجاز برای ویرایش مقاله ارسال شده‌اند."
         )
 
     return {
@@ -57,6 +58,13 @@ def _editable_post_data(post_data):
         for field_name in POST_EDITABLE_FIELDS
         if field_name in post_data
     }
+
+
+def _clear_other_featured_posts(*, post):
+    """Keep a single published feature without putting the rule in a view."""
+    if post.status != Post.Status.PUBLISHED or not post.is_featured:
+        return
+    Post.objects.select_for_update().filter(status=Post.Status.PUBLISHED, is_featured=True).exclude(pk=post.pk).update(is_featured=False)
 
 
 @transaction.atomic
@@ -78,6 +86,7 @@ def create_post(*, actor, post_data):
     post.full_clean()
     prepare_post_for_save(post=post, actor=actor)
     post.save()
+    _clear_other_featured_posts(post=post)
     return post
 
 
@@ -98,6 +107,7 @@ def update_post(*, post_id, actor, post_data):
     post.full_clean()
     prepare_post_for_save(post=post, actor=actor)
     post.save()
+    _clear_other_featured_posts(post=post)
     return post
 
 
@@ -128,7 +138,7 @@ def public_post_queryset(*, now=None):
         Post.objects.filter(status=Post.Status.PUBLISHED)
         .filter(Q(published_at__isnull=True) | Q(published_at__lte=now))
         .select_related("author", "category")
-        .order_by("-published_at", "-created_at")
+        .order_by("-is_featured", "-published_at", "-created_at")
     )
 
 
@@ -190,6 +200,7 @@ def publish_post(*, post_id, actor):
         post.published_at = None
     prepare_post_for_save(post=post, actor=actor)
     post.save(update_fields=["status", "published_at", "updated_at"])
+    _clear_other_featured_posts(post=post)
     return post
 
 
@@ -200,6 +211,7 @@ def unpublish_post(*, post_id, actor):
     _require_publication_permission(actor=actor)
     post = Post.objects.select_for_update().get(pk=post_id)
     post.status = Post.Status.DRAFT
+    post.is_featured = False
     prepare_post_for_save(post=post, actor=actor)
-    post.save(update_fields=["status", "published_at", "updated_at"])
+    post.save(update_fields=["status", "published_at", "is_featured", "updated_at"])
     return post
