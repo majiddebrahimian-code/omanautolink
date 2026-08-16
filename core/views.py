@@ -1,5 +1,6 @@
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from blog.services import public_post_queryset
@@ -9,7 +10,8 @@ from cars.public import attach_cover_photos, public_car_queryset, with_public_ph
 from cars.spin import get_public_spin_payload
 from tracking.models import Stage
 
-from .models import StaticPage
+from .forms import ContactMessageForm
+from .models import ContactMessage, StaticPage
 from .public_site import get_public_site_context
 from .seo import (
     absolute_public_url,
@@ -114,6 +116,19 @@ def static_page(request, slug):
         "static_page": page,
     }
     return render(request, "core/static_page.html", context)
+
+
+def contact(request):
+    page=StaticPage.objects.filter(slug="contact",is_published=True).first()
+    form=ContactMessageForm(request.POST or None)
+    if request.method=="POST" and form.is_valid():
+        if not form.cleaned_data["website"]:
+            ContactMessage.objects.create(full_name=form.cleaned_data["full_name"],email=form.cleaned_data["email"],phone=form.cleaned_data["phone"],subject=form.cleaned_data["subject"],message=form.cleaned_data["message"])
+            messages.success(request,"پیام شما با موفقیت ثبت شد. در اولین فرصت با شما تماس می‌گیریم.")
+        return redirect("core:contact")
+    title=page.title if page else "تماس با ما"
+    intro=page.intro if page else "برای مشاوره، پیگیری یا دریافت اطلاعات بیشتر با ما در ارتباط باشید."
+    return render(request,"core/contact.html",{"form":form,"contact_title":title,"contact_intro":intro,"static_page":page,**page_context(request,title=page.meta_title if page and page.meta_title else title,description=page.meta_description if page and page.meta_description else intro,canonical_path=reverse("core:contact"))})
 
 
 def robots_txt(request):

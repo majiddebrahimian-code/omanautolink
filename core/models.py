@@ -445,3 +445,23 @@ class FaqItem(models.Model):
 
     def __str__(self):
         return self.question[:60]
+
+
+class ContactMessage(models.Model):
+    class Status(models.TextChoices):
+        NEW="new","جدید"
+        READ="read","خوانده‌شده"
+        CLOSED="closed","بسته‌شده"
+    full_name=models.CharField("نام و نام خانوادگی",max_length=160)
+    email=models.EmailField("ایمیل")
+    phone=models.CharField("شمارهٔ تلفن",max_length=40)
+    subject=models.CharField("موضوع",max_length=180,blank=True)
+    message=models.TextField("متن پیام")
+    status=models.CharField("وضعیت",max_length=12,choices=Status.choices,default=Status.NEW)
+    created_at=models.DateTimeField("زمان ثبت",auto_now_add=True)
+    updated_at=models.DateTimeField("آخرین تغییر",auto_now=True)
+    class Meta:
+        verbose_name="پیام تماس"
+        verbose_name_plural="پیام‌های تماس"
+        ordering=["-created_at","-pk"]
+    def __str__(self):return f"{self.full_name}: {self.subject or 'پیام تماس'}"
